@@ -320,57 +320,64 @@ function ForecastDashboard({ settings, memberCount, plan, sport, canEdit, onUnlo
         </div>
       )}
 
-      {/* Shuttle stat (if equipment) */}
-      {hasEquipment && (
-        <StatCard
-          icon={Target} label={t('dash_shuttle_cost')} value={fmtVND(all.shuttleCost)}
-          sub={`${all.boxes} ${t('dash_boxes')}`} tone="cyan"
-          tip={
-            <>
-              <p className="font-semibold text-white">{t('calc_shuttle_title')}</p>
-              <p className="mt-1.5 font-mono text-cyan-300">
-                ⌈{fmtNum(all.totalMonthlySessions)} × {fmtNum(num(settings.estimated_shuttlecocks))} ÷ {BALLS_PER_BOX}⌉ = {all.boxes} {t('dash_boxes')}
-              </p>
-              <p className="mt-1 font-mono text-cyan-300">{all.boxes} × {fmtVND(num(settings.price_per_box))}</p>
-              <p className="mt-1 font-mono text-white">= {fmtVND(all.shuttleCost)}</p>
-            </>
-          }
-        />
-      )}
+      {/* Per-cycle cost breakdown */}
+      {(() => {
+        const shuttlePerSession = hasEquipment
+          ? num(settings.estimated_shuttlecocks) * num(settings.price_per_box) / BALLS_PER_BOX
+          : 0
+        const venueRows = all.venues.map((v) => {
+          const shuttleCost = hasEquipment ? v.totalSessions * shuttlePerSession : 0
+          const shuttleBoxes = hasEquipment ? Math.ceil(v.totalSessions * num(settings.estimated_shuttlecocks) / BALLS_PER_BOX) : 0
+          return { ...v, shuttleCost, shuttleBoxes, total: v.courtCost + shuttleCost }
+        })
+        const grandTotal = venueRows.reduce((s, r) => s + r.total, 0)
 
-      {/* Monthly total summary */}
-      <div className="rounded-2xl border border-slate-100 bg-white p-5">
-        <div className="flex items-center gap-2 text-slate-400 mb-4">
-          <Wallet className="h-4 w-4" />
-          <span className="text-xs font-semibold uppercase tracking-wide">{t('dash_monthly_total')}</span>
-        </div>
-        <div className="space-y-2">
-          {all.venues.map((v, i) => {
-            const note = v.billing_cycle === 'quarter' ? t('dash_court_note_quarter') : t('dash_court_note_month')
-            const label = v.weekday !== null && v.weekday !== undefined
-              ? `${t('dash_venue_court')} ${t(`wd_${v.weekday}`)}`
-              : t('dash_court_cost')
-            return (
-              <div key={v.weekday ?? i} className="flex items-center justify-between text-sm">
-                <span className="text-slate-600">
-                  {label} <span className="text-xs text-slate-400">{note}</span>
-                </span>
-                <span className="font-mono font-semibold text-slate-900">{fmtVND(v.monthlyCourtCost)}</span>
-              </div>
-            )
-          })}
-          {hasEquipment && (
-            <div className="flex items-center justify-between text-sm">
-              <span className="text-slate-600">{t('dash_shuttle_cost')}</span>
-              <span className="font-mono font-semibold text-slate-900">{fmtVND(all.shuttleCost)}</span>
+        return (
+          <div className="rounded-2xl border border-slate-100 bg-white p-5">
+            <div className="flex items-center gap-2 text-slate-400 mb-4">
+              <Wallet className="h-4 w-4" />
+              <span className="text-xs font-semibold uppercase tracking-wide">{t('dash_cost_by_cycle')}</span>
             </div>
-          )}
-          <div className="flex items-center justify-between border-t border-slate-100 pt-2 mt-2">
-            <span className="font-semibold text-slate-900">{t('dash_total_cycle')}</span>
-            <span className="font-mono text-lg font-black text-slate-900">{fmtVND(all.totalMonthlyCost)}</span>
+            <div className="space-y-4">
+              {venueRows.map((v, i) => {
+                const dayLabel = v.weekday !== null && v.weekday !== undefined ? t(`wd_${v.weekday}`) : null
+                const cycleLabel = v.billing_cycle === 'quarter' ? t('dash_court_note_quarter') : t('dash_court_note_month')
+                return (
+                  <div key={v.weekday ?? i}>
+                    <div className="flex items-center gap-2 mb-2">
+                      {dayLabel && <span className="rounded-md bg-slate-900 px-2 py-0.5 text-xs font-bold text-white">{dayLabel}</span>}
+                      <span className="text-xs text-slate-400">{cycleLabel}</span>
+                    </div>
+                    <div className="space-y-1.5 pl-2 border-l-2 border-slate-100">
+                      <div className="flex items-center justify-between text-sm">
+                        <span className="text-slate-500">{t('dash_court_cost')}</span>
+                        <span className="font-mono font-semibold text-slate-900">{fmtVND(v.courtCost)}</span>
+                      </div>
+                      {hasEquipment && (
+                        <div className="flex items-center justify-between text-sm">
+                          <span className="text-slate-500">
+                            {t('dash_shuttle_cost')}
+                            <span className="ml-1 text-xs text-slate-400">({v.totalSessions} {t('dash_sessions')} · {v.shuttleBoxes} {t('dash_boxes')})</span>
+                          </span>
+                          <span className="font-mono font-semibold text-slate-900">{fmtVND(v.shuttleCost)}</span>
+                        </div>
+                      )}
+                      <div className="flex items-center justify-between text-sm pt-1 border-t border-slate-100">
+                        <span className="font-semibold text-slate-700">{t('subtotal')}</span>
+                        <span className="font-mono font-bold text-slate-900">{fmtVND(v.total)}</span>
+                      </div>
+                    </div>
+                  </div>
+                )
+              })}
+            </div>
+            <div className="flex items-center justify-between border-t-2 border-slate-100 pt-3 mt-4">
+              <span className="font-bold text-slate-900">{t('dash_total_cycle')}</span>
+              <span className="font-mono text-lg font-black text-slate-900">{fmtVND(grandTotal)}</span>
+            </div>
           </div>
-        </div>
-      </div>
+        )
+      })()}
 
       {/* Next cycle */}
       <div className="rounded-3xl border border-slate-100 bg-white p-5">
