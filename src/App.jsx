@@ -29,6 +29,7 @@ import {
   LogOut, Globe, ShieldCheck, Coins, CircleDollarSign, Target, Zap,
   LineChart, BarChart3, FileSpreadsheet, FileText, Trash2, ChevronRight,
   Building2, RefreshCw, CheckCircle2, Gauge, Receipt, PieChart, Eye, Info,
+  ChevronDown, Menu, Link as LinkIcon, History,
 } from 'lucide-react'
 
 /* ----------------------------------------------------------------------------
@@ -54,6 +55,19 @@ const FREE_MEMBER_LIMIT = 15
 const BALLS_PER_BOX = 12
 const PRO_PRICE_VND = 99000
 const WEEKS_IN = { month: 4, quarter: 12 }
+
+// Sport configs — add a new entry here to support a new sport.
+// hasEquipment: true  → show shuttlecock/ball cost fields & stats
+// hasEquipment: false → court rental only
+const SPORT_CONFIGS = {
+  badminton:   { id: 'badminton',   labelKey: 'sport_badminton',   emoji: '🏸', hasEquipment: true },
+  football:    { id: 'football',    labelKey: 'sport_football',    emoji: '⚽', hasEquipment: false },
+  basketball:  { id: 'basketball',  labelKey: 'sport_basketball',  emoji: '🏀', hasEquipment: false },
+  volleyball:  { id: 'volleyball',  labelKey: 'sport_volleyball',  emoji: '🏐', hasEquipment: false },
+  tabletennis: { id: 'tabletennis', labelKey: 'sport_tabletennis', emoji: '🏓', hasEquipment: false },
+  pickleball:  { id: 'pickleball',  labelKey: 'sport_pickleball',  emoji: '🎾', hasEquipment: false },
+}
+const SPORT_LIST = Object.values(SPORT_CONFIGS)
 
 const cx = (...c) => c.filter(Boolean).join(' ')
 
@@ -136,13 +150,43 @@ function sessionsForPeriod(s, period) {
   return { total, breakdown, fallback: false }
 }
 
+// Count how many scheduled sessions have already happened by `today` within the period.
+function sessionsHappenedByNow(s, period, today = new Date()) {
+  const wds = Array.isArray(s.play_weekdays) ? s.play_weekdays.map(Number) : []
+  const { year: sy, month0: sm0 } = period.months[0]
+  const lastM = period.months[period.months.length - 1]
+  const periodEnd = new Date(lastM.year, lastM.month0 + 1, 0)
+  const cutoff = today <= periodEnd ? today : periodEnd
+
+  if (!wds.length) {
+    // fallback: proportional estimate based on sessions_per_week
+    const periodStart = new Date(sy, sm0, 1)
+    const totalDays = (periodEnd - periodStart) / 86400000 + 1
+    const elapsedDays = Math.max(0, Math.floor((cutoff - periodStart) / 86400000) + 1)
+    const totalSess = Math.round(num(s.sessions_per_week) * 4 * period.len)
+    return Math.min(totalSess, Math.floor((elapsedDays / totalDays) * totalSess))
+  }
+
+  const wdSet = new Set(wds)
+  const periodStart = new Date(sy, sm0, 1)
+  // Normalize cutoff to midnight to avoid time-of-day issues
+  const cutoffDay = new Date(cutoff.getFullYear(), cutoff.getMonth(), cutoff.getDate())
+  let count = 0
+  const d = new Date(periodStart)
+  while (d <= cutoffDay) {
+    if (wdSet.has(d.getDay())) count++
+    d.setDate(d.getDate() + 1)
+  }
+  return count
+}
+
 // The forecasting engine — costs for one resolved period.
-function computeCycle(s, period, memberCount) {
+function computeCycle(s, period, memberCount, hasEquipment = true) {
   const sess = sessionsForPeriod(s, period)
   const totalSessions = sess.total
   const courtCost = num(s.court_price_per_hour) * num(s.hours_per_session) * totalSessions
-  const boxes = Math.ceil((totalSessions * num(s.estimated_shuttlecocks)) / BALLS_PER_BOX)
-  const shuttleCost = boxes * num(s.price_per_box)
+  const boxes = hasEquipment ? Math.ceil((totalSessions * num(s.estimated_shuttlecocks)) / BALLS_PER_BOX) : 0
+  const shuttleCost = hasEquipment ? boxes * num(s.price_per_box) : 0
   const totalCost = courtCost + shuttleCost
   const fund = num(s.current_fund)
   const balance = fund - totalCost
@@ -411,6 +455,66 @@ function Segmented({ value, onChange, options, disabled }) {
 /* ----------------------------------------------------------------------------
  *  ⑤ NAV / SHELL
  * ------------------------------------------------------------------------- */
+function ClubSwitcher({ myClubs, activeClub, onSelectClub }) {
+  const { t } = useTranslation()
+  const [open, setOpen] = useState(false)
+  const ref = useRef(null)
+
+  useEffect(() => {
+    const handler = (e) => { if (ref.current && !ref.current.contains(e.target)) setOpen(false) }
+    document.addEventListener('mousedown', handler)
+    return () => document.removeEventListener('mousedown', handler)
+  }, [])
+
+  if (!activeClub || !myClubs?.length) return null
+
+  return (
+    <div className="relative" ref={ref}>
+      <button
+        onClick={() => setOpen((v) => !v)}
+        className="flex items-center gap-2 rounded-2xl border border-slate-200 bg-white/70 px-3 py-1.5 text-sm font-semibold text-slate-700 transition hover:border-slate-300 hover:bg-white active:scale-[0.98]"
+      >
+        <Building2 className="h-4 w-4 text-slate-400 shrink-0" />
+        <span className="max-w-[120px] truncate">{activeClub.name}</span>
+        <ChevronDown className={cx('h-3.5 w-3.5 text-slate-400 transition-transform duration-200', open && 'rotate-180')} />
+      </button>
+
+      {open && (
+        <div className="absolute top-full left-0 mt-2 z-50 w-64 animate-fade-in rounded-2xl border border-slate-100 bg-white/95 backdrop-blur-xl shadow-xl shadow-slate-900/10 p-2">
+          <p className="px-3 py-1.5 text-[10px] font-bold uppercase tracking-wider text-slate-400">{t('switcher_your_clubs')}</p>
+          {myClubs.map((c) => (
+            <button
+              key={c.id}
+              onClick={() => { onSelectClub(c); setOpen(false) }}
+              className={cx(
+                'w-full flex items-center gap-3 rounded-xl px-3 py-2.5 text-sm transition',
+                c.id === activeClub.id ? 'bg-lime-400/10 text-lime-700 font-semibold' : 'text-slate-700 hover:bg-slate-50 font-medium'
+              )}
+            >
+              <span className="grid h-7 w-7 place-items-center rounded-lg bg-slate-900 text-lime-400 text-xs font-bold shrink-0">
+                {c.name[0].toUpperCase()}
+              </span>
+              <span className="flex-1 text-left truncate">{c.name}</span>
+              {c.id === activeClub.id && <Check className="h-3.5 w-3.5 shrink-0 text-lime-600" strokeWidth={3} />}
+            </button>
+          ))}
+          <div className="mt-1 pt-1 border-t border-slate-100">
+            <button
+              onClick={() => { onSelectClub('new'); setOpen(false) }}
+              className="w-full flex items-center gap-3 rounded-xl px-3 py-2.5 text-sm font-medium text-slate-500 hover:bg-slate-50 transition"
+            >
+              <span className="grid h-7 w-7 place-items-center rounded-lg border border-dashed border-slate-300 text-slate-400">
+                <Plus className="h-3.5 w-3.5" />
+              </span>
+              {t('switcher_create_new')}
+            </button>
+          </div>
+        </div>
+      )}
+    </div>
+  )
+}
+
 function Logo({ onClick }) {
   return (
     <button onClick={onClick} className="group flex items-center gap-2.5">
@@ -452,19 +556,24 @@ function LangSwitch() {
   )
 }
 
-function Nav({ session, club, role, onSignOut }) {
+function Nav({ session, myClubs, activeClub, role, onSignOut, onSelectClub }) {
   const { t } = useTranslation()
   return (
     <header className="sticky top-0 z-40 border-b border-slate-100 bg-white/70 backdrop-blur-xl">
-      <div className="mx-auto flex h-16 max-w-[1350px] items-center justify-between gap-3 px-5">
-        <Logo onClick={() => (window.location.href = '/')} />
+      <div className={`mx-auto flex h-16 items-center gap-3 px-5 ${session ? '' : 'max-w-[1350px]'}`}>
+        <Logo onClick={() => navigate('/')} />
+
+        {/* Club switcher — centre slot */}
+        {activeClub && myClubs?.length > 0 && (
+          <div className="flex-1 flex justify-center">
+            <ClubSwitcher myClubs={myClubs} activeClub={activeClub} onSelectClub={onSelectClub} />
+          </div>
+        )}
+        {(!activeClub || !myClubs?.length) && <div className="flex-1" />}
+
+        {/* right actions */}
         <div className="flex items-center gap-2 sm:gap-3">
           <LangSwitch />
-          {club && role && (
-            <Badge className='hidden sm:block' tone={role === 'host' ? 'dark' : 'slate'} icon={role === 'host' ? Crown : User}>
-              {role === 'host' ? t('role_host') : t('role_member')}
-            </Badge>
-          )}
           {session && (
             <button
               onClick={onSignOut}
@@ -503,7 +612,7 @@ function Footer() {
   return (
     <footer className="border-t border-slate-100 bg-white/50 backdrop-blur">
       <div className="mx-auto flex max-w-[1350px] flex-col items-center justify-between gap-4 px-5 py-6 sm:flex-row">
-        <Logo onClick={() => (window.location.href = '/')} />
+        <Logo onClick={() => navigate('/')} />
         <p className="hidden text-sm text-slate-400 sm:block">Fee + Tap · {t('brand_tag')}</p>
         <span className="text-xs text-slate-300">© {new Date().getFullYear()} FEETAP</span>
       </div>
@@ -605,6 +714,7 @@ function GoogleIcon({ className = '' }) {
  * ========================================================================== */
 function Onboarding({ session, onClubReady, toast }) {
   const { t } = useTranslation()
+  const [sport, setSport] = useState('badminton')
   const [name, setName] = useState('')
   const [busy, setBusy] = useState(false)
 
@@ -615,13 +725,12 @@ function Onboarding({ session, onClubReady, toast }) {
     try {
       const { data: club, error } = await supabase
         .from('clubs')
-        .insert({ name: name.trim(), owner_id: session.user.id, plan: 'free' })
+        .insert({ name: name.trim(), owner_id: session.user.id, plan: 'free', sport_type: sport })
         .select('*')
         .single()
       if (error) throw error
-      // seed default settings
       await supabase.from('club_settings').insert({ club_id: club.id })
-      onClubReady(club, 'host')
+      onClubReady(club)
     } catch (err) {
       toast(err.message || t('err_generic'))
     } finally {
@@ -631,7 +740,7 @@ function Onboarding({ session, onClubReady, toast }) {
 
   return (
     <main className="bg-grid flex-1">
-      <div className="mx-auto max-w-xl px-5 py-20">
+      <div className="mx-auto max-w-xl px-5 py-16">
         <div className="animate-scale-in">
           <div className="mb-8 text-center">
             <span className="mx-auto grid h-16 w-16 place-items-center rounded-2xl bg-slate-900 text-lime-400">
@@ -641,12 +750,47 @@ function Onboarding({ session, onClubReady, toast }) {
             <p className="mt-2 text-slate-500">{t('onb_sub')}</p>
           </div>
           <Card>
-            <form onSubmit={createClub} className="space-y-5">
+            <form onSubmit={createClub} className="space-y-6">
+              {/* Sport picker */}
+              <div>
+                <p className="mb-3 flex items-center gap-2 text-sm font-medium text-slate-700">
+                  <Zap className="h-4 w-4 text-slate-400" /> {t('onb_sport')}
+                </p>
+                <div className="grid grid-cols-3 gap-2">
+                  {SPORT_LIST.map((s) => (
+                    <button
+                      key={s.id}
+                      type="button"
+                      onClick={() => setSport(s.id)}
+                      className={cx(
+                        'flex flex-col items-center gap-1.5 rounded-2xl border-2 px-3 py-3 text-center transition active:scale-[0.97]',
+                        sport === s.id
+                          ? 'border-slate-900 bg-slate-900 text-white'
+                          : 'border-slate-200 bg-white text-slate-600 hover:border-slate-300'
+                      )}
+                    >
+                      <span className="text-2xl leading-none">{s.emoji}</span>
+                      <span className="text-xs font-semibold leading-tight">{t(s.labelKey)}</span>
+                    </button>
+                  ))}
+                </div>
+              </div>
+
+              {/* Club name */}
               <Field label={t('onb_club_name')} icon={Building2}>
-                <input className={inputCls} placeholder={t('onb_club_ph')} value={name} onChange={(e) => setName(e.target.value)} autoFocus />
+                <input
+                  className={inputCls}
+                  placeholder={t('onb_club_ph')}
+                  value={name}
+                  onChange={(e) => setName(e.target.value)}
+                  autoFocus
+                />
               </Field>
+
               <Button type="submit" variant="primary" size="lg" className="w-full" disabled={name.trim().length < 2 || busy}>
-                {busy ? <><Loader2 className="h-5 w-5 animate-spin" /> {t('onb_creating')}</> : <>{t('onb_create')} <ArrowRight className="h-5 w-5 text-lime-400" /></>}
+                {busy
+                  ? <><Loader2 className="h-5 w-5 animate-spin" /> {t('onb_creating')}</>
+                  : <>{t('onb_create')} <ArrowRight className="h-5 w-5 text-lime-400" /></>}
               </Button>
             </form>
           </Card>
@@ -654,6 +798,128 @@ function Onboarding({ session, onClubReady, toast }) {
         </div>
       </div>
       <Footer />
+    </main>
+  )
+}
+
+/* ============================================================================
+ *  ⑦½ CLUB PICKER — choose which club to manage (multi-club support)
+ * ========================================================================== */
+function ClubCard({ club, onSelect }) {
+  const { t } = useTranslation()
+  const isHost = club.userRole === 'host'
+  return (
+    <button
+      onClick={() => onSelect(club)}
+      className="group relative flex flex-col items-start rounded-3xl border-2 border-slate-100 bg-white p-6 text-left transition hover:border-lime-400 hover:shadow-xl hover:shadow-lime-400/10 active:scale-[0.98]"
+    >
+      <div className="pointer-events-none absolute inset-0 rounded-3xl opacity-0 ring-2 ring-lime-400 transition group-hover:opacity-100" />
+      <div className="flex w-full items-start justify-between gap-2">
+        <span className="grid h-12 w-12 place-items-center rounded-2xl bg-slate-900 text-xl font-black text-lime-400 shrink-0">
+          {club.name[0].toUpperCase()}
+        </span>
+        <Badge tone={isHost ? 'dark' : 'slate'} icon={isHost ? Crown : User}>
+          {isHost ? t('role_host') : t('role_member')}
+        </Badge>
+      </div>
+      <h3 className="mt-4 text-lg font-bold text-slate-900 leading-tight">{club.name}</h3>
+      {isHost && (
+        <div className="mt-2">
+          <Badge tone={club.plan === 'pro' ? 'volt' : 'slate'} icon={club.plan === 'pro' ? Sparkles : Zap}>
+            {club.plan === 'pro' ? t('plan_pro') : t('plan_free')}
+          </Badge>
+        </div>
+      )}
+      <div className="mt-4 flex items-center gap-1.5 text-sm font-semibold text-slate-400 transition group-hover:text-lime-600">
+        {isHost ? t('picker_manage') : t('picker_view')} <ChevronRight className="h-4 w-4" />
+      </div>
+    </button>
+  )
+}
+
+function ClubPicker({ myClubs, onSelect, onCreateNew }) {
+  const { t } = useTranslation()
+  const hostedClubs = myClubs.filter((c) => c.userRole === 'host')
+  const memberClubs = myClubs.filter((c) => c.userRole === 'member')
+
+  return (
+    <main className="bg-grid flex-1">
+      <div className="mx-auto max-w-4xl px-5 py-16">
+        <div className="animate-fade-in space-y-10">
+          <div className="text-center">
+            <Badge tone="dark" icon={Building2}>{t('picker_workspace')}</Badge>
+            <h2 className="mt-4 text-4xl font-black tracking-tight text-slate-900">{t('picker_title')}</h2>
+            <p className="mt-2 text-slate-500">{t('picker_subtitle')}</p>
+          </div>
+
+          {/* Section: clubs you host */}
+          <section>
+            <div className="mb-4 flex items-center justify-between">
+              <div className="flex items-center gap-2">
+                <Crown className="h-4 w-4 text-slate-400" />
+                <h3 className="text-sm font-bold uppercase tracking-wider text-slate-500">{t('picker_hosted')}</h3>
+              </div>
+              <button
+                onClick={onCreateNew}
+                className="inline-flex items-center gap-1.5 rounded-full border border-slate-200 bg-white px-3 py-1.5 text-xs font-semibold text-slate-600 transition hover:border-slate-300 hover:bg-slate-50 active:scale-[0.98]"
+              >
+                <Plus className="h-3.5 w-3.5" /> {t('picker_new_btn')}
+              </button>
+            </div>
+
+            {hostedClubs.length > 0 ? (
+              <div className="grid gap-4 sm:grid-cols-2 lg:grid-cols-3">
+                {hostedClubs.map((c) => <ClubCard key={c.id} club={c} onSelect={onSelect} />)}
+                <button
+                  onClick={onCreateNew}
+                  className="group flex flex-col items-start rounded-3xl border-2 border-dashed border-slate-200 bg-white/50 p-6 text-left transition hover:border-slate-300 hover:bg-white active:scale-[0.98]"
+                >
+                  <span className="grid h-12 w-12 place-items-center rounded-2xl border-2 border-dashed border-slate-300 text-slate-400 transition group-hover:border-slate-400">
+                    <Plus className="h-6 w-6" />
+                  </span>
+                  <h3 className="mt-4 text-base font-bold text-slate-400">{t('picker_create_new')}</h3>
+                </button>
+              </div>
+            ) : (
+              <div className="flex flex-col items-center justify-center rounded-3xl border-2 border-dashed border-slate-200 bg-white/60 py-12 text-center">
+                <span className="grid h-14 w-14 place-items-center rounded-2xl bg-slate-100 text-slate-400">
+                  <Building2 className="h-7 w-7" />
+                </span>
+                <p className="mt-4 text-base font-bold text-slate-700">{t('picker_no_hosted_title')}</p>
+                <p className="mt-1 max-w-xs text-sm text-slate-400">{t('picker_no_hosted_body')}</p>
+                <button
+                  onClick={onCreateNew}
+                  className="mt-5 inline-flex items-center gap-2 rounded-2xl bg-slate-900 px-5 py-2.5 text-sm font-semibold text-lime-400 transition hover:bg-slate-800 active:scale-[0.98]"
+                >
+                  <Plus className="h-4 w-4" /> {t('picker_create')}
+                </button>
+              </div>
+            )}
+          </section>
+
+          {/* Section: clubs you joined as member */}
+          <section>
+            <div className="mb-4 flex items-center gap-2">
+              <Users className="h-4 w-4 text-slate-400" />
+              <h3 className="text-sm font-bold uppercase tracking-wider text-slate-500">{t('picker_joined')}</h3>
+            </div>
+
+            {memberClubs.length > 0 ? (
+              <div className="grid gap-4 sm:grid-cols-2 lg:grid-cols-3">
+                {memberClubs.map((c) => <ClubCard key={c.id} club={c} onSelect={onSelect} />)}
+              </div>
+            ) : (
+              <div className="flex items-center gap-4 rounded-3xl border border-dashed border-slate-200 bg-white/60 px-6 py-5">
+                <span className="grid h-10 w-10 shrink-0 place-items-center rounded-xl bg-slate-100 text-slate-300">
+                  <Users className="h-5 w-5" />
+                </span>
+                <p className="text-sm text-slate-400">{t('picker_no_joined')}</p>
+              </div>
+            )}
+          </section>
+        </div>
+      </div>
+      {/* <Footer /> */}
     </main>
   )
 }
@@ -815,7 +1081,7 @@ function SessionBreakdown({ breakdown }) {
 /* ============================================================================
  *  ⑨ SETTINGS — the forecasting engine inputs (host only)
  * ========================================================================== */
-function SettingsPanel({ club, settings, onSaved, canEdit, toast }) {
+function SettingsPanel({ club, settings, sport, onSaved, canEdit, toast }) {
   const { t, i18n } = useTranslation()
   const [form, setForm] = useState(() => ({ ...settings }))
   const [busy, setBusy] = useState(false)
@@ -845,6 +1111,7 @@ function SettingsPanel({ club, settings, onSaved, canEdit, toast }) {
         price_per_box: num(form.price_per_box),
         estimated_shuttlecocks: num(form.estimated_shuttlecocks),
         current_fund: num(form.current_fund),
+        court_payment_mode: courtMode,
       }
       const { error } = await supabase
         .from('club_settings')
@@ -859,13 +1126,40 @@ function SettingsPanel({ club, settings, onSaved, canEdit, toast }) {
     }
   }
 
-  const fields = [
+  const courtMode = form.court_payment_mode === 'cycle' ? 'cycle' : 'session'
+  const [topUpOpen, setTopUpOpen] = useState(false)
+  const [topUpAmount, setTopUpAmount] = useState('')
+  const [topUpNote, setTopUpNote] = useState('')
+  const [topUpBusy, setTopUpBusy] = useState(false)
+
+  async function submitTopUp() {
+    const amount = num(topUpAmount)
+    if (!amount || topUpBusy) return
+    setTopUpBusy(true)
+    try {
+      const newFund = num(settings.current_fund) + amount
+      const { error: e1 } = await supabase.from('fund_transactions').insert({
+        club_id: club.id, amount, note: topUpNote.trim() || null,
+      })
+      if (e1) throw e1
+      const { error: e2 } = await supabase.from('club_settings')
+        .update({ current_fund: newFund }).eq('club_id', club.id)
+      if (e2) throw e2
+      toast(t('fund_added'))
+      setTopUpAmount(''); setTopUpNote(''); setTopUpOpen(false)
+      onSaved({ ...settings, current_fund: newFund })
+    } catch (e) { toast(e.message || t('err_generic')) }
+    finally { setTopUpBusy(false) }
+  }
+
+  const allFields = [
     { k: 'court_price_per_hour', label: 'set_court_price', icon: Coins, suffix: '₫', type: 'number' },
     { k: 'hours_per_session', label: 'set_hours', icon: Calendar, type: 'number', step: '0.5' },
-    { k: 'price_per_box', label: 'set_box_price', icon: Coins, hint: 'set_box_hint', suffix: '₫', type: 'number' },
-    { k: 'estimated_shuttlecocks', label: 'set_shuttle', icon: Target, hint: 'set_shuttle_hint', type: 'number', step: '0.5' },
+    { k: 'price_per_box', label: 'set_box_price', icon: Coins, hint: 'set_box_hint', suffix: '₫', type: 'number', equipmentOnly: true },
+    { k: 'estimated_shuttlecocks', label: 'set_shuttle', icon: Target, hint: 'set_shuttle_hint', type: 'number', step: '0.5', equipmentOnly: true },
     { k: 'current_fund', label: 'set_fund', icon: Wallet, suffix: '₫', type: 'number' },
   ]
+  const fields = allFields.filter((f) => !f.equipmentOnly || sport.hasEquipment)
 
   return (
     <Card>
@@ -877,19 +1171,93 @@ function SettingsPanel({ club, settings, onSaved, canEdit, toast }) {
 
       <div className={cx('mt-6 grid gap-5 sm:grid-cols-2', !canEdit && 'pointer-events-none opacity-70')}>
         {fields.map((f) => (
-          <Field key={f.k} label={t(f.label)} icon={f.icon} hint={f.hint ? t(f.hint) : undefined}>
-            <div className="relative">
-              <input
-                type={f.type} step={f.step} min="0"
-                className={cx(inputCls, f.suffix && 'pr-10', 'font-mono')}
-                value={form[f.k] ?? ''}
-                onChange={set(f.k)}
-                disabled={!canEdit}
-              />
-              {f.suffix && <span className="pointer-events-none absolute right-4 top-1/2 -translate-y-1/2 text-sm font-semibold text-slate-400">{f.suffix}</span>}
-            </div>
-          </Field>
+          <div key={f.k}>
+            {f.k === 'current_fund' ? (
+              <label className="block">
+                <span className="flex items-center gap-2 text-sm font-medium text-slate-700 mb-2">
+                  <Wallet className="w-4 h-4 text-slate-400" />
+                  {t(f.label)}
+                  {canEdit && (
+                    <button
+                      type="button"
+                      onClick={() => setTopUpOpen((v) => !v)}
+                      className="ml-auto flex items-center gap-1 rounded-full bg-lime-400 px-2.5 py-0.5 text-xs font-bold text-slate-900 hover:bg-lime-300 transition"
+                    >
+                      <Plus className="h-3 w-3" /> {t('fund_topup_btn')}
+                    </button>
+                  )}
+                </span>
+                <div className="relative">
+                  <input
+                    type="number" min="0"
+                    className={cx(inputCls, 'pr-10 font-mono')}
+                    value={form.current_fund ?? ''}
+                    onChange={set('current_fund')}
+                    disabled={!canEdit}
+                  />
+                  <span className="pointer-events-none absolute right-4 top-1/2 -translate-y-1/2 text-sm font-semibold text-slate-400">₫</span>
+                </div>
+              </label>
+            ) : (
+              <Field label={t(f.label)} icon={f.icon} hint={f.hint ? t(f.hint) : undefined}>
+                <div className="relative">
+                  <input
+                    type={f.type} step={f.step} min="0"
+                    className={cx(inputCls, f.suffix && 'pr-10', 'font-mono')}
+                    value={form[f.k] ?? ''}
+                    onChange={set(f.k)}
+                    disabled={!canEdit}
+                  />
+                  {f.suffix && <span className="pointer-events-none absolute right-4 top-1/2 -translate-y-1/2 text-sm font-semibold text-slate-400">{f.suffix}</span>}
+                </div>
+              </Field>
+            )}
+            {f.k === 'current_fund' && topUpOpen && canEdit && (
+              <div className="mt-2 rounded-2xl border border-lime-200 bg-lime-50 p-4 space-y-3 animate-fade-in">
+                <p className="text-xs font-semibold text-slate-600">{t('fund_topup_title')}</p>
+                <div className="relative">
+                  <input
+                    type="number" min="0"
+                    className={cx(inputCls, 'pr-10 font-mono bg-white')}
+                    placeholder={t('fund_topup_amount_ph')}
+                    value={topUpAmount}
+                    onChange={(e) => setTopUpAmount(e.target.value)}
+                    autoFocus
+                  />
+                  <span className="pointer-events-none absolute right-4 top-1/2 -translate-y-1/2 text-sm font-semibold text-slate-400">₫</span>
+                </div>
+                <input
+                  className={cx(inputCls, 'bg-white')}
+                  placeholder={t('fund_topup_note_ph')}
+                  value={topUpNote}
+                  onChange={(e) => setTopUpNote(e.target.value)}
+                />
+                <div className="flex gap-2">
+                  <Button variant="volt" size="sm" className="flex-1" onClick={submitTopUp} disabled={topUpBusy || !topUpAmount}>
+                    {topUpBusy ? <Loader2 className="h-4 w-4 animate-spin" /> : <><Plus className="h-4 w-4" /> {t('fund_topup_submit')}</>}
+                  </Button>
+                  <Button variant="ghost" size="sm" onClick={() => { setTopUpOpen(false); setTopUpAmount(''); setTopUpNote('') }}>
+                    {t('cancel')}
+                  </Button>
+                </div>
+              </div>
+            )}
+          </div>
         ))}
+
+        <div className="sm:col-span-2">
+          <Field label={t('set_court_mode')} icon={Coins} hint={t('set_court_mode_hint')}>
+            <Segmented
+              value={courtMode}
+              onChange={(v) => setForm((f) => ({ ...f, court_payment_mode: v }))}
+              disabled={!canEdit}
+              options={[
+                { value: 'session', label: t('court_mode_session') },
+                { value: 'cycle', label: t('court_mode_cycle') },
+              ]}
+            />
+          </Field>
+        </div>
 
         <div className="sm:col-span-2">
           <Field label={t('set_cycle')} icon={RefreshCw}>
@@ -1089,11 +1457,12 @@ function StatCard({ icon: Icon, label, value, sub, tone = 'slate', big, tip }) {
   )
 }
 
-function ForecastDashboard({ settings, memberCount, memberSource, plan, canEdit, onUnlock }) {
+function ForecastDashboard({ settings, memberCount, memberSource, plan, sport, canEdit, onUnlock, logs, fundTxns }) {
   const { t, i18n } = useTranslation()
+  const hasEquipment = sport?.hasEquipment ?? true
   const periods = useMemo(() => resolvePeriods(settings), [settings])
-  const f = useMemo(() => computeCycle(settings, periods.current, memberCount), [settings, periods, memberCount])
-  const fn = useMemo(() => computeCycle(settings, periods.next, memberCount), [settings, periods, memberCount])
+  const f = useMemo(() => computeCycle(settings, periods.current, memberCount, hasEquipment), [settings, periods, memberCount, hasEquipment])
+  const fn = useMemo(() => computeCycle(settings, periods.next, memberCount, hasEquipment), [settings, periods, memberCount, hasEquipment])
   const curLabel = formatPeriodLabel(periods.current, i18n.language)
   const nextLabel = formatPeriodLabel(periods.next, i18n.language)
   const delta = fn.totalCost - f.totalCost
@@ -1101,19 +1470,70 @@ function ForecastDashboard({ settings, memberCount, memberSource, plan, canEdit,
     .filter((d) => f.breakdown[d])
     .map((d) => `${f.breakdown[d]} × ${t('wd_' + d)}`)
     .join('  ·  ')
-  const surplus = f.balance >= 0
+
+  // ── actual vs forecast ────────────────────────────────────────
+  const courtMode = settings.court_payment_mode === 'cycle' ? 'cycle' : 'session'
+  const periodMonthKeys = periods.current.months.map(
+    (m) => `${m.year}-${String(m.month0 + 1).padStart(2, '0')}`
+  )
+  const logsInPeriod = (logs || []).filter((l) =>
+    periodMonthKeys.some((k) => l.played_on?.startsWith(k))
+  )
+  const loggedSessions = logsInPeriod.length
+
+  // How many sessions have actually happened by today (from schedule)
+  const happenedSessions = useMemo(
+    () => sessionsHappenedByNow(settings, periods.current),
+    [settings, periods]
+  )
+  const unloggedHappened = Math.max(0, happenedSessions - loggedSessions)
+  const remainingSessions = Math.max(0, f.totalSessions - happenedSessions)
+
+  // Cost per session (full / shuttle-only)
+  const costPerSession = f.totalSessions > 0 ? f.totalCost / f.totalSessions : 0
+  const shuttleCostPerSession = f.totalSessions > 0 ? f.shuttleCost / f.totalSessions : 0
+
+  const actualShuttleSpent = logsInPeriod.reduce((s, l) => s + num(l.shuttle_cost), 0)
+  const actualSessionSpent = logsInPeriod.reduce((s, l) => s + num(l.total_cost), 0)
+
+  // Unlogged sessions that already happened → use estimated cost
+  const estimatedUnloggedCost = courtMode === 'cycle'
+    ? Math.round(unloggedHappened * shuttleCostPerSession)
+    : Math.round(unloggedHappened * costPerSession)
+
+  // In cycle mode: court paid as lump sum; only shuttle varies per session
+  const actualSpent = courtMode === 'cycle'
+    ? f.courtCost + actualShuttleSpent + estimatedUnloggedCost
+    : actualSessionSpent + estimatedUnloggedCost
+  const remainingForecast = courtMode === 'cycle'
+    ? Math.round(remainingSessions * shuttleCostPerSession)
+    : Math.round(remainingSessions * costPerSession)
+
+  const totalCollected = (fundTxns || []).reduce((s, tx) => s + num(tx.amount), 0)
+  const currentFund = num(settings.current_fund)
+  // cycle mode: fund hasn't had court deducted yet — must subtract it in projection
+  // session mode: fund is already reduced per session, only subtract remaining forecast
+  const projectedBalance = courtMode === 'cycle'
+    ? currentFund - f.courtCost - Math.round(remainingSessions * shuttleCostPerSession)
+    : currentFund - remainingForecast
+  const projectedSurplus = projectedBalance >= 0
+  const projectedDeficit = projectedSurplus ? 0 : -projectedBalance
+  const perMemberTopUp = memberCount > 0 ? Math.ceil(projectedDeficit / memberCount) : 0
+  const suggestedFee = f.totalSessions > 0 && memberCount > 0 ? Math.ceil(f.totalCost / memberCount) : 0
+  const sessionProgress = f.totalSessions > 0 ? Math.min(1, happenedSessions / f.totalSessions) : 0
 
   return (
-    <div className="space-y-6">
-      {/* hero summary */}
-      <div className="relative overflow-hidden rounded-3xl bg-slate-900 bg-grid-dark p-6 sm:p-8 text-white">
-        <div className={cx('pointer-events-none absolute -right-10 -top-10 h-52 w-52 rounded-full blur-3xl', surplus ? 'bg-lime-400/10' : 'bg-red-500/15')} />
+    <div className="space-y-5">
 
-        {/* header: cycle label + subtle members chip */}
-        <div className="relative flex items-center justify-between gap-3">
+      {/* ── HERO CARD ─────────────────────────────────────────── */}
+      <div className="relative overflow-hidden rounded-3xl bg-slate-900 bg-grid-dark p-6 sm:p-8 text-white">
+        <div className={cx('pointer-events-none absolute -right-10 -top-10 h-64 w-64 rounded-full blur-3xl', projectedSurplus ? 'bg-lime-400/10' : 'bg-red-500/15')} />
+
+        {/* header row */}
+        <div className="relative flex flex-wrap items-center justify-between gap-2">
           <div className="flex items-center gap-2 text-slate-400">
             <PieChart className="h-4 w-4" />
-            <span className="text-xs font-semibold uppercase tracking-wider">{t('dash_current_cycle')} · {curLabel}</span>
+            <span className="text-xs font-semibold uppercase tracking-wider">{curLabel}</span>
           </div>
           <span
             className="inline-flex items-center gap-1.5 rounded-full bg-slate-800/70 px-3 py-1 text-xs font-semibold text-slate-300"
@@ -1123,57 +1543,132 @@ function ForecastDashboard({ settings, memberCount, memberSource, plan, canEdit,
           </span>
         </div>
 
-        {/* figures: balance (dominant) + total cost (secondary) */}
-        <div className="relative mt-5 flex flex-wrap items-start gap-x-12 gap-y-5">
-          <div>
-            <div className="flex items-center gap-1.5">
-              {surplus ? <TrendingUp className="h-4 w-4 text-lime-400" /> : <TrendingDown className="h-4 w-4 text-red-400" />}
-              <p className="text-xs font-semibold uppercase tracking-wide text-slate-400">{t('dash_balance')}</p>
-            </div>
-            <p className={cx('mt-1.5 font-mono text-3xl sm:text-5xl font-black tabular-nums sm:text-6xl', surplus ? 'text-lime-400' : 'text-red-400')}>
-              {surplus ? '' : '−'}{fmtVND(Math.abs(f.balance))}
+        {/* live fund — dominant figure */}
+        <div className="relative mt-5">
+          <p className="text-xs font-semibold uppercase tracking-wide text-slate-400">{t('dash_fund_live')}</p>
+          <p className="mt-1 font-mono text-4xl sm:text-5xl font-black tabular-nums leading-none text-white">
+            {fmtVND(currentFund)}
+          </p>
+        </div>
+
+        {/* 4-column mini-stats: Thu → Chi → Còn lại → Cuối kỳ */}
+        <div className="relative mt-5 grid grid-cols-2 gap-2 sm:grid-cols-4 sm:gap-3">
+          {/* Tổng đã thu */}
+          <div className="rounded-2xl bg-lime-400/10 border border-lime-400/20 px-3 py-3 sm:px-4">
+            <p className="text-[10px] font-semibold uppercase tracking-wide text-lime-500">{t('dash_total_collected')}</p>
+            <p className="mt-1.5 font-mono text-sm sm:text-base font-black text-lime-400">{fmtVND(totalCollected)}</p>
+            <p className="mt-0.5 text-[10px] text-slate-500">{(fundTxns || []).length} {t('dash_collections')}</p>
+          </div>
+
+          {/* Đã chi */}
+          <div className="rounded-2xl bg-slate-800/60 px-3 py-3 sm:px-4">
+            <p className="text-[10px] font-semibold uppercase tracking-wide text-slate-500">{t('dash_actual_spent')}</p>
+            <p className="mt-1.5 font-mono text-sm sm:text-base font-black text-white">{fmtVND(actualSpent)}</p>
+            {courtMode === 'cycle' ? (
+              <p className="mt-0.5 text-[10px] text-slate-500">
+                {t('dash_court_paid')} + {fmtVND(actualShuttleSpent)} {t('dash_shuttle_actual')}
+              </p>
+            ) : (
+              <p className="mt-0.5 text-[10px] text-slate-500">
+                {happenedSessions} {t('dash_sessions_happened')}
+                {unloggedHappened > 0 && <span className="text-amber-400"> ({unloggedHappened} {t('dash_estimated')})</span>}
+              </p>
+            )}
+          </div>
+
+          {/* Còn lại */}
+          <div className="rounded-2xl bg-slate-800/60 px-3 py-3 sm:px-4">
+            <p className="text-[10px] font-semibold uppercase tracking-wide text-slate-500">{t('dash_remaining_forecast')}</p>
+            <p className="mt-1.5 font-mono text-sm sm:text-base font-black text-slate-300">~{fmtVND(remainingForecast)}</p>
+            <p className="mt-0.5 text-[10px] text-slate-500">{remainingSessions} {t('dash_sessions_future')}</p>
+          </div>
+
+          {/* Cuối kỳ */}
+          <div className={cx('rounded-2xl px-3 py-3 sm:px-4', projectedSurplus ? 'bg-lime-400/15' : 'bg-red-500/20')}>
+            <p className="text-[10px] font-semibold uppercase tracking-wide text-slate-500">{t('dash_end_of_period')}</p>
+            <p className={cx('mt-1.5 font-mono text-sm sm:text-base font-black', projectedSurplus ? 'text-lime-400' : 'text-red-400')}>
+              {projectedSurplus ? '+' : '−'}{fmtVND(Math.abs(projectedBalance))}
             </p>
-            <span className={cx('mt-2 inline-flex items-center gap-1.5 rounded-full px-3 py-1 text-xs font-bold', surplus ? 'bg-lime-400/15 text-lime-300' : 'bg-red-500/15 text-red-300')}>
-              {surplus ? t('bal_surplus') : t('bal_deficit')}
+            <span className={cx('mt-0.5 text-[10px] font-bold', projectedSurplus ? 'text-lime-400' : 'text-red-400')}>
+              {projectedSurplus ? t('bal_surplus') : t('bal_deficit')}
             </span>
           </div>
-
-          <div className="pb-1">
-            <p className="text-xs font-semibold uppercase tracking-wide text-slate-400">{t('dash_total_cost')}</p>
-            <p className="mt-1.5 font-mono text-xl sm:text-3xl font-black tabular-nums text-white sm:text-4xl">{fmtVND(f.totalCost)}</p>
-
-            {/* compact cost split — court vs shuttle (sized to this column) */}
-            <div className="mt-3 w-72 max-w-full">
-              <div className="flex h-2.5 w-full overflow-hidden rounded-full bg-slate-800">
-                <div className="h-full bg-violet-400" style={{ width: `${f.totalCost ? (f.courtCost / f.totalCost) * 100 : 0}%` }} />
-                <div className="h-full bg-cyan-400" style={{ width: `${f.totalCost ? (f.shuttleCost / f.totalCost) * 100 : 0}%` }} />
-              </div>
-              <div className="mt-2 flex flex-wrap gap-x-4 gap-y-1 text-xs text-slate-400">
-                <span className="inline-flex items-center gap-1.5"><span className="h-2 w-2 rounded-full bg-violet-400" /> {t('dash_court_cost')} {fmtVND(f.courtCost)}</span>
-                <span className="inline-flex items-center gap-1.5"><span className="h-2 w-2 rounded-full bg-cyan-400" /> {t('dash_shuttle_cost')} {fmtVND(f.shuttleCost)}</span>
-              </div>
-            </div>
-
-            <p className="mt-3 text-sm text-slate-500">{t('dash_fund')}: <span className="font-mono text-slate-300">{fmtVND(f.fund)}</span></p>
-          </div>
         </div>
+
+        {/* session progress bar */}
+        {f.totalSessions > 0 && (
+          <div className="relative mt-5">
+            <div className="flex items-center justify-between mb-1.5">
+              <span className="text-[10px] font-semibold uppercase tracking-wide text-slate-500">{t('dash_session_progress')}</span>
+              <span className="text-[10px] font-mono text-slate-400">{loggedSessions} / {f.totalSessions} {t('dash_sessions')}</span>
+            </div>
+            <div className="h-1.5 w-full overflow-hidden rounded-full bg-slate-800">
+              <div
+                className="h-full rounded-full bg-lime-400 transition-all duration-500"
+                style={{ width: `${sessionProgress * 100}%` }}
+              />
+            </div>
+          </div>
+        )}
       </div>
 
-      {/* stat grid */}
-      <div className="grid gap-4 sm:grid-cols-2 lg:grid-cols-4">
-        <StatCard
-          icon={Calendar} label={t('dash_sessions')} value={fmtNum(f.totalSessions)}
-          sub={f.fallback ? t('dash_est') : curLabel}
-          tip={
-            <>
-              <p className="font-semibold text-white">{t('calc_sessions_title')}</p>
-              <p className="mt-1.5 font-mono text-lime-300">{f.fallback ? t('dash_est') : (bdText || '—')}</p>
-              <p className="mt-1 font-mono text-white">= {fmtNum(f.totalSessions)}</p>
-            </>
-          }
-        />
+      {/* ── PROJECTED RESULT CALLOUT ──────────────────────────── */}
+      {projectedSurplus ? (
+        <div className="flex flex-wrap items-center gap-4 rounded-3xl border border-lime-200 bg-lime-50 p-5">
+          <span className="grid h-12 w-12 shrink-0 place-items-center rounded-2xl bg-lime-400 text-slate-900">
+            <TrendingUp className="h-6 w-6" />
+          </span>
+          <div className="flex-1 min-w-0">
+            <p className="font-bold text-slate-900">{t('dash_proj_surplus_title')}</p>
+            <p className="text-sm text-slate-600">
+              {t('dash_proj_surplus_body')} <span className="font-mono font-bold text-lime-700">{fmtVND(projectedBalance)}</span>
+            </p>
+          </div>
+          {memberCount > 0 && (
+            <div className="shrink-0 text-right">
+              <p className="text-[10px] text-slate-400 uppercase tracking-wide">{t('dash_suggested_fee')}</p>
+              <p className="font-mono text-2xl font-black text-slate-900">{fmtVND(suggestedFee)}</p>
+              <p className="text-[10px] text-slate-400">/ {t('member')}</p>
+            </div>
+          )}
+        </div>
+      ) : (
+        <div className="overflow-hidden rounded-3xl border border-red-200 bg-red-50 p-5">
+          <div className="flex items-start gap-4">
+            <span className="grid h-12 w-12 shrink-0 place-items-center rounded-2xl bg-red-500 text-white">
+              <AlertTriangle className="h-6 w-6" />
+            </span>
+            <div className="flex-1">
+              <p className="font-bold text-red-700">{t('dash_proj_deficit_title')}</p>
+              <p className="mt-1 text-sm text-slate-700">
+                {t('dash_deficit_body', { amount: fmtVND(projectedDeficit) })}
+              </p>
+            </div>
+          </div>
+          {memberCount > 0 && (
+            <div className="mt-4 grid grid-cols-3 gap-3">
+              <div className="rounded-2xl bg-white/70 p-3 text-center">
+                <p className="text-[10px] text-slate-400 uppercase tracking-wide">{t('dash_proj_shortfall')}</p>
+                <p className="font-mono text-lg font-black text-red-600">{fmtVND(projectedDeficit)}</p>
+              </div>
+              <div className="rounded-2xl bg-white/70 p-3 text-center">
+                <p className="text-[10px] text-slate-400 uppercase tracking-wide">{t('dash_member_count')}</p>
+                <p className="font-mono text-lg font-black text-slate-900">{memberCount}</p>
+              </div>
+              <div className="rounded-2xl bg-slate-900 p-3 text-center">
+                <p className="text-[10px] text-slate-400 uppercase tracking-wide">{t('dash_per_member')}</p>
+                <p className="font-mono text-lg font-black text-lime-400">{fmtVND(perMemberTopUp)}</p>
+              </div>
+            </div>
+          )}
+        </div>
+      )}
+
+      {/* ── COST BREAKDOWN STATS ─────────────────────────────── */}
+      <div className={cx('grid gap-4', hasEquipment ? 'sm:grid-cols-3' : 'sm:grid-cols-2')}>
         <StatCard
           icon={Activity} label={t('dash_court_cost')} value={fmtVND(f.courtCost)} tone="violet"
+          sub={`${f.totalSessions} ${t('dash_sessions')} × ${fmtVND(num(settings.court_price_per_hour) * num(settings.hours_per_session))}`}
           tip={
             <>
               <p className="font-semibold text-white">{t('calc_court_title')}</p>
@@ -1184,86 +1679,34 @@ function ForecastDashboard({ settings, memberCount, memberSource, plan, canEdit,
             </>
           }
         />
+        {hasEquipment && (
+          <StatCard
+            icon={Target} label={t('dash_shuttle_cost')} value={fmtVND(f.shuttleCost)} sub={`${f.boxes} ${t('dash_boxes')}`} tone="cyan"
+            tip={
+              <>
+                <p className="font-semibold text-white">{t('calc_shuttle_title')}</p>
+                <p className="mt-1.5 font-mono text-cyan-300">
+                  ⌈{fmtNum(f.totalSessions)} × {fmtNum(num(settings.estimated_shuttlecocks))} ÷ {BALLS_PER_BOX}⌉ = {f.boxes} {t('dash_boxes')}
+                </p>
+                <p className="mt-1 font-mono text-cyan-300">{f.boxes} × {fmtVND(num(settings.price_per_box))}</p>
+                <p className="mt-1 font-mono text-white">= {fmtVND(f.shuttleCost)}</p>
+              </>
+            }
+          />
+        )}
         <StatCard
-          icon={Target} label={t('dash_shuttle_cost')} value={fmtVND(f.shuttleCost)} sub={`${f.boxes} ${t('dash_boxes')}`} tone="cyan"
+          icon={Wallet} label={t('dash_total_cycle')} value={fmtVND(f.totalCost)} sub={curLabel}
           tip={
             <>
-              <p className="font-semibold text-white">{t('calc_shuttle_title')}</p>
-              <p className="mt-1.5 font-mono text-cyan-300">
-                ⌈{fmtNum(f.totalSessions)} × {fmtNum(num(settings.estimated_shuttlecocks))} ÷ {BALLS_PER_BOX}⌉ = {f.boxes} {t('dash_boxes')}
-              </p>
-              <p className="mt-1 font-mono text-cyan-300">{f.boxes} × {fmtVND(num(settings.price_per_box))}</p>
-              <p className="mt-1 font-mono text-white">= {fmtVND(f.shuttleCost)}</p>
+              <p className="font-semibold text-white">{t('dash_total_cost')}</p>
+              <p className="mt-1.5 font-mono text-lime-300">{fmtVND(f.courtCost)} + {hasEquipment ? fmtVND(f.shuttleCost) : '0'}</p>
+              <p className="mt-1 font-mono text-white">= {fmtVND(f.totalCost)}</p>
             </>
           }
         />
-        <StatCard icon={Wallet} label={t('dash_fund')} value={fmtVND(f.fund)} />
       </div>
 
-      {/* runway status */}
-      {f.balance >= 0 ? (
-        <div className="flex items-center gap-4 rounded-3xl border border-lime-200 bg-lime-50 p-5">
-          <span className="grid h-12 w-12 shrink-0 place-items-center rounded-2xl bg-lime-400 text-slate-900">
-            <TrendingUp className="h-6 w-6" />
-          </span>
-          <div className="flex-1">
-            <p className="font-bold text-slate-900">{t('dash_surplus')}</p>
-            <p className="text-sm text-slate-600">{t('dash_balance')}: <span className="font-mono font-bold text-lime-700">{fmtVND(f.balance)}</span></p>
-          </div>
-        </div>
-      ) : (
-        <div className="relative overflow-hidden rounded-3xl border border-red-200 bg-red-50 p-5 sm:p-6">
-          <div className="flex items-start gap-4">
-            <span className="grid h-12 w-12 shrink-0 place-items-center rounded-2xl bg-red-500 text-white animate-pulse-dot">
-              <AlertTriangle className="h-6 w-6" />
-            </span>
-            <div className="flex-1">
-              <p className="font-bold text-red-700">{t('dash_deficit_title')}</p>
-              {memberCount > 0 ? (
-                <p className="mt-1 text-sm leading-relaxed text-slate-700">
-                  {t('dash_deficit_body', { amount: fmtVND(f.deficit) })}{' '}
-                  <span className="font-mono font-black text-red-600">{t('dash_deficit_each', { amount: fmtVND(f.perMemberDeficit) })}</span>{' '}
-                  {t('dash_deficit_clear')}
-                </p>
-              ) : (
-                <p className="mt-1 text-sm text-slate-700">{t('dash_no_members')}</p>
-              )}
-            </div>
-          </div>
-          {memberCount > 0 && (
-            <div className="mt-4 grid grid-cols-2 gap-3 sm:grid-cols-3">
-              <div className="rounded-2xl bg-white/70 p-3 text-center">
-                <p className="text-xs text-slate-400">{t('dash_balance')}</p>
-                <p className="font-mono text-lg font-black text-red-600">{fmtVND(f.balance)}</p>
-              </div>
-              <div className="rounded-2xl bg-white/70 p-3 text-center">
-                <p className="text-xs text-slate-400">{t('dash_member_count')}</p>
-                <p className="font-mono text-lg font-black text-slate-900">{memberCount}</p>
-              </div>
-              <div className="col-span-2 rounded-2xl bg-slate-900 p-3 text-center sm:col-span-1">
-                <p className="text-xs text-slate-400">{t('dash_per_member')}</p>
-                <p className="font-mono text-lg font-black text-lime-400">{fmtVND(f.perMemberDeficit)}</p>
-              </div>
-            </div>
-          )}
-        </div>
-      )}
-
-      {/* suggested fee */}
-      {memberCount > 0 && (
-        <div className="flex items-center justify-between rounded-3xl border border-slate-100 bg-white p-5">
-          <div className="flex items-center gap-3">
-            <span className="grid h-11 w-11 place-items-center rounded-2xl bg-slate-900 text-lime-400"><Receipt className="h-5 w-5" /></span>
-            <div>
-              <p className="text-sm font-semibold text-slate-900">{t('dash_per_member')}</p>
-              <p className="text-xs text-slate-400">{curLabel} · {memberCount} {t('members')}</p>
-            </div>
-          </div>
-          <p className="font-mono text-2xl font-black text-slate-900">{fmtVND(f.suggestedFee)}</p>
-        </div>
-      )}
-
-      {/* next cycle */}
+      {/* ── NEXT CYCLE ───────────────────────────────────────── */}
       <div className="rounded-3xl border border-slate-100 bg-white p-5">
         <div className="flex flex-wrap items-center justify-between gap-2">
           <div className="flex items-center gap-2 text-slate-400">
@@ -1292,7 +1735,7 @@ function ForecastDashboard({ settings, memberCount, memberSource, plan, canEdit,
         </div>
       </div>
 
-      {/* advanced (Pro) */}
+      {/* ── ADVANCED (Pro) ───────────────────────────────────── */}
       <AdvancedForecast forecast={f} plan={plan} onUnlock={onUnlock} />
     </div>
   )
@@ -1351,37 +1794,113 @@ function AdvancedForecast({ forecast, plan, onUnlock }) {
 /* ============================================================================
  *  ⑫ SESSION LOG — post-match actuals + variance
  * ========================================================================== */
-function SessionLog({ club, logs, estimate, canEdit, onChanged, toast }) {
+function SessionLog({ club, logs, settings, sport, estimate, canEdit, onChanged, toast }) {
   const { t } = useTranslation()
-  const [form, setForm] = useState({ played_on: new Date().toISOString().slice(0, 10), actual: '', note: '' })
+  const [editingDate, setEditingDate] = useState(null)
+  const [editForm, setEditForm] = useState({ actual: '', note: '' })
   const [busy, setBusy] = useState(false)
 
+  const hasEquipment = sport?.hasEquipment ?? true
   const est = num(estimate)
-  const avg = logs.length ? logs.reduce((s, l) => s + num(l.actual_shuttlecocks), 0) / logs.length : 0
-  const runningHigh = logs.length >= 2 && avg > est
+  const cycleMode = settings.court_payment_mode === 'cycle'
 
-  async function add(e) {
-    e.preventDefault()
-    if (!canEdit || busy) return
+  // Derive all session dates in the current period up to today from schedule
+  const periods = useMemo(() => resolvePeriods(settings), [settings])
+  const wds = useMemo(() => {
+    const arr = Array.isArray(settings.play_weekdays) ? settings.play_weekdays.map(Number) : []
+    return new Set(arr)
+  }, [settings.play_weekdays])
+
+  const scheduledDates = useMemo(() => {
+    if (!wds.size) return []
+    const { year: sy, month0: sm0 } = periods.current.months[0]
+    const lastM = periods.current.months[periods.current.months.length - 1]
+    const periodEnd = new Date(lastM.year, lastM.month0 + 1, 0)
+    const today = new Date()
+    const cutoff = new Date(Math.min(today, periodEnd))
+    const cutoffDay = new Date(cutoff.getFullYear(), cutoff.getMonth(), cutoff.getDate())
+    const dates = []
+    const d = new Date(sy, sm0, 1)
+    while (d <= cutoffDay) {
+      if (wds.has(d.getDay())) dates.push(d.toISOString().slice(0, 10))
+      d.setDate(d.getDate() + 1)
+    }
+    return dates.reverse() // most recent first
+  }, [settings, periods, wds])
+
+  // Merge schedule with actual logs
+  const sessions = useMemo(() => scheduledDates.map((date) => {
+    const log = logs.find((l) => l.played_on === date)
+    return { date, log }
+  }), [scheduledDates, logs])
+
+  const loggedCount = sessions.filter((s) => s.log).length
+  const avgActual = loggedCount
+    ? sessions.filter((s) => s.log).reduce((sum, s) => sum + num(s.log.actual_shuttlecocks), 0) / loggedCount
+    : 0
+  const runningHigh = loggedCount >= 2 && avgActual > est
+
+  function startEdit(date, log) {
+    setEditingDate(date)
+    setEditForm({ actual: log ? String(num(log.actual_shuttlecocks)) : '', note: log?.note || '' })
+  }
+
+  async function saveEdit() {
+    if (busy) return
     setBusy(true)
     try {
-      const { error } = await supabase.from('session_logs').insert({
-        club_id: club.id,
-        played_on: form.played_on,
-        actual_shuttlecocks: form.actual === '' ? est : num(form.actual),
-        note: form.note.trim() || null,
-      })
-      if (error) throw error
-      setForm({ played_on: new Date().toISOString().slice(0, 10), actual: '', note: '' })
+      const actualCount = editForm.actual === '' ? est : num(editForm.actual)
+      const courtCost = num(settings.court_price_per_hour) * num(settings.hours_per_session)
+      const shuttleCost = hasEquipment
+        ? Math.round(actualCount * (num(settings.price_per_box) / BALLS_PER_BOX))
+        : 0
+      const totalCost = courtCost + shuttleCost
+      const existingLog = logs.find((l) => l.played_on === editingDate)
+
+      if (existingLog) {
+        await supabase.from('session_logs').update({
+          actual_shuttlecocks: actualCount,
+          note: editForm.note.trim() || null,
+          court_cost: courtCost, shuttle_cost: shuttleCost, total_cost: totalCost,
+        }).eq('id', existingLog.id)
+
+        // Adjust fund: restore old deduction, apply new
+        const oldDeduct = cycleMode ? num(existingLog.shuttle_cost) : num(existingLog.total_cost)
+        const newDeduct = cycleMode ? shuttleCost : totalCost
+        const adj = oldDeduct - newDeduct
+        if (adj !== 0) {
+          await supabase.from('club_settings')
+            .update({ current_fund: num(settings.current_fund) + adj })
+            .eq('club_id', club.id)
+        }
+      } else {
+        await supabase.from('session_logs').insert({
+          club_id: club.id, played_on: editingDate,
+          actual_shuttlecocks: actualCount, note: editForm.note.trim() || null,
+          court_cost: courtCost, shuttle_cost: shuttleCost, total_cost: totalCost,
+        })
+        const deduct = cycleMode ? shuttleCost : totalCost
+        await supabase.from('club_settings')
+          .update({ current_fund: Math.max(0, num(settings.current_fund) - deduct) })
+          .eq('club_id', club.id)
+      }
+
+      setEditingDate(null)
       onChanged()
     } catch (e) { toast(e.message || t('err_generic')) }
     finally { setBusy(false) }
   }
 
-  async function remove(id) {
-    if (!canEdit) return
+  async function clearLog(log) {
+    if (!canEdit || !log) return
     try {
-      await supabase.from('session_logs').delete().eq('id', id)
+      await supabase.from('session_logs').delete().eq('id', log.id)
+      const restore = cycleMode ? num(log.shuttle_cost) : num(log.total_cost)
+      if (restore > 0) {
+        await supabase.from('club_settings')
+          .update({ current_fund: num(settings.current_fund) + restore })
+          .eq('club_id', club.id)
+      }
       onChanged()
     } catch (e) { toast(e.message || t('err_generic')) }
   }
@@ -1392,13 +1911,13 @@ function SessionLog({ club, logs, estimate, canEdit, onChanged, toast }) {
         <ClipboardList className="h-5 w-5 text-slate-400" />
         <h3 className="text-lg font-bold text-slate-900">{t('log_title')}</h3>
       </div>
-      <p className="mt-1 text-sm text-slate-500">{t('log_sub')}</p>
+      <p className="mt-1 text-sm text-slate-500">{t('log_sub_auto')}</p>
 
       {/* summary strip */}
-      <div className="mt-5 grid grid-cols-2 gap-3 sm:grid-cols-3">
-        <StatCard icon={Target} label={t('log_estimate')} value={`${fmtNum(est)}`} sub="/ session" />
-        <StatCard icon={Gauge} label={t('log_avg')} value={logs.length ? avg.toFixed(1) : '—'} tone={runningHigh ? 'red' : 'slate'} />
-        <StatCard icon={ClipboardList} label="Sessions" value={fmtNum(logs.length)} />
+      <div className="mt-5 grid grid-cols-3 gap-3">
+        <StatCard icon={ClipboardList} label={t('log_happened')} value={fmtNum(sessions.length)} />
+        <StatCard icon={Check} label={t('log_recorded')} value={fmtNum(loggedCount)} tone={loggedCount === sessions.length ? 'volt' : 'slate'} />
+        {hasEquipment && <StatCard icon={Gauge} label={t('log_avg')} value={loggedCount ? avgActual.toFixed(1) : '—'} tone={runningHigh ? 'red' : 'slate'} />}
       </div>
 
       {runningHigh && (
@@ -1407,45 +1926,104 @@ function SessionLog({ club, logs, estimate, canEdit, onChanged, toast }) {
         </div>
       )}
 
-      {canEdit && (
-        <form onSubmit={add} className="mt-5 grid gap-3 sm:grid-cols-[auto_1fr_auto]">
-          <input type="date" className={cx(inputCls, 'font-mono')} value={form.played_on} onChange={(e) => setForm((f) => ({ ...f, played_on: e.target.value }))} />
-          <input type="number" min="0" step="0.5" className={cx(inputCls, 'font-mono')} placeholder={`${t('log_actual')} (${est})`} value={form.actual} onChange={(e) => setForm((f) => ({ ...f, actual: e.target.value }))} />
-          <Button type="submit" variant="primary" disabled={busy}>
-            {busy ? <Loader2 className="h-4 w-4 animate-spin" /> : <><Plus className="h-4 w-4" /> {t('log_add')}</>}
-          </Button>
-          <input className={cx(inputCls, 'sm:col-span-3')} placeholder={t('log_note_ph')} value={form.note} onChange={(e) => setForm((f) => ({ ...f, note: e.target.value }))} />
-        </form>
+      {!wds.size && (
+        <div className="mt-4 flex items-center gap-2 rounded-2xl border border-slate-200 bg-slate-50 px-4 py-3 text-sm text-slate-500">
+          <Info className="h-4 w-4 shrink-0" /> {t('log_no_schedule')}
+        </div>
       )}
 
       <ul className="mt-5 space-y-2">
-        {logs.length === 0 && (
-          <li className="rounded-2xl border border-dashed border-slate-200 py-10 text-center text-sm text-slate-400">{t('log_empty')}</li>
+        {sessions.length === 0 && wds.size > 0 && (
+          <li className="rounded-2xl border border-dashed border-slate-200 py-10 text-center text-sm text-slate-400">{t('log_no_sessions_yet')}</li>
         )}
-        {logs.map((l) => {
-          const actual = num(l.actual_shuttlecocks)
-          const diff = actual - est
+        {sessions.map(({ date, log }) => {
+          const isEditing = editingDate === date
+          const isActual = !!log
+          const shuttleCount = isActual ? num(log.actual_shuttlecocks) : est
+          const diff = shuttleCount - est
           const tone = diff > 0 ? 'red' : diff < 0 ? 'volt' : 'slate'
-          const label = diff > 0 ? t('log_over') : diff < 0 ? t('log_under') : t('log_on_track')
+          const cost = isActual ? num(log.total_cost) : 0
+
           return (
-            <li key={l.id} className="flex items-center gap-3 rounded-2xl border border-slate-100 bg-white px-4 py-3">
-              <span className="grid h-9 w-9 shrink-0 place-items-center rounded-xl bg-slate-100 text-slate-500">
-                <Calendar className="h-4 w-4" />
-              </span>
-              <div className="min-w-0 flex-1">
-                <p className="text-sm font-semibold text-slate-900">{fmtDate(l.played_on)}</p>
-                {l.note && <p className="truncate text-xs text-slate-400">{l.note}</p>}
-              </div>
-              <div className="text-right">
-                <p className="font-mono text-sm font-bold text-slate-900">{actual} <span className="text-xs font-normal text-slate-400">/ {est}</span></p>
-                <Badge tone={tone === 'volt' ? 'volt' : tone === 'red' ? 'red' : 'slate'}>
-                  {diff > 0 ? '+' : ''}{diff !== 0 ? diff : ''} {label}
-                </Badge>
-              </div>
-              {canEdit && (
-                <button onClick={() => remove(l.id)} className="grid h-8 w-8 place-items-center rounded-lg text-slate-300 transition hover:bg-red-50 hover:text-red-500">
-                  <Trash2 className="h-4 w-4" />
-                </button>
+            <li key={date} className={cx(
+              'rounded-2xl border px-4 py-3 transition',
+              isActual ? 'border-slate-100 bg-white' : 'border-dashed border-slate-200 bg-slate-50/60'
+            )}>
+              {isEditing ? (
+                <div className="space-y-2">
+                  <p className="text-sm font-bold text-slate-900">{fmtDate(date)}</p>
+                  <div className="grid gap-2 sm:grid-cols-2">
+                    <div className="relative">
+                      <input
+                        type="number" min="0" step="0.5" autoFocus
+                        className={cx(inputCls, 'font-mono')}
+                        placeholder={`${t('log_actual')} (${est})`}
+                        value={editForm.actual}
+                        onChange={(e) => setEditForm((f) => ({ ...f, actual: e.target.value }))}
+                      />
+                    </div>
+                    <input
+                      className={inputCls}
+                      placeholder={t('log_note_ph')}
+                      value={editForm.note}
+                      onChange={(e) => setEditForm((f) => ({ ...f, note: e.target.value }))}
+                    />
+                  </div>
+                  <div className="flex gap-2">
+                    <Button variant="volt" size="sm" className="flex-1" onClick={saveEdit} disabled={busy}>
+                      {busy ? <Loader2 className="h-4 w-4 animate-spin" /> : <><Check className="h-4 w-4" /> {t('save')}</>}
+                    </Button>
+                    <Button variant="ghost" size="sm" onClick={() => setEditingDate(null)}>{t('cancel')}</Button>
+                  </div>
+                </div>
+              ) : (
+                <div className="flex items-center gap-3">
+                  <span className={cx(
+                    'grid h-9 w-9 shrink-0 place-items-center rounded-xl text-sm',
+                    isActual ? 'bg-slate-100 text-slate-500' : 'bg-slate-100 text-slate-300'
+                  )}>
+                    <Calendar className="h-4 w-4" />
+                  </span>
+                  <div className="min-w-0 flex-1">
+                    <p className={cx('text-sm font-semibold', isActual ? 'text-slate-900' : 'text-slate-400')}>{fmtDate(date)}</p>
+                    {log?.note && <p className="truncate text-xs text-slate-400">{log.note}</p>}
+                    {!isActual && <p className="text-xs text-slate-400">{t('log_estimated_default')}</p>}
+                  </div>
+                  <div className="text-right shrink-0">
+                    {cost > 0 && <p className="font-mono text-sm font-black text-slate-900">{fmtVND(cost)}</p>}
+                    {hasEquipment && (
+                      <p className={cx('font-mono text-xs', isActual ? 'text-slate-500' : 'text-slate-300')}>
+                        {shuttleCount} {t('log_shuttles')}
+                        {!isActual && <span className="ml-1 text-slate-300">({t('log_est_tag')})</span>}
+                      </p>
+                    )}
+                    {isActual && (
+                      <Badge tone={tone === 'volt' ? 'volt' : tone === 'red' ? 'red' : 'slate'}>
+                        {diff > 0 ? '+' : ''}{diff !== 0 ? diff : ''} {diff > 0 ? t('log_over') : diff < 0 ? t('log_under') : t('log_on_track')}
+                      </Badge>
+                    )}
+                  </div>
+                  {canEdit && (
+                    <div className="flex shrink-0 gap-1">
+                      <button
+                        onClick={() => startEdit(date, log)}
+                        className="grid h-8 w-8 place-items-center rounded-lg text-slate-300 transition hover:bg-slate-100 hover:text-slate-600"
+                        title={t('log_edit')}
+                      >
+                        <Settings2 className="h-4 w-4" />
+                      </button>
+                      {isActual && (
+                        <button
+                          onClick={() => clearLog(log)}
+                          className="grid h-8 w-8 place-items-center rounded-lg text-slate-300 transition hover:bg-red-50 hover:text-red-400"
+                          title={t('log_reset')}
+                        >
+                          <Trash2 className="h-4 w-4" />
+                        </button>
+                      )}
+                    </div>
+                  )}
+                </div>
               )}
             </li>
           )
@@ -1498,9 +2076,9 @@ function PlanSimulator({ plan, canEdit, onChange }) {
 }
 
 /* ============================================================================
- *  ⑭ CLUB APP — the authenticated experience (tabs + data wiring)
+ *  ⑭ CLUB APP — the authenticated experience (sidebar + data wiring)
  * ========================================================================== */
-function ClubApp({ session, club, role, setClub, toast }) {
+function ClubApp({ session, club, role, setClub, myClubs, onSwitchClub, toast }) {
   const { t } = useTranslation()
   const isOwner = role === 'host'
   const [tab, setTab] = useState('dashboard')
@@ -1508,17 +2086,20 @@ function ClubApp({ session, club, role, setClub, toast }) {
   const [settings, setSettings] = useState(null)
   const [members, setMembers] = useState([])
   const [logs, setLogs] = useState([])
+  const [fundTxns, setFundTxns] = useState([])
   const [pollTally, setPollTally] = useState(null) // { count, source }
   const [loading, setLoading] = useState(true)
   const [upsell, setUpsell] = useState(false)
+  const [sidebarOpen, setSidebarOpen] = useState(false)
 
   const canEdit = isOwner && !previewMember
   const plan = club.plan || 'free'
+  const sport = SPORT_CONFIGS[club.sport_type] || SPORT_CONFIGS.badminton
 
   const DEFAULT_SETTINGS = {
     court_price_per_hour: 120000, hours_per_session: 2, sessions_per_week: 2,
     play_weekdays: [], quarter_start_month: Math.floor(new Date().getMonth() / 3) * 3 + 1,
-    billing_cycle: 'month', price_per_box: 320000, estimated_shuttlecocks: 6, current_fund: 0,
+    billing_cycle: 'month', price_per_box: 320000, estimated_shuttlecocks: 6, current_fund: 0, court_payment_mode: 'session',
   }
 
   const loadAll = useCallback(async () => {
@@ -1531,6 +2112,9 @@ function ClubApp({ session, club, role, setClub, toast }) {
     // logs
     const { data: lg } = await supabase.from('session_logs').select('*').eq('club_id', club.id).order('played_on', { ascending: false })
     setLogs(lg || [])
+    // fund transactions
+    const { data: ft } = await supabase.from('fund_transactions').select('*').eq('club_id', club.id).order('created_at', { ascending: false })
+    setFundTxns(ft || [])
     // cross-query membership_cycle poll tally (Ecosystem Collaboration Engine)
     const { data: v } = await supabase
       .from('votes').select('id').eq('club_id', club.id).eq('vote_type', 'membership_cycle')
@@ -1554,6 +2138,7 @@ function ClubApp({ session, club, role, setClub, toast }) {
       .on('postgres_changes', { event: '*', schema: 'public', table: 'club_settings', filter: `club_id=eq.${club.id}` }, loadAll)
       .on('postgres_changes', { event: '*', schema: 'public', table: 'club_members', filter: `club_id=eq.${club.id}` }, loadAll)
       .on('postgres_changes', { event: '*', schema: 'public', table: 'session_logs', filter: `club_id=eq.${club.id}` }, loadAll)
+      .on('postgres_changes', { event: '*', schema: 'public', table: 'fund_transactions', filter: `club_id=eq.${club.id}` }, loadAll)
       .subscribe()
     return () => { supabase.removeChannel(ch) }
   }, [club.id, loadAll])
@@ -1575,6 +2160,7 @@ function ClubApp({ session, club, role, setClub, toast }) {
     { id: 'dashboard', label: t('nav_dashboard'), icon: LayoutDashboard },
     { id: 'settings', label: t('nav_settings'), icon: Settings2 },
     { id: 'log', label: t('nav_log'), icon: ClipboardList },
+    { id: 'fund', label: t('nav_fund'), icon: History },
   ]
 
   if (loading || !settings) {
@@ -1588,53 +2174,130 @@ function ClubApp({ session, club, role, setClub, toast }) {
   }
 
   return (
-    <main className="bg-grid flex-1">
-      <div className="mx-auto max-w-[1350px] px-5 py-10 pb-24">
-        {/* club header */}
-        <div className="flex flex-wrap items-start justify-between gap-4">
-          <div>
-            <div className="flex flex-wrap items-center gap-2">
-              <Badge tone={plan === 'pro' ? 'volt' : 'slate'} icon={plan === 'pro' ? Crown : Zap}>
-                {plan === 'pro' ? t('plan_pro') : t('plan_free')}
-              </Badge>
-              {!canEdit && <Badge tone="cyan" icon={Eye}>{t('role_member')}</Badge>}
-            </div>
-            <h1 className="mt-3 flex items-center gap-2 text-3xl font-black tracking-tight text-slate-900 sm:text-4xl">
-              <Building2 className="h-7 w-7 text-slate-300" /> {club.name}
-            </h1>
+    <div className="flex flex-1 bg-grid relative">
+      {/* Mobile sidebar overlay */}
+      {sidebarOpen && (
+        <div
+          className="fixed inset-0 z-30 bg-slate-900/20 backdrop-blur-sm md:hidden"
+          onClick={() => setSidebarOpen(false)}
+        />
+      )}
+
+      {/* Sidebar */}
+      <aside className={cx(
+        'fixed left-0 top-[65px] bottom-0 z-40 w-56 flex flex-col border-r border-slate-100 bg-white/90 backdrop-blur-xl transition-transform duration-200',
+        'md:sticky md:h-[calc(100vh-4rem)] md:translate-x-0',
+        sidebarOpen ? 'translate-x-0' : '-translate-x-full'
+      )}>
+        {/* Club name strip */}
+        <div className="px-4 py-4 border-b border-slate-100">
+          <div className="flex items-center gap-2.5">
+            <span className="grid h-8 w-8 shrink-0 place-items-center rounded-xl bg-slate-900 text-sm font-black text-lime-400">
+              {club.name[0].toUpperCase()}
+            </span>
+            <span className="text-sm font-bold text-slate-900 truncate">{club.name}</span>
           </div>
-          {/* {isOwner && (
-            <Button variant="ghost" size="sm" onClick={() => setPreviewMember((v) => !v)}>
-              <Eye className="h-4 w-4" /> {previewMember ? t('view_as_host') : t('view_as_member')}
-            </Button>
-          )} */}
         </div>
 
-        {!canEdit && (
-          <div className="mt-5 flex items-center gap-3 rounded-2xl border border-cyan-200 bg-cyan-50 px-4 py-3 text-sm text-cyan-800">
-            <Eye className="h-4 w-4 shrink-0" /> {t('readonly_banner')}
-          </div>
-        )}
-
-        {/* tabs */}
-        <div className="mt-6 inline-flex rounded-2xl border border-slate-200 bg-white/70 p-1 backdrop-blur">
+        {/* Nav items */}
+        <nav className="flex-1 p-3 space-y-0.5 overflow-y-auto">
           {tabs.map((tb) => (
             <button
               key={tb.id}
-              onClick={() => setTab(tb.id)}
+              onClick={() => { setTab(tb.id); setSidebarOpen(false) }}
               className={cx(
-                'inline-flex items-center gap-2 rounded-xl px-4 py-2 text-xs sm:text-sm font-semibold transition',
-                tab === tb.id ? 'bg-slate-900 text-white shadow' : 'text-slate-500 hover:text-slate-700'
+                'w-full flex items-center gap-3 rounded-2xl px-3 py-2.5 text-sm font-semibold transition',
+                tab === tb.id
+                  ? 'bg-lime-400/10 text-lime-700'
+                  : 'text-slate-500 hover:bg-slate-100 hover:text-slate-900'
               )}
             >
-              <tb.icon className="h-4 w-4" /> <span className='sm:hidden'>{tab === tb.id ? tb.label : null}</span>
-              <span className='hidden sm:block'>{tb.label}</span>
+              <tb.icon className={cx('h-4 w-4 shrink-0', tab === tb.id ? 'text-lime-600' : 'text-slate-400')} />
+              {tb.label}
             </button>
           ))}
+        </nav>
+
+        {/* Invite link — host only */}
+        {isOwner && (
+          <div className="px-3 pb-2">
+            <Button
+              variant="ghost"
+              size="sm"
+              className="w-full text-xs"
+              onClick={() => {
+                navigator.clipboard.writeText(`${window.location.origin}/join/${club.id}`)
+                toast(t('join_copied'))
+              }}
+            >
+              <LinkIcon className="h-3.5 w-3.5" /> {t('join_copy')}
+            </Button>
+          </div>
+        )}
+
+        {/* Bottom: plan status */}
+        <div className="p-3 border-t border-slate-100 space-y-2">
+          {!canEdit && (
+            <div className="flex items-center gap-2 px-1">
+              <Eye className="h-3.5 w-3.5 text-cyan-600" />
+              <span className="text-xs font-semibold text-cyan-700">{t('role_member')}</span>
+            </div>
+          )}
+          <div className="rounded-2xl border border-slate-100 bg-slate-50 p-3">
+            <div className="flex items-center gap-2">
+              <Badge tone={plan === 'pro' ? 'volt' : 'slate'} icon={plan === 'pro' ? Crown : Zap}>
+                {plan === 'pro' ? t('plan_pro') : t('plan_free')}
+              </Badge>
+            </div>
+            {plan === 'free' && isOwner && (
+              <Button variant="volt" size="sm" className="mt-2.5 w-full text-xs" onClick={() => setUpsell(true)}>
+                <Crown className="h-3 w-3" /> {t('sidebar_upgrade')}
+              </Button>
+            )}
+            {plan === 'pro' && isOwner && (
+              <Button variant="subtle" size="sm" className="mt-2.5 w-full text-xs" onClick={() => setPlan('free')}>
+                {t('sidebar_switch_free')}
+              </Button>
+            )}
+          </div>
+        </div>
+      </aside>
+
+      {/* Main content */}
+      <main className="flex-1 min-w-0 flex flex-col">
+        {/* Mobile top bar */}
+        <div className="flex items-center gap-3 border-b border-slate-100 bg-white/70 px-5 py-3 md:hidden">
+          <button
+            onClick={() => setSidebarOpen(true)}
+            className="grid h-9 w-9 place-items-center rounded-xl border border-slate-200 bg-white text-slate-600 transition hover:bg-slate-50"
+          >
+            <Menu className="h-4 w-4" />
+          </button>
+          <h2 className="text-sm font-bold text-slate-900 truncate">{club.name}</h2>
+          <div className="ml-auto">
+            <Badge tone={plan === 'pro' ? 'volt' : 'slate'} icon={plan === 'pro' ? Crown : Zap}>
+              {plan === 'pro' ? t('plan_pro') : t('plan_free')}
+            </Badge>
+          </div>
         </div>
 
-        {/* tab content */}
-        <div className="mt-6">
+        <div className="flex-1 px-5 py-8 pb-24 mx-auto w-full max-w-[1460px]">
+          {/* Club header (desktop) */}
+          <div className="hidden md:flex flex-wrap items-center justify-between gap-4 mb-8">
+            <div>
+              <h1 className="flex items-center gap-2 text-2xl font-black tracking-tight text-slate-900">
+                <Building2 className="h-6 w-6 text-slate-300" /> {club.name}
+              </h1>
+            </div>
+          </div>
+
+          {!canEdit && (
+            <div className="mb-6 flex items-center gap-3 rounded-2xl border border-cyan-200 bg-cyan-50 px-4 py-3 text-sm text-cyan-800">
+              <Eye className="h-4 w-4 shrink-0" /> {t('readonly_banner')}
+            </div>
+          )}
+
+          {/* Tab content */}
           {tab === 'dashboard' && (
             <div className="grid gap-6 lg:grid-cols-3">
               <div className="lg:col-span-2">
@@ -1643,8 +2306,11 @@ function ClubApp({ session, club, role, setClub, toast }) {
                   memberCount={memberCount}
                   memberSource={memberSource}
                   plan={plan}
+                  sport={sport}
                   canEdit={canEdit}
                   onUnlock={() => setUpsell(true)}
+                  logs={logs}
+                  fundTxns={fundTxns}
                 />
               </div>
               <div className="space-y-6">
@@ -1652,12 +2318,6 @@ function ClubApp({ session, club, role, setClub, toast }) {
                   club={club} members={members} plan={plan} pollTally={pollTally}
                   canEdit={canEdit} onChanged={loadAll} onHitLimit={() => setUpsell(true)} toast={toast}
                 />
-                {isOwner && (
-                  <PlanSimulator
-                    plan={plan} canEdit={isOwner}
-                    onChange={(p) => { if (p === 'pro') setUpsell(true); else setPlan('free') }}
-                  />
-                )}
               </div>
             </div>
           )}
@@ -1665,7 +2325,7 @@ function ClubApp({ session, club, role, setClub, toast }) {
           {tab === 'settings' && (
             <div className="grid gap-6 lg:grid-cols-3">
               <div className="lg:col-span-2">
-                <SettingsPanel club={club} settings={settings} canEdit={canEdit} onSaved={(p) => setSettings({ ...settings, ...p })} toast={toast} />
+                <SettingsPanel club={club} settings={settings} sport={sport} canEdit={canEdit} onSaved={(p) => setSettings({ ...settings, ...p })} toast={toast} />
               </div>
               <div className="space-y-6">
                 <MembersPanel
@@ -1678,11 +2338,26 @@ function ClubApp({ session, club, role, setClub, toast }) {
 
           {tab === 'log' && (
             <div className="mx-auto max-w-3xl">
-              <SessionLog club={club} logs={logs} estimate={settings.estimated_shuttlecocks} canEdit={canEdit} onChanged={loadAll} toast={toast} />
+              <SessionLog club={club} logs={logs} settings={settings} sport={sport} estimate={settings.estimated_shuttlecocks} canEdit={canEdit} onChanged={loadAll} toast={toast} />
+            </div>
+          )}
+
+          {tab === 'fund' && (
+            <div className="p-6">
+              <FundHistory
+                club={club}
+                fundTxns={fundTxns}
+                settings={settings}
+                canEdit={canEdit}
+                onTopUp={loadAll}
+                toast={toast}
+              />
             </div>
           )}
         </div>
-      </div>
+
+        {/* <Footer /> */}
+      </main>
 
       <UpsellModal
         open={upsell}
@@ -1691,23 +2366,226 @@ function ClubApp({ session, club, role, setClub, toast }) {
         onUpgraded={() => setClub({ ...club, plan: 'pro' })}
         toast={toast}
       />
-      <Footer />
-    </main>
+    </div>
   )
 }
 
 /* ============================================================================
- *  ⑮ ROOT — auth gate + club resolution
+ *  ⑮ FUND HISTORY — list of all fund top-ups
  * ========================================================================== */
+function FundHistory({ club, fundTxns, settings, canEdit, onTopUp, toast }) {
+  const { t } = useTranslation()
+  const [topUpOpen, setTopUpOpen] = useState(false)
+  const [amount, setAmount] = useState('')
+  const [note, setNote] = useState('')
+  const [busy, setBusy] = useState(false)
+
+  async function submit() {
+    const amt = num(amount)
+    if (!amt || busy) return
+    setBusy(true)
+    try {
+      const newFund = num(settings.current_fund) + amt
+      const { error: e1 } = await supabase.from('fund_transactions').insert({
+        club_id: club.id, amount: amt, note: note.trim() || null,
+      })
+      if (e1) throw e1
+      const { error: e2 } = await supabase.from('club_settings')
+        .update({ current_fund: newFund }).eq('club_id', club.id)
+      if (e2) throw e2
+      toast(t('fund_added'))
+      setAmount(''); setNote(''); setTopUpOpen(false)
+      onTopUp()
+    } catch (e) { toast(e.message || t('err_generic')) }
+    finally { setBusy(false) }
+  }
+
+  const total = fundTxns.reduce((s, tx) => s + num(tx.amount), 0)
+
+  return (
+    <div className="mx-auto max-w-2xl space-y-5">
+      {/* Header + top-up button */}
+      <div className="flex items-center justify-between">
+        <div>
+          <h2 className="text-xl font-black tracking-tight text-slate-900">{t('fund_history_title')}</h2>
+          <p className="mt-0.5 text-sm text-slate-500">{t('fund_history_sub')}</p>
+        </div>
+        {canEdit && (
+          <Button variant="volt" size="sm" onClick={() => setTopUpOpen((v) => !v)}>
+            <Plus className="h-4 w-4" /> {t('fund_topup_btn')}
+          </Button>
+        )}
+      </div>
+
+      {/* Inline top-up form */}
+      {topUpOpen && canEdit && (
+        <div className="rounded-3xl border border-lime-200 bg-lime-50 p-5 space-y-3 animate-fade-in">
+          <p className="font-semibold text-slate-800">{t('fund_topup_title')}</p>
+          <div className="grid gap-3 sm:grid-cols-2">
+            <div className="relative">
+              <input
+                type="number" min="0" autoFocus
+                className={cx(inputCls, 'pr-10 font-mono')}
+                placeholder={t('fund_topup_amount_ph')}
+                value={amount}
+                onChange={(e) => setAmount(e.target.value)}
+              />
+              <span className="pointer-events-none absolute right-4 top-1/2 -translate-y-1/2 text-sm font-semibold text-slate-400">₫</span>
+            </div>
+            <input
+              className={inputCls}
+              placeholder={t('fund_topup_note_ph')}
+              value={note}
+              onChange={(e) => setNote(e.target.value)}
+            />
+          </div>
+          <div className="flex gap-2">
+            <Button variant="volt" size="sm" className="flex-1" onClick={submit} disabled={busy || !amount}>
+              {busy ? <Loader2 className="h-4 w-4 animate-spin" /> : <><Plus className="h-4 w-4" /> {t('fund_topup_submit')}</>}
+            </Button>
+            <Button variant="ghost" size="sm" onClick={() => { setTopUpOpen(false); setAmount(''); setNote('') }}>
+              {t('cancel')}
+            </Button>
+          </div>
+        </div>
+      )}
+
+      {/* Summary card */}
+      <div className="flex items-center gap-4 rounded-3xl bg-slate-900 p-5 text-white">
+        <span className="grid h-12 w-12 shrink-0 place-items-center rounded-2xl bg-lime-400 text-slate-900">
+          <Wallet className="h-6 w-6" />
+        </span>
+        <div className="flex-1 min-w-0">
+          <p className="text-xs font-semibold uppercase tracking-wide text-slate-400">{t('fund_history_total')}</p>
+          <p className="font-mono text-2xl font-black text-lime-400">{fmtVND(total)}</p>
+        </div>
+        <div className="text-right">
+          <p className="text-xs text-slate-400">{t('dash_fund_live')}</p>
+          <p className="font-mono text-lg font-black text-white">{fmtVND(num(settings.current_fund))}</p>
+        </div>
+      </div>
+
+      {/* Transaction list */}
+      <ul className="space-y-2">
+        {fundTxns.length === 0 && (
+          <li className="rounded-2xl border border-dashed border-slate-200 py-12 text-center text-sm text-slate-400">
+            {t('fund_history_empty')}
+          </li>
+        )}
+        {fundTxns.map((tx) => (
+          <li key={tx.id} className="flex items-center gap-3 rounded-2xl border border-slate-100 bg-white px-4 py-3">
+            <span className="grid h-9 w-9 shrink-0 place-items-center rounded-xl bg-lime-50 text-lime-600">
+              <TrendingUp className="h-4 w-4" />
+            </span>
+            <div className="min-w-0 flex-1">
+              <p className="text-sm font-semibold text-slate-900">
+                {tx.note || t('fund_topup_default_note')}
+              </p>
+              <p className="text-xs text-slate-400">{fmtDate(tx.created_at?.slice(0, 10))}</p>
+            </div>
+            <p className="font-mono text-base font-black text-lime-600">+{fmtVND(num(tx.amount))}</p>
+          </li>
+        ))}
+      </ul>
+    </div>
+  )
+}
+
+/* ============================================================================
+ *  ⑯ PRE-JOIN PAGE — shown to unauthenticated users visiting /join/:clubId
+ * ========================================================================== */
+function PreJoinPage({ clubId, onGoogle, busy }) {
+  const { t } = useTranslation()
+
+  function handleSignIn() {
+    localStorage.setItem('feetap_pending_join', clubId)
+    onGoogle()
+  }
+
+  return (
+    <div className="flex flex-1 items-center justify-center px-4 py-20">
+      <div className="w-full max-w-sm animate-fade-in rounded-3xl border border-slate-100 bg-white p-8 shadow-xl shadow-slate-900/[0.06] text-center">
+        <div className="mx-auto mb-4 grid h-16 w-16 place-items-center rounded-3xl bg-slate-900 text-3xl">
+          🏅
+        </div>
+        <h1 className="text-xl font-black tracking-tight text-slate-900 mb-1">{t('join_pre_title')}</h1>
+        <p className="text-slate-500 text-sm mb-6">{t('join_pre_sub')}</p>
+        <Button variant="volt" className="w-full" onClick={handleSignIn} disabled={busy}>
+          {busy ? <Loader2 className="h-4 w-4 animate-spin" /> : t('join_signin')}
+        </Button>
+      </div>
+    </div>
+  )
+}
+
+/* ============================================================================
+ *  ⑯ WELCOME MODAL — shown after joining a club
+ * ========================================================================== */
+function WelcomeModal({ clubId, myClubs, onClose }) {
+  const { t } = useTranslation()
+  const club = myClubs.find((c) => c.id === clubId)
+  const sport = SPORT_CONFIGS[club?.sport_type] || SPORT_CONFIGS.badminton
+
+  useEffect(() => {
+    const timer = setTimeout(onClose, 4000)
+    return () => clearTimeout(timer)
+  }, [onClose])
+
+  if (!club) return null
+
+  return (
+    <Modal onClose={onClose}>
+      <div className="text-center py-4">
+        <div className="mx-auto mb-4 grid h-16 w-16 place-items-center rounded-3xl bg-slate-900 text-3xl">
+          {sport.emoji}
+        </div>
+        <h2 className="text-2xl font-black tracking-tight text-slate-900 mb-2">{t('join_welcome')}</h2>
+        <p className="text-slate-500 text-sm mb-1">{t('join_pre_sub')}</p>
+        <p className="font-bold text-slate-900 mb-6">{club.name}</p>
+        <Button variant="volt" onClick={onClose}>{t('close')}</Button>
+      </div>
+    </Modal>
+  )
+}
+
+/* ============================================================================
+ *  ⑰ ROOT — URL router + auth gate + multi-club resolution
+ *
+ *  Routes:
+ *    /            → all clubs picker (logged-in) or sign-in page
+ *    /club/:id    → ClubApp for that specific club
+ *    /new         → Onboarding (create a new club)
+ *    /join/:id    → PreJoinPage (unauthenticated) or auto-join (authenticated)
+ * ========================================================================== */
+
+// Tiny History API router — no react-router dependency.
+function usePath() {
+  const [path, setPath] = useState(() => window.location.pathname)
+  useEffect(() => {
+    const handler = () => setPath(window.location.pathname)
+    window.addEventListener('popstate', handler)
+    return () => window.removeEventListener('popstate', handler)
+  }, [])
+  return path
+}
+
+function navigate(to) {
+  window.history.pushState(null, '', to)
+  window.dispatchEvent(new PopStateEvent('popstate'))
+}
+
 export default function App() {
   const { t } = useTranslation()
+  const path = usePath()
+
   const [session, setSession] = useState(null)
   const [authReady, setAuthReady] = useState(false)
-  const [club, setClub] = useState(null)
-  const [role, setRole] = useState(null) // 'host' | 'member'
+  const [myClubs, setMyClubs] = useState([])      // all clubs user has access to
+  const [role, setRole] = useState(null)           // 'host' | 'member'
   const [resolving, setResolving] = useState(false)
   const [signinBusy, setSigninBusy] = useState(false)
   const [toastMsg, setToastMsg] = useState(null)
+  const [welcomeClubId, setWelcomeClubId] = useState(null)
   const toastTimer = useRef(null)
 
   const toast = useCallback((msg) => {
@@ -1715,6 +2593,11 @@ export default function App() {
     clearTimeout(toastTimer.current)
     toastTimer.current = setTimeout(() => setToastMsg(null), 2600)
   }, [])
+
+  // Parse route
+  const clubIdFromPath = path.startsWith('/club/') ? path.slice(6) : null
+  const isNewPath = path === '/new'
+  const joinClubId = path.startsWith('/join/') ? path.slice(6) : null
 
   // ── auth session ───────────────────────────────────────────────
   useEffect(() => {
@@ -1727,34 +2610,75 @@ export default function App() {
     return () => sub.subscription.unsubscribe()
   }, [])
 
-  // ── resolve the user's club + role ─────────────────────────────
+  // ── load all clubs user has access to (owned + member, in parallel) ──
   useEffect(() => {
-    if (!session) { setClub(null); setRole(null); return }
+    if (!session) { setMyClubs([]); setRole(null); return }
     let cancelled = false
     ;(async () => {
       setResolving(true)
       try {
-        // 1) a club I own → host
-        const { data: owned } = await supabase
-          .from('clubs').select('*').eq('owner_id', session.user.id)
-          .order('created_at', { ascending: true }).limit(1)
-        if (!cancelled && owned && owned.length) {
-          setClub(owned[0]); setRole('host'); return
+        const uid = session.user.id
+
+        // Fetch owned clubs + member rows in parallel
+        const [{ data: owned }, { data: memRows }] = await Promise.all([
+          supabase.from('clubs').select('*').eq('owner_id', uid).order('created_at', { ascending: true }),
+          supabase.from('club_members').select('club_id').eq('user_id', uid),
+        ])
+
+        const ownedClubs = (owned || []).map((c) => ({ ...c, userRole: 'host' }))
+        const ownedIds = new Set(ownedClubs.map((c) => c.id))
+
+        // Fetch club details for member rows that aren't already owned
+        const memberOnlyIds = (memRows || []).map((r) => r.club_id).filter((id) => !ownedIds.has(id))
+        let memberClubs = []
+        if (memberOnlyIds.length) {
+          const { data: mclubs } = await supabase.from('clubs').select('*').in('id', memberOnlyIds)
+          memberClubs = (mclubs || []).map((c) => ({ ...c, userRole: 'member' }))
         }
-        // 2) a club I'm a member of → read-only
-        const { data: mem } = await supabase
-          .from('club_members').select('club_id').eq('user_id', session.user.id).limit(1)
-        if (!cancelled && mem && mem.length) {
-          const { data: c } = await supabase.from('clubs').select('*').eq('id', mem[0].club_id).single()
-          if (!cancelled && c) { setClub(c); setRole('member'); return }
+
+        if (cancelled) return
+
+        const all = [...ownedClubs, ...memberClubs]
+        setMyClubs(all)
+        // Global role: host if owns any club, else member
+        setRole(ownedClubs.length ? 'host' : memberClubs.length ? 'member' : null)
+
+        // Consume pending join from localStorage (set before OAuth redirect)
+        const pendingJoin = localStorage.getItem('feetap_pending_join')
+        if (pendingJoin) {
+          localStorage.removeItem('feetap_pending_join')
+          if (!cancelled) {
+            setResolving(false)
+            await handleJoin(pendingJoin, s)
+          }
+          return
         }
-        if (!cancelled) { setClub(null); setRole(null) }
+
+        // Auto-redirect: exactly 1 club total → go straight to it
+        if (path === '/' && all.length === 1) {
+          navigate(`/club/${all[0].id}`)
+          return
+        }
+        // No clubs at all → onboarding
+        if (all.length === 0 && path !== '/new' && !path.startsWith('/join/')) {
+          navigate('/new')
+        }
       } finally {
         if (!cancelled) setResolving(false)
       }
     })()
     return () => { cancelled = true }
   }, [session])
+
+  // Keep myClubs in sync when plan/name changes
+  function updateClub(updated) {
+    setMyClubs((prev) => prev.map((c) => c.id === updated.id ? updated : c))
+  }
+
+  function selectClub(club) {
+    if (club === 'new') { navigate('/new'); return }
+    navigate(`/club/${club.id}`)
+  }
 
   async function signInGoogle() {
     setSigninBusy(true)
@@ -1772,30 +2696,139 @@ export default function App() {
 
   async function signOut() {
     await supabase.auth.signOut()
-    setSession(null); setClub(null); setRole(null)
+    setSession(null); setMyClubs([]); setRole(null)
+    navigate('/')
   }
 
+  async function handleJoin(clubId, sess = session) {
+    if (!sess || !clubId) return
+    try {
+      const { error } = await supabase.from('club_members').upsert(
+        { club_id: clubId, user_id: sess.user.id, name: sess.user.user_metadata?.full_name || sess.user.email },
+        { onConflict: 'club_id,user_id', ignoreDuplicates: true }
+      )
+      if (error) throw error
+      // Reload clubs so the joined club appears
+      const { data: clubData } = await supabase.from('clubs').select('*').eq('id', clubId).single()
+      if (clubData) {
+        const newClub = { ...clubData, userRole: 'member' }
+        setMyClubs((prev) => prev.some((c) => c.id === clubId) ? prev : [...prev, newClub])
+      }
+      setWelcomeClubId(clubId)
+      navigate(`/club/${clubId}`)
+    } catch (e) {
+      toast(e.message || t('err_generic'))
+    }
+  }
+
+  // ── auto-join when logged-in user visits /join/:id ────────────
+  useEffect(() => {
+    if (session && joinClubId && !resolving) {
+      handleJoin(joinClubId)
+    }
+  // eslint-disable-next-line react-hooks/exhaustive-deps
+  }, [session, joinClubId, resolving])
+
+  // ── active club for the current URL ───────────────────────────
+  const activeClub = clubIdFromPath ? (myClubs.find((c) => c.id === clubIdFromPath) ?? null) : null
+
   // ── render ─────────────────────────────────────────────────────
+  const loading = !authReady || (session && resolving)
   let body
-  if (!authReady || (session && resolving)) {
+
+  if (loading) {
     body = (
       <div className="grid flex-1 place-items-center">
         <div className="flex items-center gap-3 text-slate-400"><Loader2 className="h-5 w-5 animate-spin" /> {t('loading')}</div>
       </div>
     )
   } else if (!session) {
-    body = <SignInPage onGoogle={signInGoogle} busy={signinBusy} />
-  } else if (!club) {
-    body = <Onboarding session={session} toast={toast} onClubReady={(c, r) => { setClub(c); setRole(r) }} />
+    if (joinClubId) {
+      body = <PreJoinPage clubId={joinClubId} onGoogle={signInGoogle} busy={signinBusy} />
+    } else {
+      body = <SignInPage onGoogle={signInGoogle} busy={signinBusy} />
+    }
+  } else if (isNewPath) {
+    body = (
+      <Onboarding
+        session={session}
+        toast={toast}
+        onClubReady={(c) => {
+          const clubWithRole = { ...c, userRole: 'host' }
+          setMyClubs((prev) => [...prev, clubWithRole])
+          if (role !== 'host') setRole('host')
+          navigate(`/club/${c.id}`)
+        }}
+      />
+    )
+  } else if (clubIdFromPath) {
+    if (!activeClub && !resolving) {
+      // club ID not in myClubs — could be still loading or invalid
+      body = (
+        <div className="grid flex-1 place-items-center">
+          <div className="text-center">
+            <p className="text-slate-400 mb-4">{t('club_not_found')}</p>
+            <Button variant="ghost" onClick={() => navigate('/')}>{t('club_back')}</Button>
+          </div>
+        </div>
+      )
+    } else if (activeClub) {
+      body = (
+        <ClubApp
+          session={session}
+          club={activeClub}
+          role={activeClub.userRole}
+          setClub={updateClub}
+          myClubs={myClubs}
+          onSwitchClub={selectClub}
+          toast={toast}
+        />
+      )
+    } else {
+      body = (
+        <div className="grid flex-1 place-items-center">
+          <div className="flex items-center gap-3 text-slate-400"><Loader2 className="h-5 w-5 animate-spin" /> {t('loading')}</div>
+        </div>
+      )
+    }
+  } else if (joinClubId) {
+    // Logged-in user visiting /join/:id — trigger auto-join immediately
+    body = (
+      <div className="grid flex-1 place-items-center">
+        <div className="flex items-center gap-3 text-slate-400"><Loader2 className="h-5 w-5 animate-spin" /> {t('loading')}</div>
+      </div>
+    )
+    // Kick off join — effect via useEffect to avoid render-time side effects
   } else {
-    body = <ClubApp session={session} club={club} role={role} setClub={setClub} toast={toast} />
+    // path === '/' — all clubs picker
+    body = (
+      <ClubPicker
+        myClubs={myClubs}
+        onSelect={selectClub}
+        onCreateNew={() => navigate('/new')}
+      />
+    )
   }
 
   return (
     <div className="flex min-h-screen flex-col bg-slate-50/50 text-slate-900 antialiased">
-      <Nav session={session} club={club} role={role} onSignOut={signOut} />
+      <Nav
+        session={session}
+        myClubs={myClubs}
+        activeClub={activeClub}
+        role={role}
+        onSignOut={signOut}
+        onSelectClub={selectClub}
+      />
       {!isConfigured && <ConfigWarning />}
       {body}
+      {welcomeClubId && (
+        <WelcomeModal
+          clubId={welcomeClubId}
+          myClubs={myClubs}
+          onClose={() => setWelcomeClubId(null)}
+        />
+      )}
       <Toast toast={toastMsg} />
     </div>
   )
