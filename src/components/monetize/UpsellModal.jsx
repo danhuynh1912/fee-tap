@@ -60,7 +60,7 @@ export function UpsellModal({ open, onClose, onUpgraded, clubId, toast }) {
 
           <div className="mt-6 flex items-end justify-between rounded-2xl bg-slate-900 px-5 py-4">
             <div>
-              <p className="text-xs font-medium text-slate-400">FeeTap Pro</p>
+              <p className="text-xs font-medium text-slate-400">SPOFUND Pro</p>
               <p className="font-mono text-2xl font-black text-white">
                 {t('upsell_price')}
                 <span className="ml-1 text-sm font-medium text-slate-500">{t('upsell_price_cycle')}</span>

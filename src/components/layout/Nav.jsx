@@ -15,7 +15,7 @@ function Logo({ onClick }) {
         </svg>
       </span>
       <span className="text-lg font-extrabold tracking-tight text-slate-900">
-        FEE<span className="text-lime-500">TAP</span>
+        SPO<span className="text-lime-500">FUND</span>
       </span>
     </button>
   )
@@ -163,8 +163,8 @@ export function Footer() {
     <footer className="border-t border-slate-100 bg-white/50 backdrop-blur">
       <div className="mx-auto flex max-w-[1350px] flex-col items-center justify-between gap-4 px-5 py-6 sm:flex-row">
         <Logo onClick={() => navigate('/')} />
-        <p className="hidden text-sm text-slate-400 sm:block">Fee + Tap · {t('brand_tag')}</p>
-        <span className="text-xs text-slate-300">© {new Date().getFullYear()} FEETAP</span>
+        <p className="hidden text-sm text-slate-400 sm:block">Spo + Fund · {t('brand_tag')}</p>
+        <span className="text-xs text-slate-300">© {new Date().getFullYear()} SPOFUND</span>
       </div>
     </footer>
   )

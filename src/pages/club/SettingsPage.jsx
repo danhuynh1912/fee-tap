@@ -105,6 +105,18 @@ export function SettingsPage({ club, settings, sport, members, plan, pollTally, 
       }
       const { error } = await supabase.from('club_settings').upsert(payload, { onConflict: 'club_id' })
       if (error) throw error
+
+      // Audit log: if current_fund changed, record a fund_transaction
+      const oldFund = num(settings.current_fund)
+      const newFund = num(form.current_fund)
+      if (newFund !== oldFund) {
+        await supabase.from('fund_transactions').insert({
+          club_id: club.id,
+          amount: newFund - oldFund,
+          note: t('fund_manual_adjust'),
+        })
+      }
+
       toast(t('set_saved'))
       onSaved(payload)
     } catch (e) {

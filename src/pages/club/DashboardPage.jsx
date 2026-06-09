@@ -176,6 +176,10 @@ function ForecastDashboard({ settings, memberCount, plan, sport, canEdit, onUnlo
   const txCount = (fundTxns || []).length
   const sessionProgress = all.totalScheduled > 0 ? Math.min(1, all.totalHappened / all.totalScheduled) : 0
 
+  // Next cycle: inherit surplus/deficit from current period
+  const nextNetCost = all.nextTotalCost - projectedBalance // surplus reduces, deficit adds
+  const nextAdjustedFee = memberCount > 0 ? Math.ceil(Math.max(0, nextNetCost) / memberCount) : 0
+
   return (
     <div className="space-y-5">
       {/* Hero card */}
@@ -186,9 +190,17 @@ function ForecastDashboard({ settings, memberCount, plan, sport, canEdit, onUnlo
             <PieChart className="h-4 w-4" />
             <span className="text-xs font-semibold uppercase tracking-wider">{t('dash_monthly_total')}</span>
           </div>
-          <span className="inline-flex items-center gap-1.5 rounded-full bg-slate-800/70 px-3 py-1 text-xs font-semibold text-slate-300">
-            <Users className="h-3.5 w-3.5 text-lime-400" /> {memberCount} {t('members')}
-          </span>
+          <div className="flex items-center gap-2 flex-wrap justify-end">
+            {all.venues.length > 0 && (
+              <span className="inline-flex items-center gap-1.5 rounded-full bg-slate-800/70 px-3 py-1 text-xs font-semibold text-slate-300">
+                <Activity className="h-3.5 w-3.5 text-lime-400" />
+                {[...new Set(all.venues.map((v) => formatPeriodLabel(v.period, i18n.language)))].join(' · ')}
+              </span>
+            )}
+            <span className="inline-flex items-center gap-1.5 rounded-full bg-slate-800/70 px-3 py-1 text-xs font-semibold text-slate-300">
+              <Users className="h-3.5 w-3.5 text-lime-400" /> {memberCount} {t('members')}
+            </span>
+          </div>
         </div>
 
         <div className="relative mt-5">
@@ -375,7 +387,7 @@ function ForecastDashboard({ settings, memberCount, plan, sport, canEdit, onUnlo
             </Badge>
           )}
         </div>
-        <div className="mt-4 grid sm:grid-cols-3 gap-3">
+        <div className="mt-4 grid sm:grid-cols-4 gap-3">
           <div className="rounded-2xl bg-slate-50 p-3 text-center">
             <p className="text-xs text-slate-400">{t('dash_sessions')}</p>
             <p className="font-mono text-lg font-black text-slate-900">{fmtNum(all.nextSessions)}</p>
@@ -384,9 +396,18 @@ function ForecastDashboard({ settings, memberCount, plan, sport, canEdit, onUnlo
             <p className="text-xs text-slate-400">{t('dash_total_cost')}</p>
             <p className="font-mono text-lg font-black text-slate-900">{fmtVND(all.nextTotalCost)}</p>
           </div>
+          <div className={cx('rounded-2xl p-3 text-center', projectedSurplus ? 'bg-lime-50' : 'bg-red-50')}>
+            <p className="text-xs text-slate-400">{t('dash_carryover')}</p>
+            <p className={cx('font-mono text-lg font-black', projectedSurplus ? 'text-lime-600' : 'text-red-500')}>
+              {projectedSurplus ? '+' : '−'}{fmtVND(Math.abs(projectedBalance))}
+            </p>
+          </div>
           <div className="rounded-2xl bg-slate-900 p-3 text-center">
             <p className="text-xs text-slate-400">{t('dash_per_member')}</p>
-            <p className="font-mono text-lg font-black text-lime-400">{fmtVND(all.nextSuggestedFee)}</p>
+            <p className="font-mono text-lg font-black text-lime-400">{fmtVND(nextAdjustedFee)}</p>
+            {projectedBalance !== 0 && (
+              <p className="text-[10px] text-slate-500 mt-0.5">{t('dash_incl_carryover')}</p>
+            )}
           </div>
         </div>
       </div>
