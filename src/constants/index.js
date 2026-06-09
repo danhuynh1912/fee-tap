@@ -14,8 +14,18 @@ export const SPORT_CONFIGS = {
 
 export const SPORT_LIST = Object.values(SPORT_CONFIGS)
 
-export const DEFAULT_SETTINGS = {
+export const DEFAULT_SESSION_CONFIG = {
   court_price_per_hour: 120000,
+  hours_per_session: 2,
+  court_payment_mode: 'session',
+  billing_cycle: 'month',
+  quarter_start_month: 1,
+}
+
+export const DEFAULT_SETTINGS = {
+  // flat fields kept for backward-compat fallback
+  court_price_per_hour: 120000,
+  court_prices_by_weekday: {},
   hours_per_session: 2,
   sessions_per_week: 2,
   play_weekdays: [],
@@ -25,4 +35,5 @@ export const DEFAULT_SETTINGS = {
   estimated_shuttlecocks: 6,
   current_fund: 0,
   court_payment_mode: 'session',
+  session_configs: [],
 }

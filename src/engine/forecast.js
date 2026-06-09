@@ -1,5 +1,5 @@
 import { num } from '../lib/utils'
-import { BALLS_PER_BOX } from '../constants'
+import { BALLS_PER_BOX, DEFAULT_SESSION_CONFIG } from '../constants'
 
 const mIdx = (y, m0) => y * 12 + m0
 const fromIdx = (i) => ({ year: Math.floor(i / 12), month0: ((i % 12) + 12) % 12 })
@@ -79,7 +79,18 @@ export function sessionsHappenedByNow(s, period, today = new Date()) {
 export function computeCycle(s, period, memberCount, hasEquipment = true) {
   const sess = sessionsForPeriod(s, period)
   const totalSessions = sess.total
-  const courtCost = num(s.court_price_per_hour) * num(s.hours_per_session) * totalSessions
+  const priceMap = s.court_prices_by_weekday || {}
+  const defaultPrice = num(s.court_price_per_hour)
+  const hours = num(s.hours_per_session)
+  let courtCost = 0
+  if (sess.fallback || !Object.keys(sess.breakdown).length) {
+    courtCost = defaultPrice * hours * totalSessions
+  } else {
+    for (const [wd, count] of Object.entries(sess.breakdown)) {
+      const price = priceMap[wd] !== undefined ? num(priceMap[wd]) : defaultPrice
+      courtCost += price * hours * count
+    }
+  }
   const boxes = hasEquipment ? Math.ceil((totalSessions * num(s.estimated_shuttlecocks)) / BALLS_PER_BOX) : 0
   const shuttleCost = hasEquipment ? boxes * num(s.price_per_box) : 0
   const totalCost = courtCost + shuttleCost
@@ -109,4 +120,119 @@ export function formatPeriodLabel(period, lang) {
 export function monthName(m1, lang) {
   const locale = lang === 'vi' ? 'vi-VN' : 'en-US'
   return new Date(2000, m1 - 1, 1).toLocaleDateString(locale, { month: 'long' })
+}
+
+// Returns an array of per-weekday session configs.
+// If session_configs is populated (new format), use that.
+// Otherwise synthesise from legacy flat fields for backward compat.
+export function getSessionConfigs(settings) {
+  const raw = settings.session_configs
+  if (Array.isArray(raw) && raw.length > 0) return raw
+
+  const weekdays = Array.isArray(settings.play_weekdays) ? settings.play_weekdays : []
+  const priceMap = settings.court_prices_by_weekday || {}
+  const base = {
+    court_price_per_hour: num(settings.court_price_per_hour) || DEFAULT_SESSION_CONFIG.court_price_per_hour,
+    hours_per_session: num(settings.hours_per_session) || DEFAULT_SESSION_CONFIG.hours_per_session,
+    court_payment_mode: settings.court_payment_mode || DEFAULT_SESSION_CONFIG.court_payment_mode,
+    billing_cycle: settings.billing_cycle || DEFAULT_SESSION_CONFIG.billing_cycle,
+    quarter_start_month: num(settings.quarter_start_month) || DEFAULT_SESSION_CONFIG.quarter_start_month,
+  }
+
+  if (!weekdays.length) return [{ ...base, weekday: null }]
+
+  return weekdays.map((wd) => ({
+    ...base,
+    weekday: wd,
+    court_price_per_hour:
+      priceMap[wd] !== undefined ? num(priceMap[wd]) : base.court_price_per_hour,
+  }))
+}
+
+// Computes full forecast across all session configs, normalised to monthly.
+// Returns per-venue results plus aggregated monthly totals.
+export function computeAll(settings, memberCount, hasEquipment = true, now = new Date()) {
+  const configs = getSessionConfigs(settings)
+
+  const venues = configs.map((sc) => {
+    const wds = sc.weekday !== null && sc.weekday !== undefined ? [sc.weekday] : []
+    const scWithDays = { ...sc, play_weekdays: wds, sessions_per_week: 1 }
+    const periods = resolvePeriods(sc, now)
+    const sess = sessionsForPeriod(scWithDays, periods.current)
+    const nextSess = sessionsForPeriod(scWithDays, periods.next)
+    const price = num(sc.court_price_per_hour)
+    const hours = num(sc.hours_per_session)
+    const courtCost = price * hours * sess.total
+    const nextCourtCost = price * hours * nextSess.total
+    // Normalise to monthly so mixed cycles are comparable
+    const divisor = sc.billing_cycle === 'quarter' ? 3 : 1
+    const monthlyCourtCost = courtCost / divisor
+    const nextMonthlyCourtCost = nextCourtCost / divisor
+    const happened = sessionsHappenedByNow(scWithDays, periods.current, now)
+    return {
+      weekday: sc.weekday,
+      billing_cycle: sc.billing_cycle,
+      court_payment_mode: sc.court_payment_mode,
+      period: periods.current,
+      nextPeriod: periods.next,
+      totalSessions: sess.total,
+      nextSessions: nextSess.total,
+      breakdown: sess.breakdown,
+      courtCost,
+      monthlyCourtCost,
+      nextMonthlyCourtCost,
+      happened,
+    }
+  })
+
+  const totalMonthlyCourtCost = venues.reduce((s, v) => s + v.monthlyCourtCost, 0)
+  // Monthly-equivalent session count drives shuttle calculation
+  const totalMonthlySessions = venues.reduce((s, v) => {
+    return s + v.totalSessions / (v.billing_cycle === 'quarter' ? 3 : 1)
+  }, 0)
+
+  const boxes = hasEquipment
+    ? Math.ceil((totalMonthlySessions * num(settings.estimated_shuttlecocks)) / BALLS_PER_BOX)
+    : 0
+  const shuttleCost = hasEquipment ? boxes * num(settings.price_per_box) : 0
+  const totalMonthlyCost = totalMonthlyCourtCost + shuttleCost
+
+  const fund = num(settings.current_fund)
+  const balance = fund - totalMonthlyCost
+  const deficit = balance < 0 ? -balance : 0
+  const suggestedFee = memberCount > 0 ? Math.ceil(totalMonthlyCost / memberCount) : 0
+  const perMemberDeficit = memberCount > 0 && deficit > 0 ? Math.ceil(deficit / memberCount) : 0
+
+  const nextMonthlyCourtCost = venues.reduce((s, v) => s + v.nextMonthlyCourtCost, 0)
+  const nextMonthlySessions = venues.reduce((s, v) => {
+    return s + v.nextSessions / (v.billing_cycle === 'quarter' ? 3 : 1)
+  }, 0)
+  const nextBoxes = hasEquipment
+    ? Math.ceil((nextMonthlySessions * num(settings.estimated_shuttlecocks)) / BALLS_PER_BOX)
+    : 0
+  const nextShuttleCost = hasEquipment ? nextBoxes * num(settings.price_per_box) : 0
+  const nextTotalCost = nextMonthlyCourtCost + nextShuttleCost
+  const nextSuggestedFee = memberCount > 0 ? Math.ceil(nextTotalCost / memberCount) : 0
+
+  const totalHappened = venues.reduce((s, v) => s + v.happened, 0)
+  const totalScheduled = venues.reduce((s, v) => s + v.totalSessions, 0)
+
+  return {
+    venues,
+    totalMonthlyCourtCost,
+    totalMonthlySessions,
+    shuttleCost,
+    boxes,
+    totalMonthlyCost,
+    fund,
+    balance,
+    deficit,
+    suggestedFee,
+    perMemberDeficit,
+    nextTotalCost,
+    nextSuggestedFee,
+    nextSessions: venues.reduce((s, v) => s + v.nextSessions, 0),
+    totalHappened,
+    totalScheduled,
+  }
 }

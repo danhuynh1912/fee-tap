@@ -11,7 +11,7 @@ import { InfoTip } from '../../components/club/InfoTip'
 import { ProLock } from '../../components/monetize/ProLock'
 import { MembersPanel } from './MembersPanel'
 import {
-  resolvePeriods, computeCycle, formatPeriodLabel, sessionsHappenedByNow,
+  computeAll, formatPeriodLabel,
 } from '../../engine/forecast'
 import { fmtVND, fmtNum, num, cx } from '../../lib/utils'
 import { BALLS_PER_BOX } from '../../constants'
@@ -34,13 +34,13 @@ function StatCard({ icon: Icon, label, value, sub, tone = 'slate', big, tip }) {
   )
 }
 
-function AdvancedForecast({ forecast, plan, onUnlock }) {
+function AdvancedForecast({ totalMonthlyCost, plan, onUnlock }) {
   const { t } = useTranslation()
   const locked = plan !== 'pro'
   const factors = [1, 1.08, 0.96, 1.14]
   const projections = factors.map((fac, i) => ({
     label: t('adv_q', { n: i + 1 }),
-    cost: forecast.totalCost * fac,
+    cost: totalMonthlyCost * fac,
     fac,
   }))
   const maxCost = Math.max(...projections.map((p) => p.cost), 1)
@@ -81,54 +81,29 @@ function AdvancedForecast({ forecast, plan, onUnlock }) {
   )
 }
 
-function ForecastDashboard({ settings, memberCount, memberSource, plan, sport, canEdit, onUnlock, logs, fundTxns }) {
+function ForecastDashboard({ settings, memberCount, plan, sport, canEdit, onUnlock, logs, fundTxns }) {
   const { t, i18n } = useTranslation()
   const hasEquipment = sport?.hasEquipment ?? true
-  const periods = useMemo(() => resolvePeriods(settings), [settings])
-  const f = useMemo(() => computeCycle(settings, periods.current, memberCount, hasEquipment), [settings, periods, memberCount, hasEquipment])
-  const fn = useMemo(() => computeCycle(settings, periods.next, memberCount, hasEquipment), [settings, periods, memberCount, hasEquipment])
-  const curLabel = formatPeriodLabel(periods.current, i18n.language)
-  const nextLabel = formatPeriodLabel(periods.next, i18n.language)
-  const delta = fn.totalCost - f.totalCost
 
-  const courtMode = settings.court_payment_mode === 'cycle' ? 'cycle' : 'session'
-  const periodMonthKeys = periods.current.months.map(
-    (m) => `${m.year}-${String(m.month0 + 1).padStart(2, '0')}`
-  )
-  const logsInPeriod = (logs || []).filter((l) =>
-    periodMonthKeys.some((k) => l.played_on?.startsWith(k))
-  )
-  const loggedSessions = logsInPeriod.length
-  const happenedSessions = useMemo(() => sessionsHappenedByNow(settings, periods.current), [settings, periods])
-  const unloggedHappened = Math.max(0, happenedSessions - loggedSessions)
-  const remainingSessions = Math.max(0, f.totalSessions - happenedSessions)
-  const costPerSession = f.totalSessions > 0 ? f.totalCost / f.totalSessions : 0
-  const shuttleCostPerSession = f.totalSessions > 0 ? f.shuttleCost / f.totalSessions : 0
-  const actualShuttleSpent = logsInPeriod.reduce((s, l) => s + num(l.shuttle_cost), 0)
-  const actualSessionSpent = logsInPeriod.reduce((s, l) => s + num(l.total_cost), 0)
-  const estimatedUnloggedCost = courtMode === 'cycle'
-    ? Math.round(unloggedHappened * shuttleCostPerSession)
-    : Math.round(unloggedHappened * costPerSession)
-  const actualSpent = courtMode === 'cycle'
-    ? f.courtCost + actualShuttleSpent + estimatedUnloggedCost
-    : actualSessionSpent + estimatedUnloggedCost
-  const remainingForecast = courtMode === 'cycle'
-    ? Math.round(remainingSessions * shuttleCostPerSession)
-    : Math.round(remainingSessions * costPerSession)
-  const totalCollected = (fundTxns || []).reduce((s, tx) => s + num(tx.amount), 0)
-  const currentFund = num(settings.current_fund)
-  const projectedBalance = courtMode === 'cycle'
-    ? currentFund - f.courtCost - Math.round(remainingSessions * shuttleCostPerSession)
-    : currentFund - remainingForecast
+  const all = useMemo(() => computeAll(settings, memberCount, hasEquipment), [settings, memberCount, hasEquipment])
+
+  // Actual spent: sum of all logged session costs this calendar month + lump-sum court for cycle-mode venues
+  const now = new Date()
+  const currentMonthKey = `${now.getFullYear()}-${String(now.getMonth() + 1).padStart(2, '0')}`
+  const logsThisMonth = useMemo(() => (logs || []).filter((l) => l.played_on?.startsWith(currentMonthKey)), [logs, currentMonthKey])
+  const loggedSessionSpend = logsThisMonth.reduce((s, l) => s + num(l.total_cost), 0)
+  const cycleCourtSpend = all.venues
+    .filter((v) => v.court_payment_mode === 'cycle')
+    .reduce((s, v) => s + v.monthlyCourtCost, 0)
+  const actualSpent = cycleCourtSpend + loggedSessionSpend
+
+  const remainingForecast = Math.max(0, all.totalMonthlyCost - actualSpent)
+  const projectedBalance = all.fund - remainingForecast
   const projectedSurplus = projectedBalance >= 0
   const projectedDeficit = projectedSurplus ? 0 : -projectedBalance
   const perMemberTopUp = memberCount > 0 ? Math.ceil(projectedDeficit / memberCount) : 0
-  const suggestedFee = f.totalSessions > 0 && memberCount > 0 ? Math.ceil(f.totalCost / memberCount) : 0
-  const sessionProgress = f.totalSessions > 0 ? Math.min(1, happenedSessions / f.totalSessions) : 0
-  const bdText = [1, 2, 3, 4, 5, 6, 0]
-    .filter((d) => f.breakdown[d])
-    .map((d) => `${f.breakdown[d]} × ${t('wd_' + d)}`)
-    .join('  ·  ')
+  const totalCollected = (fundTxns || []).reduce((s, tx) => s + num(tx.amount), 0)
+  const sessionProgress = all.totalScheduled > 0 ? Math.min(1, all.totalHappened / all.totalScheduled) : 0
 
   return (
     <div className="space-y-5">
@@ -138,7 +113,7 @@ function ForecastDashboard({ settings, memberCount, memberSource, plan, sport, c
         <div className="relative flex flex-wrap items-center justify-between gap-2">
           <div className="flex items-center gap-2 text-slate-400">
             <PieChart className="h-4 w-4" />
-            <span className="text-xs font-semibold uppercase tracking-wider">{curLabel}</span>
+            <span className="text-xs font-semibold uppercase tracking-wider">{t('dash_monthly_total')}</span>
           </div>
           <span className="inline-flex items-center gap-1.5 rounded-full bg-slate-800/70 px-3 py-1 text-xs font-semibold text-slate-300">
             <Users className="h-3.5 w-3.5 text-lime-400" /> {memberCount} {t('members')}
@@ -147,7 +122,7 @@ function ForecastDashboard({ settings, memberCount, memberSource, plan, sport, c
 
         <div className="relative mt-5">
           <p className="text-xs font-semibold uppercase tracking-wide text-slate-400">{t('dash_fund_live')}</p>
-          <p className="mt-1 font-mono text-4xl sm:text-5xl font-black tabular-nums leading-none text-white">{fmtVND(currentFund)}</p>
+          <p className="mt-1 font-mono text-4xl sm:text-5xl font-black tabular-nums leading-none text-white">{fmtVND(all.fund)}</p>
         </div>
 
         <div className="relative mt-5 grid grid-cols-2 gap-2 sm:grid-cols-4 sm:gap-3">
@@ -159,19 +134,14 @@ function ForecastDashboard({ settings, memberCount, memberSource, plan, sport, c
           <div className="rounded-2xl bg-slate-800/60 px-3 py-3 sm:px-4">
             <p className="text-[10px] font-semibold uppercase tracking-wide text-slate-500">{t('dash_actual_spent')}</p>
             <p className="mt-1.5 font-mono text-sm sm:text-base font-black text-white">{fmtVND(actualSpent)}</p>
-            {courtMode === 'cycle' ? (
-              <p className="mt-0.5 text-[10px] text-slate-500">{t('dash_court_paid')} + {fmtVND(actualShuttleSpent)} {t('dash_shuttle_actual')}</p>
-            ) : (
-              <p className="mt-0.5 text-[10px] text-slate-500">
-                {happenedSessions} {t('dash_sessions_happened')}
-                {unloggedHappened > 0 && <span className="text-amber-400"> ({unloggedHappened} {t('dash_estimated')})</span>}
-              </p>
-            )}
+            <p className="mt-0.5 text-[10px] text-slate-500">
+              {all.totalHappened} {t('dash_sessions_happened')}
+            </p>
           </div>
           <div className="rounded-2xl bg-slate-800/60 px-3 py-3 sm:px-4">
             <p className="text-[10px] font-semibold uppercase tracking-wide text-slate-500">{t('dash_remaining_forecast')}</p>
             <p className="mt-1.5 font-mono text-sm sm:text-base font-black text-slate-300">~{fmtVND(remainingForecast)}</p>
-            <p className="mt-0.5 text-[10px] text-slate-500">{remainingSessions} {t('dash_sessions_future')}</p>
+            <p className="mt-0.5 text-[10px] text-slate-500">{all.totalScheduled - all.totalHappened} {t('dash_sessions_future')}</p>
           </div>
           <div className={cx('rounded-2xl px-3 py-3 sm:px-4', projectedSurplus ? 'bg-lime-400/15' : 'bg-red-500/20')}>
             <p className="text-[10px] font-semibold uppercase tracking-wide text-slate-500">{t('dash_end_of_period')}</p>
@@ -184,11 +154,11 @@ function ForecastDashboard({ settings, memberCount, memberSource, plan, sport, c
           </div>
         </div>
 
-        {f.totalSessions > 0 && (
+        {all.totalScheduled > 0 && (
           <div className="relative mt-5">
             <div className="flex items-center justify-between mb-1.5">
               <span className="text-[10px] font-semibold uppercase tracking-wide text-slate-500">{t('dash_session_progress')}</span>
-              <span className="text-[10px] font-mono text-slate-400">{loggedSessions} / {f.totalSessions} {t('dash_sessions')}</span>
+              <span className="text-[10px] font-mono text-slate-400">{all.totalHappened} / {all.totalScheduled} {t('dash_sessions')}</span>
             </div>
             <div className="h-1.5 w-full overflow-hidden rounded-full bg-slate-800">
               <div className="h-full rounded-full bg-lime-400 transition-all duration-500" style={{ width: `${sessionProgress * 100}%` }} />
@@ -212,8 +182,8 @@ function ForecastDashboard({ settings, memberCount, memberSource, plan, sport, c
           {memberCount > 0 && (
             <div className="shrink-0 text-right">
               <p className="text-[10px] text-slate-400 uppercase tracking-wide">{t('dash_suggested_fee')}</p>
-              <p className="font-mono text-2xl font-black text-slate-900">{fmtVND(suggestedFee)}</p>
-              <p className="text-[10px] text-slate-400">/ {t('member')}</p>
+              <p className="font-mono text-2xl font-black text-slate-900">{fmtVND(all.suggestedFee)}</p>
+              <p className="text-[10px] text-slate-400">/ {t('member')} / {t('month')}</p>
             </div>
           )}
         </div>
@@ -247,23 +217,65 @@ function ForecastDashboard({ settings, memberCount, memberSource, plan, sport, c
         </div>
       )}
 
-      {/* Cost breakdown */}
-      <div className={cx('grid gap-4', hasEquipment ? 'sm:grid-cols-3' : 'sm:grid-cols-2')}>
+      {/* Per-venue cost cards */}
+      {all.venues.length > 0 && (
+        <div className="grid gap-3 sm:grid-cols-2">
+          {all.venues.map((v, i) => (
+            <VenueCard key={v.weekday ?? i} venue={v} lang={i18n.language} t={t} />
+          ))}
+        </div>
+      )}
+
+      {/* Shuttle stat (if equipment) */}
+      {hasEquipment && (
         <StatCard
-          icon={Activity} label={t('dash_court_cost')} value={fmtVND(f.courtCost)} tone="violet"
-          sub={`${f.totalSessions} ${t('dash_sessions')} × ${fmtVND(num(settings.court_price_per_hour) * num(settings.hours_per_session))}`}
-          tip={<><p className="font-semibold text-white">{t('calc_court_title')}</p><p className="mt-1.5 font-mono text-lime-300">{fmtVND(num(settings.court_price_per_hour))} × {fmtNum(num(settings.hours_per_session))}h × {fmtNum(f.totalSessions)}</p><p className="mt-1 font-mono text-white">= {fmtVND(f.courtCost)}</p></>}
+          icon={Target} label={t('dash_shuttle_cost')} value={fmtVND(all.shuttleCost)}
+          sub={`${all.boxes} ${t('dash_boxes')}`} tone="cyan"
+          tip={
+            <>
+              <p className="font-semibold text-white">{t('calc_shuttle_title')}</p>
+              <p className="mt-1.5 font-mono text-cyan-300">
+                ⌈{fmtNum(all.totalMonthlySessions)} × {fmtNum(num(settings.estimated_shuttlecocks))} ÷ {BALLS_PER_BOX}⌉ = {all.boxes} {t('dash_boxes')}
+              </p>
+              <p className="mt-1 font-mono text-cyan-300">{all.boxes} × {fmtVND(num(settings.price_per_box))}</p>
+              <p className="mt-1 font-mono text-white">= {fmtVND(all.shuttleCost)}</p>
+            </>
+          }
         />
-        {hasEquipment && (
-          <StatCard
-            icon={Target} label={t('dash_shuttle_cost')} value={fmtVND(f.shuttleCost)} sub={`${f.boxes} ${t('dash_boxes')}`} tone="cyan"
-            tip={<><p className="font-semibold text-white">{t('calc_shuttle_title')}</p><p className="mt-1.5 font-mono text-cyan-300">⌈{fmtNum(f.totalSessions)} × {fmtNum(num(settings.estimated_shuttlecocks))} ÷ {BALLS_PER_BOX}⌉ = {f.boxes} {t('dash_boxes')}</p><p className="mt-1 font-mono text-cyan-300">{f.boxes} × {fmtVND(num(settings.price_per_box))}</p><p className="mt-1 font-mono text-white">= {fmtVND(f.shuttleCost)}</p></>}
-          />
-        )}
-        <StatCard
-          icon={Wallet} label={t('dash_total_cycle')} value={fmtVND(f.totalCost)} sub={curLabel}
-          tip={<><p className="font-semibold text-white">{t('dash_total_cost')}</p><p className="mt-1.5 font-mono text-lime-300">{fmtVND(f.courtCost)} + {hasEquipment ? fmtVND(f.shuttleCost) : '0'}</p><p className="mt-1 font-mono text-white">= {fmtVND(f.totalCost)}</p></>}
-        />
+      )}
+
+      {/* Monthly total summary */}
+      <div className="rounded-2xl border border-slate-100 bg-white p-5">
+        <div className="flex items-center gap-2 text-slate-400 mb-4">
+          <Wallet className="h-4 w-4" />
+          <span className="text-xs font-semibold uppercase tracking-wide">{t('dash_monthly_total')}</span>
+        </div>
+        <div className="space-y-2">
+          {all.venues.map((v, i) => {
+            const note = v.billing_cycle === 'quarter' ? t('dash_court_note_quarter') : t('dash_court_note_month')
+            const label = v.weekday !== null && v.weekday !== undefined
+              ? `${t('dash_venue_court')} ${t(`wd_${v.weekday}`)}`
+              : t('dash_court_cost')
+            return (
+              <div key={v.weekday ?? i} className="flex items-center justify-between text-sm">
+                <span className="text-slate-600">
+                  {label} <span className="text-xs text-slate-400">{note}</span>
+                </span>
+                <span className="font-mono font-semibold text-slate-900">{fmtVND(v.monthlyCourtCost)}</span>
+              </div>
+            )
+          })}
+          {hasEquipment && (
+            <div className="flex items-center justify-between text-sm">
+              <span className="text-slate-600">{t('dash_shuttle_cost')}</span>
+              <span className="font-mono font-semibold text-slate-900">{fmtVND(all.shuttleCost)}</span>
+            </div>
+          )}
+          <div className="flex items-center justify-between border-t border-slate-100 pt-2 mt-2">
+            <span className="font-semibold text-slate-900">{t('dash_total_cycle')}</span>
+            <span className="font-mono text-lg font-black text-slate-900">{fmtVND(all.totalMonthlyCost)}</span>
+          </div>
+        </div>
       </div>
 
       {/* Next cycle */}
@@ -271,38 +283,72 @@ function ForecastDashboard({ settings, memberCount, memberSource, plan, sport, c
         <div className="flex flex-wrap items-center justify-between gap-2">
           <div className="flex items-center gap-2 text-slate-400">
             <ArrowRight className="h-4 w-4" />
-            <span className="text-xs font-semibold uppercase tracking-wide">{t('dash_next_cycle')} · {nextLabel}</span>
+            <span className="text-xs font-semibold uppercase tracking-wide">{t('dash_next_cycle')}</span>
           </div>
-          {delta !== 0 && (
-            <Badge tone={delta > 0 ? 'red' : 'volt'} icon={delta > 0 ? TrendingUp : TrendingDown}>
-              {delta > 0 ? '+' : '−'}{fmtVND(Math.abs(delta))} {t('dash_vs_current')}
+          {all.nextTotalCost !== all.totalMonthlyCost && (
+            <Badge tone={all.nextTotalCost > all.totalMonthlyCost ? 'red' : 'volt'}
+              icon={all.nextTotalCost > all.totalMonthlyCost ? TrendingUp : TrendingDown}
+            >
+              {all.nextTotalCost > all.totalMonthlyCost ? '+' : '−'}{fmtVND(Math.abs(all.nextTotalCost - all.totalMonthlyCost))} {t('dash_vs_current')}
             </Badge>
           )}
         </div>
         <div className="mt-4 grid sm:grid-cols-3 gap-3">
           <div className="rounded-2xl bg-slate-50 p-3 text-center">
             <p className="text-xs text-slate-400">{t('dash_sessions')}</p>
-            <p className="font-mono text-lg font-black text-slate-900">{fmtNum(fn.totalSessions)}</p>
+            <p className="font-mono text-lg font-black text-slate-900">{fmtNum(all.nextSessions)}</p>
           </div>
           <div className="rounded-2xl bg-slate-50 p-3 text-center">
             <p className="text-xs text-slate-400">{t('dash_total_cost')}</p>
-            <p className="font-mono text-lg font-black text-slate-900">{fmtVND(fn.totalCost)}</p>
+            <p className="font-mono text-lg font-black text-slate-900">{fmtVND(all.nextTotalCost)}</p>
           </div>
           <div className="rounded-2xl bg-slate-900 p-3 text-center">
             <p className="text-xs text-slate-400">{t('dash_per_member')}</p>
-            <p className="font-mono text-lg font-black text-lime-400">{fmtVND(fn.suggestedFee)}</p>
+            <p className="font-mono text-lg font-black text-lime-400">{fmtVND(all.nextSuggestedFee)}</p>
           </div>
         </div>
       </div>
 
-      <AdvancedForecast forecast={f} plan={plan} onUnlock={onUnlock} />
+      <AdvancedForecast totalMonthlyCost={all.totalMonthlyCost} plan={plan} onUnlock={onUnlock} />
+    </div>
+  )
+}
+
+function VenueCard({ venue, lang, t }) {
+  const periodLabel = formatPeriodLabel(venue.period, lang)
+  const isQuarter = venue.billing_cycle === 'quarter'
+  const cycleNote = isQuarter ? t('dash_court_note_quarter') : t('dash_court_note_month')
+  const dayLabel = venue.weekday !== null && venue.weekday !== undefined
+    ? t(`wd_${venue.weekday}`)
+    : null
+
+  return (
+    <div className="rounded-2xl border border-slate-100 bg-white p-5">
+      <div className="flex items-start justify-between gap-2">
+        <div className="flex items-center gap-2">
+          {dayLabel && (
+            <span className="rounded-lg bg-slate-900 px-2.5 py-1 text-xs font-bold text-white">{dayLabel}</span>
+          )}
+          <span className="text-xs text-slate-400">{periodLabel}</span>
+        </div>
+        <Badge tone={venue.court_payment_mode === 'cycle' ? 'cyan' : 'slate'}>
+          {t(venue.court_payment_mode === 'cycle' ? 'court_mode_cycle' : 'court_mode_session')}
+        </Badge>
+      </div>
+      <p className="mt-3 text-xs font-semibold uppercase tracking-wide text-slate-400">{t('dash_court_cost')}</p>
+      <p className="mt-1 font-mono text-xl font-black text-slate-900">{fmtVND(venue.courtCost)}</p>
+      <p className="mt-0.5 text-xs text-slate-400">
+        {venue.totalSessions} {t('dash_sessions')} · {cycleNote}
+        {isQuarter && (
+          <span className="ml-1 text-slate-400">→ {fmtVND(venue.monthlyCourtCost)}/{t('month')}</span>
+        )}
+      </p>
     </div>
   )
 }
 
 export function DashboardPage({ club, settings, members, logs, fundTxns, pollTally, plan, sport, canEdit, onUnlock, onChanged, toast }) {
   const memberCount = pollTally?.count ?? members.length
-  const memberSource = pollTally?.source === 'poll' ? 'poll' : 'list'
 
   return (
     <div className="grid gap-6 lg:grid-cols-3">
@@ -310,7 +356,6 @@ export function DashboardPage({ club, settings, members, logs, fundTxns, pollTal
         <ForecastDashboard
           settings={settings}
           memberCount={memberCount}
-          memberSource={memberSource}
           plan={plan}
           sport={sport}
           canEdit={canEdit}
