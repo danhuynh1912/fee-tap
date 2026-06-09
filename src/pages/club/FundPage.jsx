@@ -30,7 +30,7 @@ export function FundPage({ club, fundTxns, settings, canEdit, onTopUp, toast }) 
     finally { setBusy(false) }
   }
 
-  const total = fundTxns.reduce((s, tx) => s + num(tx.amount), 0)
+  const total = num(settings.current_fund)
 
   return (
     <div className="mx-auto max-w-2xl space-y-5">

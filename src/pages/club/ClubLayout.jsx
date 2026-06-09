@@ -37,6 +37,13 @@ export function ClubLayout({ session, club, setClub, path, toast }) {
 
   const canEdit = isOwner && !previewMember
   const plan = club.plan || 'free'
+  const hostName = isOwner
+    ? (session?.user?.user_metadata?.full_name || session?.user?.email || null)
+    : (club.owner?.full_name || null)
+  const hostAvatar = isOwner
+    ? (session?.user?.user_metadata?.avatar_url || null)
+    : (club.owner?.avatar_url || null)
+  const currentUserId = session?.user?.id || null
   const sport = SPORT_CONFIGS[club.sport_type] || SPORT_CONFIGS.badminton
   const tab = activeTab(path, club.id)
 
@@ -173,16 +180,12 @@ export function ClubLayout({ session, club, setClub, path, toast }) {
             </h1>
           </div>
 
-          {!canEdit && (
-            <div className="mb-6 flex items-center gap-3 rounded-2xl border border-cyan-200 bg-cyan-50 px-4 py-3 text-sm text-cyan-800">
-              <Eye className="h-4 w-4 shrink-0" /> {t('readonly_banner')}
-            </div>
-          )}
 
           {tab === 'dashboard' && (
             <DashboardPage
               club={club} settings={settings} members={members} logs={logs}
               fundTxns={fundTxns} pollTally={pollTally} plan={plan} sport={sport}
+              hostName={hostName} hostAvatar={hostAvatar} currentUserId={currentUserId}
               canEdit={canEdit} onUnlock={() => setUpsell(true)} onChanged={reload} toast={toast}
             />
           )}
@@ -191,6 +194,7 @@ export function ClubLayout({ session, club, setClub, path, toast }) {
             <SettingsPage
               club={club} settings={settings} sport={sport} members={members}
               plan={plan} pollTally={pollTally} canEdit={canEdit}
+              hostName={hostName} hostAvatar={hostAvatar} currentUserId={currentUserId}
               onSaved={(p) => setSettings((s) => ({ ...s, ...p }))}
               onChanged={reload} onHitLimit={() => setUpsell(true)} toast={toast}
             />

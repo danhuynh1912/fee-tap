@@ -50,7 +50,15 @@ export function useAuth() {
       let memberClubs = []
       if (memberOnlyIds.length) {
         const { data: mclubs } = await supabase.from('clubs').select('*').in('id', memberOnlyIds)
-        memberClubs = (mclubs || []).map((c) => ({ ...c, userRole: 'member' }))
+        const ownerIds = [...new Set((mclubs || []).map((c) => c.owner_id))]
+        const { data: ownerProfiles } = await supabase
+          .from('profiles').select('id, full_name, avatar_url').in('id', ownerIds)
+        const profileMap = Object.fromEntries((ownerProfiles || []).map((p) => [p.id, p]))
+        memberClubs = (mclubs || []).map((c) => ({
+          ...c,
+          owner: profileMap[c.owner_id] || null,
+          userRole: 'member',
+        }))
       }
 
       if (cancelled) return
@@ -93,7 +101,7 @@ export function useAuth() {
     try {
       const { error } = await supabase.auth.signInWithOAuth({
         provider: 'google',
-        options: { redirectTo: window.location.origin },
+        options: { redirectTo: window.location.href },
       })
       if (error) throw error
     } catch (e) {

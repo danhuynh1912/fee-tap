@@ -14,7 +14,7 @@ import { PreJoinPage } from './pages/PreJoinPage'
 import { WelcomeModal } from './pages/WelcomeModal'
 import { ClubLayout } from './pages/club/ClubLayout'
 
-import { useState, useRef } from 'react'
+import { useState, useRef, useEffect } from 'react'
 
 export default function App() {
   const { t } = useTranslation()
@@ -45,15 +45,33 @@ export default function App() {
   const isNewPath = path === '/new'
   const activeClub = clubId ? myClubs.find((c) => c.id === clubId) ?? null : null
 
-  // Auto-join effect
-  const [joiningId, setJoiningId] = useState(null)
-  if (session && joinClubId && !resolving && joiningId !== joinClubId) {
-    setJoiningId(joinClubId)
-    joinClub(joinClubId).then(() => {
-      setWelcomeClubId(joinClubId)
-      navigate(`/club/${joinClubId}`)
-    }).catch((e) => toast(e.message || t('err_generic')))
-  }
+  // Auto-join: run in useEffect so it fires exactly once, not during render
+  const [joining, setJoining] = useState(false)
+  const joinedRef = useRef(null)
+  const alreadyHost = joinClubId
+    ? myClubs.some((c) => c.id === joinClubId && c.userRole === 'host')
+    : false
+  const alreadyMember = joinClubId
+    ? myClubs.some((c) => c.id === joinClubId && c.userRole === 'member')
+    : false
+
+  useEffect(() => {
+    if (!session || !joinClubId || resolving) return
+    // Already a member → go straight to club
+    if (alreadyMember) { navigate(`/club/${joinClubId}`); return }
+    // Host of this club → block, show message
+    if (alreadyHost) return
+    if (joinedRef.current === joinClubId) return
+    joinedRef.current = joinClubId
+    setJoining(true)
+    joinClub(joinClubId)
+      .then(() => {
+        setWelcomeClubId(joinClubId)
+        navigate(`/club/${joinClubId}`)
+      })
+      .catch((e) => toast(e.message || t('err_generic')))
+      .finally(() => setJoining(false))
+  }, [session, joinClubId, resolving, alreadyHost, alreadyMember])
 
   const loading = !authReady || (session && resolving)
 
@@ -68,6 +86,29 @@ export default function App() {
     body = joinClubId
       ? <PreJoinPage clubId={joinClubId} onGoogle={signInGoogle} busy={signinBusy} />
       : <SignInPage onGoogle={signInGoogle} busy={signinBusy} />
+  } else if (joinClubId) {
+    body = alreadyHost ? (
+      <div className="grid flex-1 place-items-center px-4">
+        <div className="max-w-sm text-center">
+          <div className="mx-auto mb-4 grid h-14 w-14 place-items-center rounded-2xl bg-amber-100 text-amber-600">
+            <svg className="h-7 w-7" fill="none" viewBox="0 0 24 24" stroke="currentColor" strokeWidth={2}><path strokeLinecap="round" strokeLinejoin="round" d="M12 9v2m0 4h.01M10.29 3.86L1.82 18a2 2 0 001.71 3h16.94a2 2 0 001.71-3L13.71 3.86a2 2 0 00-3.42 0z" /></svg>
+          </div>
+          <p className="text-lg font-bold text-slate-900">{t('join_already_host')}</p>
+          <button
+            onClick={() => navigate(`/club/${joinClubId}`)}
+            className="mt-5 rounded-2xl bg-slate-900 px-6 py-2.5 text-sm font-semibold text-white hover:bg-slate-700 transition active:scale-[0.98]"
+          >
+            {t('join_go_to_club')}
+          </button>
+        </div>
+      </div>
+    ) : (
+      <div className="grid flex-1 place-items-center">
+        <div className="flex items-center gap-3 text-slate-400">
+          <Loader2 className="h-5 w-5 animate-spin" /> {t('loading')}
+        </div>
+      </div>
+    )
   } else if (isNewPath) {
     body = (
       <OnboardingPage

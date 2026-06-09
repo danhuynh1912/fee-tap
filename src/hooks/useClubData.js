@@ -19,8 +19,17 @@ export function useClubData(clubId) {
       supabase.from('fund_transactions').select('*').eq('club_id', clubId).order('created_at', { ascending: false }),
     ])
 
-    setSettings(s || { club_id: clubId, ...DEFAULT_SETTINGS })
-    setMembers(m || [])
+    setSettings(s ? { ...DEFAULT_SETTINGS, ...Object.fromEntries(Object.entries(s).filter(([, v]) => v !== null)) } : { club_id: clubId, ...DEFAULT_SETTINGS })
+
+    // Enrich members with avatar from profiles (only for members who joined via OAuth)
+    const userIds = (m || []).filter((r) => r.user_id).map((r) => r.user_id)
+    let profileMap = {}
+    if (userIds.length) {
+      const { data: profs } = await supabase
+        .from('profiles').select('id, avatar_url').in('id', userIds)
+      profileMap = Object.fromEntries((profs || []).map((p) => [p.id, p]))
+    }
+    setMembers((m || []).map((r) => ({ ...r, avatar_url: profileMap[r.user_id]?.avatar_url || null })))
     setLogs(lg || [])
     setFundTxns(ft || [])
 

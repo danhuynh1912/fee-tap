@@ -25,7 +25,7 @@ function initForm(settings) {
   }
 }
 
-export function SettingsPage({ club, settings, sport, members, plan, pollTally, canEdit, onSaved, onChanged, onHitLimit, toast }) {
+export function SettingsPage({ club, settings, sport, members, plan, pollTally, hostName, hostAvatar, currentUserId, canEdit, onSaved, onChanged, onHitLimit, toast }) {
   const { t, i18n } = useTranslation()
   const [form, setForm] = useState(() => initForm(settings))
   const [collapsedDays, setCollapsedDays] = useState(() => new Set())
@@ -257,6 +257,7 @@ export function SettingsPage({ club, settings, sport, members, plan, pollTally, 
       <div className="space-y-6">
         <MembersPanel
           club={club} members={members} plan={plan} pollTally={pollTally}
+          hostName={hostName} hostAvatar={hostAvatar} currentUserId={currentUserId}
           canEdit={canEdit} onChanged={onChanged} onHitLimit={onHitLimit} toast={toast}
         />
       </div>
