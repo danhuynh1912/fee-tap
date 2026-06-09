@@ -285,6 +285,34 @@ const en = {
   join_already_host: "You're the host of this club — you can't join as a member.",
   join_go_to_club: 'Go to club',
 
+  // ── guest fee (giao lưu) ─────────────────────────────────────────────────
+  set_guest_fee: 'Walk-in guest fees (giao lưu)',
+  set_guest_fee_hint: 'Guests brought by members to fill spots left by absentees',
+  set_guest_mode: 'Fee mode',
+  set_guest_mode_fixed: 'Fixed by gender',
+  set_guest_mode_shuttle: 'Female fixed + Male splits shuttle',
+  set_guest_mode_split: 'Equal split (all players)',
+  set_guest_fee_male: 'Male guest fee',
+  set_guest_fee_female: 'Female guest fee',
+  set_guest_fee_mode_hint_fixed: 'Each male pays a fixed fee; each female pays a fixed fee.',
+  set_guest_fee_mode_hint_shuttle: 'Females pay a fixed fee. Males split the shuttle cost with regular males.',
+  set_guest_fee_mode_hint_split: 'All guests share court + shuttle cost equally with every player.',
+
+  // ── polltap token ────────────────────────────────────────────────────────
+  polltap_token_label: 'PollTap Club Token',
+  polltap_token_hint: 'Paste into PollTap when creating an attendance vote to link it to this club',
+  polltap_token_copied: 'Token copied!',
+
+  // ── session log — vote linking & guests ──────────────────────────────────
+  log_create_vote: 'Create vote for next session',
+  log_link_vote: 'Link PollTap vote',
+  log_link_vote_none: 'No linked vote — enter manually',
+  log_guest_section: 'Walk-in guests (giao lưu)',
+  log_guest_male: 'Male guests',
+  log_guest_female: 'Female guests',
+  log_guest_revenue_preview: 'Guest revenue → added to fund',
+  log_poll_suggestion: 'from poll',
+
   // ── config / errors ──────────────────────────────────────
   cfg_warn: 'Supabase is not configured. Set VITE_SUPABASE_URL and VITE_SUPABASE_ANON_KEY in a .env file, then run the SQL in supabase/schema.sql.',
   err_generic: 'Something went wrong. Please try again.',
@@ -556,6 +584,34 @@ const vi = {
   join_not_found: 'Link mời này không còn hợp lệ.',
   join_already_host: 'Bạn là host của câu lạc bộ này — không thể tham gia với tư cách thành viên.',
   join_go_to_club: 'Đến câu lạc bộ',
+
+  // ── guest fee (giao lưu) ─────────────────────────────────────────────────
+  set_guest_fee: 'Phí giao lưu',
+  set_guest_fee_hint: 'Khách do thành viên rủ vào để bù số người nghỉ',
+  set_guest_mode: 'Hình thức tính phí',
+  set_guest_mode_fixed: 'Cố định theo giới tính',
+  set_guest_mode_shuttle: 'Nữ cố định + Nam chia tiền cầu',
+  set_guest_mode_split: 'Chia đều tất cả mọi người',
+  set_guest_fee_male: 'Phí khách nam',
+  set_guest_fee_female: 'Phí khách nữ',
+  set_guest_fee_mode_hint_fixed: 'Khách nam trả phí cố định; khách nữ trả phí cố định.',
+  set_guest_fee_mode_hint_shuttle: 'Khách nữ trả phí cố định. Khách nam chia đều tiền cầu với các nam cố định.',
+  set_guest_fee_mode_hint_split: 'Khách chia đều toàn bộ chi phí sân + cầu với tất cả người chơi.',
+
+  // ── polltap token ────────────────────────────────────────────────────────
+  polltap_token_label: 'PollTap Club Token',
+  polltap_token_hint: 'Dán vào PollTap khi tạo vote để liên kết buổi điểm danh với đội này',
+  polltap_token_copied: 'Đã sao chép token!',
+
+  // ── session log — vote linking & guests ──────────────────────────────────
+  log_create_vote: 'Tạo vote cho buổi kế tiếp',
+  log_link_vote: 'Liên kết vote PollTap',
+  log_link_vote_none: 'Không liên kết — nhập tay',
+  log_guest_section: 'Khách giao lưu',
+  log_guest_male: 'Khách nam',
+  log_guest_female: 'Khách nữ',
+  log_guest_revenue_preview: 'Tiền giao lưu → cộng vào quỹ',
+  log_poll_suggestion: 'từ poll',
 
   // ── config / errors ──────────────────────────────────────
   cfg_warn: 'Chưa cấu hình Supabase. Đặt VITE_SUPABASE_URL và VITE_SUPABASE_ANON_KEY trong tệp .env, rồi chạy SQL trong supabase/schema.sql.',

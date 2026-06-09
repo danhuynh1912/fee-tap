@@ -25,7 +25,7 @@ export function MembersPanel({ club, members, plan, pollTally, hostName, hostAva
   const [name, setName] = useState('')
   const [busy, setBusy] = useState(false)
   const filteredMembers = members.filter((m) => m.user_id !== club.owner_id)
-  const count = filteredMembers.length
+  const count = filteredMembers.length + (hostName ? 1 : 0)
   const atLimit = plan === 'free' && count >= FREE_MEMBER_LIMIT
   const isViewerHost = currentUserId === club.owner_id
 

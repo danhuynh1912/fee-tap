@@ -202,7 +202,7 @@ export function ClubLayout({ session, club, setClub, path, toast }) {
 
           {tab === 'log' && (
             <SessionLogPage
-              club={club} logs={logs} settings={settings} sport={sport}
+              club={club} logs={logs} settings={settings} members={members} sport={sport}
               canEdit={canEdit} onChanged={reload} toast={toast}
             />
           )}

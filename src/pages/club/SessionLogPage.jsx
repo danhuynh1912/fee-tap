@@ -1,7 +1,8 @@
-import { useState, useMemo } from 'react'
+import { useState, useMemo, useCallback } from 'react'
 import { useTranslation } from 'react-i18next'
 import {
   ClipboardList, Check, Gauge, AlertTriangle, Info, Calendar, Settings2, Trash2, Loader2,
+  Link, Users, TrendingUp, ExternalLink,
 } from 'lucide-react'
 import { Card } from '../../components/ui/Card'
 import { Badge } from '../../components/ui/Badge'
@@ -9,7 +10,7 @@ import { Button } from '../../components/ui/Button'
 import { inputCls } from '../../components/ui/Field'
 import { cx, num, fmtDate, fmtVND, fmtNum } from '../../lib/utils'
 import { supabase } from '../../lib/supabase'
-import { resolvePeriods, getSessionConfigs } from '../../engine/forecast'
+import { resolvePeriods, getSessionConfigs, calcGuestRevenue } from '../../engine/forecast'
 import { BALLS_PER_BOX } from '../../constants'
 
 function StatCard({ icon: Icon, label, value, tone = 'slate' }) {
@@ -25,19 +26,43 @@ function StatCard({ icon: Icon, label, value, tone = 'slate' }) {
   )
 }
 
-export function SessionLogPage({ club, logs, settings, sport, canEdit, onChanged, toast }) {
+function GuestStepper({ label, value, onDecrement, onIncrement, disabled }) {
+  return (
+    <div className="flex items-center justify-between">
+      <p className="text-sm font-semibold text-slate-700">{label}</p>
+      <div className="flex items-center gap-2">
+        <button onClick={onDecrement} disabled={value <= 0 || disabled}
+          className="grid h-8 w-8 place-items-center rounded-xl border border-slate-200 bg-white text-slate-700 transition hover:border-slate-300 disabled:opacity-30">
+          <span className="text-lg leading-none">−</span>
+        </button>
+        <span className="w-7 text-center font-mono text-lg font-black tabular-nums text-slate-900">{value}</span>
+        <button onClick={onIncrement} disabled={disabled}
+          className="grid h-8 w-8 place-items-center rounded-xl bg-slate-900 text-white transition hover:bg-slate-800 disabled:opacity-30">
+          <span className="text-lg leading-none">+</span>
+        </button>
+      </div>
+    </div>
+  )
+}
+
+export function SessionLogPage({ club, logs, settings, members, sport, canEdit, onChanged, toast }) {
   const { t } = useTranslation()
   const [editingDate, setEditingDate] = useState(null)
-  const [editForm, setEditForm] = useState({ actual: '', note: '' })
+  const [editForm, setEditForm] = useState({
+    actual: '', note: '', voteId: '', guestMale: 0, guestFemale: 0,
+  })
   const [busy, setBusy] = useState(false)
+  const [nearbyVotes, setNearbyVotes] = useState([])
+  const [pollSuggestion, setPollSuggestion] = useState(null)
+  const [votesLoading, setVotesLoading] = useState(false)
 
   const hasEquipment = sport?.hasEquipment ?? true
   const est = num(settings.estimated_shuttlecocks)
+  const memberCount = members?.length || 0
 
   const configs = useMemo(() => getSessionConfigs(settings), [settings])
   const hasSchedule = configs.some((c) => c.weekday !== null && c.weekday !== undefined)
 
-  // Build scheduled sessions per config, each using its own billing period
   const sessions = useMemo(() => {
     if (!hasSchedule) return []
     const today = new Date()
@@ -77,9 +102,63 @@ export function SessionLogPage({ club, logs, settings, sport, canEdit, onChanged
     : 0
   const runningHigh = loggedCount >= 2 && avgActual > est
 
+  // Fetch PollTap votes near a given date for the vote picker
+  const fetchNearbyVotes = useCallback(async (dateStr) => {
+    if (!club.id) return
+    setVotesLoading(true)
+    try {
+      const d = new Date(dateStr)
+      const from = new Date(d); from.setDate(from.getDate() - 1)
+      const to   = new Date(d); to.setDate(to.getDate() + 1)
+      const { data } = await supabase
+        .from('votes')
+        .select('id, title, match_date, is_closed')
+        .eq('club_id', club.id)
+        .gte('match_date', from.toISOString())
+        .lte('match_date', to.toISOString())
+        .order('match_date', { ascending: false })
+      setNearbyVotes(data || [])
+    } finally {
+      setVotesLoading(false)
+    }
+  }, [club.id])
+
+  // When a vote is selected, fetch guest counts from responses
+  async function handleVoteSelect(voteId) {
+    setEditForm((f) => ({ ...f, voteId, guestMale: 0, guestFemale: 0 }))
+    setPollSuggestion(null)
+    if (!voteId) return
+    const { data: responses } = await supabase
+      .from('responses')
+      .select('guests, guest_male_count, guest_female_count')
+      .eq('vote_id', voteId)
+      .eq('attending', true)
+    if (!responses) return
+    const totalMale   = responses.reduce((s, r) => s + (r.guest_male_count   || 0), 0)
+    const totalFemale = responses.reduce((s, r) => s + (r.guest_female_count || 0), 0)
+    const totalGuests = responses.reduce((s, r) => s + (r.guests || 0), 0)
+    const suggestion = { male: totalMale, female: totalFemale, total: totalGuests }
+    setPollSuggestion(suggestion)
+    // Pre-fill from poll — admin can override
+    if (totalMale || totalFemale) {
+      setEditForm((f) => ({ ...f, guestMale: totalMale, guestFemale: totalFemale }))
+    } else if (totalGuests) {
+      // Gender not tracked — put all in male as fallback, admin adjusts
+      setEditForm((f) => ({ ...f, guestMale: totalGuests, guestFemale: 0 }))
+    }
+  }
+
   function startEdit(date, log) {
     setEditingDate(date)
-    setEditForm({ actual: log ? String(num(log.actual_shuttlecocks)) : '', note: log?.note || '' })
+    setEditForm({
+      actual: log ? String(num(log.actual_shuttlecocks)) : '',
+      note: log?.note || '',
+      voteId: log?.vote_id || '',
+      guestMale: log?.guest_male || 0,
+      guestFemale: log?.guest_female || 0,
+    })
+    setPollSuggestion(null)
+    fetchNearbyVotes(date)
   }
 
   async function saveEdit() {
@@ -88,36 +167,97 @@ export function SessionLogPage({ club, logs, settings, sport, canEdit, onChanged
     try {
       const actualCount = editForm.actual === '' ? est : num(editForm.actual)
       const wd = new Date(editingDate).getDay()
-      const configs = getSessionConfigs(settings)
-      const sc = configs.find((c) => c.weekday === wd) || configs[0] || {}
+      const sc = getSessionConfigs(settings).find((c) => c.weekday === wd) || getSessionConfigs(settings)[0] || {}
       const isCycleMode = sc.court_payment_mode === 'cycle'
-      const courtCost = num(sc.court_price_per_hour) * num(sc.hours_per_session)
+      const courtCost   = num(sc.court_price_per_hour) * num(sc.hours_per_session)
       const shuttleCost = hasEquipment ? Math.round(actualCount * (num(settings.price_per_box) / BALLS_PER_BOX)) : 0
-      const totalCost = courtCost + shuttleCost
+      const totalCost   = courtCost + shuttleCost
+
+      const gm = editForm.guestMale || 0
+      const gf = editForm.guestFemale || 0
+      const guestRevenue = calcGuestRevenue({
+        mode: settings.guest_fee_mode || 'split_all',
+        guestMale: gm,
+        guestFemale: gf,
+        feeMale: num(settings.guest_fee_male),
+        feeFemale: num(settings.guest_fee_female),
+        shuttleCost,
+        courtCost,
+        memberCount,
+      })
+
       const existingLog = logs.find((l) => l.played_on === editingDate)
 
       if (existingLog) {
+        // --- UPDATE existing log ---
         await supabase.from('session_logs').update({
-          actual_shuttlecocks: actualCount, note: editForm.note.trim() || null,
-          court_cost: courtCost, shuttle_cost: shuttleCost, total_cost: totalCost,
+          actual_shuttlecocks: actualCount,
+          note: editForm.note.trim() || null,
+          court_cost: courtCost,
+          shuttle_cost: shuttleCost,
+          total_cost: totalCost,
+          vote_id: editForm.voteId || null,
+          guest_male: gm,
+          guest_female: gf,
+          guest_revenue: guestRevenue,
         }).eq('id', existingLog.id)
+
+        // Reverse old cost, apply new cost
         const oldDeduct = isCycleMode ? num(existingLog.shuttle_cost) : num(existingLog.total_cost)
         const newDeduct = isCycleMode ? shuttleCost : totalCost
-        const adj = oldDeduct - newDeduct
-        if (adj !== 0) {
+        const oldGuestRev = num(existingLog.guest_revenue)
+        const fundAdj = (oldDeduct - newDeduct) + (guestRevenue - oldGuestRev)
+
+        if (fundAdj !== 0) {
           await supabase.from('club_settings')
-            .update({ current_fund: num(settings.current_fund) + adj })
+            .update({ current_fund: num(settings.current_fund) + fundAdj })
             .eq('club_id', club.id)
         }
+
+        // Update fund_transaction for guest revenue (idempotent via session_log_id)
+        if (guestRevenue > 0) {
+          await supabase.from('fund_transactions').upsert({
+            club_id: club.id,
+            amount: guestRevenue,
+            note: `${t('log_guest_section')} ${fmtDate(editingDate)}: ${gm}M ${gf}F`,
+            session_log_id: existingLog.id,
+          }, { onConflict: 'session_log_id' })
+        }
       } else {
-        await supabase.from('session_logs').insert({
-          club_id: club.id, played_on: editingDate, actual_shuttlecocks: actualCount,
-          note: editForm.note.trim() || null, court_cost: courtCost, shuttle_cost: shuttleCost, total_cost: totalCost,
-        })
+        // --- INSERT new log (vote_id UNIQUE prevents duplicate settle) ---
+        const { data: newLog, error: insertErr } = await supabase
+          .from('session_logs')
+          .insert({
+            club_id: club.id,
+            played_on: editingDate,
+            actual_shuttlecocks: actualCount,
+            note: editForm.note.trim() || null,
+            court_cost: courtCost,
+            shuttle_cost: shuttleCost,
+            total_cost: totalCost,
+            vote_id: editForm.voteId || null,
+            guest_male: gm,
+            guest_female: gf,
+            guest_revenue: guestRevenue,
+          })
+          .select('id')
+          .single()
+        if (insertErr) throw insertErr
+
         const deduct = isCycleMode ? shuttleCost : totalCost
+        const netChange = -deduct + guestRevenue
         await supabase.from('club_settings')
-          .update({ current_fund: Math.max(0, num(settings.current_fund) - deduct) })
+          .update({ current_fund: Math.max(0, num(settings.current_fund) + netChange) })
           .eq('club_id', club.id)
+
+        if (guestRevenue > 0) {
+          await supabase.from('fund_transactions').upsert({
+            club_id: club.id,
+            amount: guestRevenue,
+            note: `${t('log_guest_section')} ${fmtDate(editingDate)}: ${gm}M ${gf}F`,
+            session_log_id: newLog.id,
+          }, { onConflict: 'session_log_id' })
+        }
       }
 
       setEditingDate(null)
@@ -131,21 +271,67 @@ export function SessionLogPage({ club, logs, settings, sport, canEdit, onChanged
     try {
       await supabase.from('session_logs').delete().eq('id', log.id)
       const wd = new Date(log.played_on).getDay()
-      const configs = getSessionConfigs(settings)
-      const sc = configs.find((c) => c.weekday === wd) || configs[0] || {}
+      const sc = getSessionConfigs(settings).find((c) => c.weekday === wd) || getSessionConfigs(settings)[0] || {}
       const isCycleMode = sc.court_payment_mode === 'cycle'
       const restore = isCycleMode ? num(log.shuttle_cost) : num(log.total_cost)
-      if (restore > 0) {
+      const guestRev = num(log.guest_revenue)
+      // Restore session cost, remove guest revenue
+      const fundAdj = restore - guestRev
+      if (fundAdj !== 0) {
         await supabase.from('club_settings')
-          .update({ current_fund: num(settings.current_fund) + restore })
+          .update({ current_fund: num(settings.current_fund) + fundAdj })
           .eq('club_id', club.id)
       }
       onChanged()
     } catch (e) { toast(e.message || t('err_generic')) }
   }
 
+  // Find next unlogged future session and open PollTap create-vote URL
+  function openCreateVote() {
+    const today = new Date().toISOString().slice(0, 10)
+    const next = [...sessions]
+      .sort((a, b) => (a.date < b.date ? -1 : 1))
+      .find((s) => s.date > today && !s.log)
+    const date = next?.date || today
+    // Default deadline = same day 20:00 local → convert to datetime-local format
+    const deadlineDt = `${date}T20:00`
+    const matchDt    = `${date}T08:00`
+    const title = encodeURIComponent(`${club.name} · ${fmtDate(date)}`)
+    const token = club.polltap_link_token || ''
+    const slots = members?.length || 0
+    const base  = import.meta.env.VITE_POLLTAP_URL || 'http://localhost:5191'
+    const url   = `${base}/?token=${token}&date=${matchDt}&deadline=${deadlineDt}&slots=${slots}&title=${title}`
+    window.open(url, '_blank')
+  }
+
+  // Preview guest revenue for the current edit form state
+  const previewGuestRevenue = useMemo(() => {
+    if (!editingDate) return 0
+    const wd = new Date(editingDate).getDay()
+    const sc = getSessionConfigs(settings).find((c) => c.weekday === wd) || getSessionConfigs(settings)[0] || {}
+    const actualCount = editForm.actual === '' ? est : num(editForm.actual)
+    const courtCost = num(sc.court_price_per_hour) * num(sc.hours_per_session)
+    const shuttleCost = hasEquipment ? Math.round(actualCount * (num(settings.price_per_box) / BALLS_PER_BOX)) : 0
+    return calcGuestRevenue({
+      mode: settings.guest_fee_mode || 'split_all',
+      guestMale: editForm.guestMale || 0,
+      guestFemale: editForm.guestFemale || 0,
+      feeMale: num(settings.guest_fee_male),
+      feeFemale: num(settings.guest_fee_female),
+      shuttleCost, courtCost, memberCount,
+    })
+  }, [editingDate, editForm, settings, hasEquipment, est, memberCount])
+
   return (
     <div className="mx-auto max-w-3xl">
+      {canEdit && club.polltap_link_token && (
+        <div className="mb-4 flex justify-end">
+          <Button variant="ghost" size="sm" onClick={openCreateVote}>
+            <ExternalLink className="h-4 w-4" />
+            {t('log_create_vote')}
+          </Button>
+        </div>
+      )}
       <Card>
         <div className="flex items-center gap-2">
           <ClipboardList className="h-5 w-5 text-slate-400" />
@@ -190,8 +376,10 @@ export function SessionLogPage({ club, logs, settings, sport, canEdit, onChanged
                 isActual ? 'border-slate-100 bg-white' : 'border-dashed border-slate-200 bg-slate-50/60'
               )}>
                 {isEditing ? (
-                  <div className="space-y-2">
+                  <div className="space-y-3">
                     <p className="text-sm font-bold text-slate-900">{fmtDate(date)}</p>
+
+                    {/* Shuttlecocks + note */}
                     <div className="grid gap-2 sm:grid-cols-2">
                       <div className="relative">
                         <input
@@ -209,6 +397,65 @@ export function SessionLogPage({ club, logs, settings, sport, canEdit, onChanged
                         onChange={(e) => setEditForm((f) => ({ ...f, note: e.target.value }))}
                       />
                     </div>
+
+                    {/* PollTap vote picker */}
+                    <div>
+                      <label className="mb-1 flex items-center gap-1.5 text-xs font-semibold text-slate-500">
+                        <Link className="h-3.5 w-3.5" /> {t('log_link_vote')}
+                      </label>
+                      {votesLoading
+                        ? <p className="text-xs text-slate-400 flex items-center gap-1"><Loader2 className="h-3 w-3 animate-spin" /> Loading…</p>
+                        : (
+                          <select
+                            className={cx(inputCls, 'text-sm')}
+                            value={editForm.voteId}
+                            onChange={(e) => handleVoteSelect(e.target.value)}
+                          >
+                            <option value="">{t('log_link_vote_none')}</option>
+                            {nearbyVotes.map((v) => (
+                              <option key={v.id} value={v.id}>
+                                {v.title}{v.match_date ? ` · ${fmtDate(v.match_date)}` : ''}
+                              </option>
+                            ))}
+                          </select>
+                        )
+                      }
+                    </div>
+
+                    {/* Guest section */}
+                    <div className="rounded-2xl border border-slate-100 bg-slate-50 p-4 space-y-3">
+                      <div className="flex items-center gap-1.5 text-xs font-semibold text-slate-500">
+                        <Users className="h-3.5 w-3.5" /> {t('log_guest_section')}
+                        {pollSuggestion && (
+                          <span className="ml-auto text-cyan-600 font-normal">
+                            {t('log_poll_suggestion')}: {pollSuggestion.male}M {pollSuggestion.female}F
+                          </span>
+                        )}
+                      </div>
+                      <GuestStepper
+                        label={`♂ ${t('log_guest_male')}`}
+                        value={editForm.guestMale}
+                        onDecrement={() => setEditForm((f) => ({ ...f, guestMale: Math.max(0, f.guestMale - 1) }))}
+                        onIncrement={() => setEditForm((f) => ({ ...f, guestMale: f.guestMale + 1 }))}
+                        disabled={busy}
+                      />
+                      <GuestStepper
+                        label={`♀ ${t('log_guest_female')}`}
+                        value={editForm.guestFemale}
+                        onDecrement={() => setEditForm((f) => ({ ...f, guestFemale: Math.max(0, f.guestFemale - 1) }))}
+                        onIncrement={() => setEditForm((f) => ({ ...f, guestFemale: f.guestFemale + 1 }))}
+                        disabled={busy}
+                      />
+                      {previewGuestRevenue > 0 && (
+                        <div className="flex items-center gap-2 rounded-xl bg-lime-50 border border-lime-200 px-3 py-2">
+                          <TrendingUp className="h-4 w-4 text-lime-600 shrink-0" />
+                          <p className="text-xs font-semibold text-lime-700">
+                            {t('log_guest_revenue_preview')}: <span className="font-mono">{fmtVND(previewGuestRevenue)}</span>
+                          </p>
+                        </div>
+                      )}
+                    </div>
+
                     <div className="flex gap-2">
                       <Button variant="volt" size="sm" className="flex-1" onClick={saveEdit} disabled={busy}>
                         {busy ? <Loader2 className="h-4 w-4 animate-spin" /> : <><Check className="h-4 w-4" /> {t('save')}</>}
@@ -225,9 +472,15 @@ export function SessionLogPage({ club, logs, settings, sport, canEdit, onChanged
                       <div className="flex items-center gap-2">
                         <p className={cx('text-sm font-semibold', isActual ? 'text-slate-900' : 'text-slate-400')}>{fmtDate(date)}</p>
                         <span className="text-[10px] text-slate-400">{cycleTag}</span>
+                        {log?.vote_id && <Link className="h-3 w-3 text-cyan-500" />}
                       </div>
                       {log?.note && <p className="truncate text-xs text-slate-400">{log.note}</p>}
                       {!isActual && <p className="text-xs text-slate-400">{t('log_estimated_default')}</p>}
+                      {isActual && num(log.guest_revenue) > 0 && (
+                        <p className="text-xs text-lime-600 font-semibold">
+                          +{fmtVND(log.guest_revenue)} {t('log_guest_section')}
+                        </p>
+                      )}
                     </div>
                     <div className="text-right shrink-0">
                       {cost > 0 && <p className="font-mono text-sm font-black text-slate-900">{fmtVND(cost)}</p>}

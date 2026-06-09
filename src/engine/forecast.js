@@ -125,6 +125,27 @@ export function monthName(m1, lang) {
 // Returns an array of per-weekday session configs.
 // If session_configs is populated (new format), use that.
 // Otherwise synthesise from legacy flat fields for backward compat.
+export function calcGuestRevenue({ mode, guestMale, guestFemale, feeMale, feeFemale, shuttleCost, courtCost, memberCount }) {
+  const gm = Math.round(guestMale) || 0
+  const gf = Math.round(guestFemale) || 0
+  if (!gm && !gf) return 0
+
+  if (mode === 'fixed_by_gender')
+    return gm * (feeMale || 0) + gf * (feeFemale || 0)
+
+  if (mode === 'split_shuttle') {
+    const femalePart = gf * (feeFemale || 0)
+    const totalMales = Math.max(1, (memberCount || 1) + gm)
+    const perMale = Math.round((shuttleCost || 0) / totalMales)
+    return femalePart + gm * perMale
+  }
+
+  // split_all
+  const totalPlayers = Math.max(1, (memberCount || 1) + gm + gf)
+  const perHead = Math.round(((courtCost || 0) + (shuttleCost || 0)) / totalPlayers)
+  return (gm + gf) * perHead
+}
+
 export function getSessionConfigs(settings) {
   const raw = settings.session_configs
   if (Array.isArray(raw) && raw.length > 0) return raw

@@ -1,6 +1,6 @@
-import { useState, useEffect } from 'react'
+import { useState, useEffect, useCallback } from 'react'
 import { useTranslation } from 'react-i18next'
-import { Settings2, Coins, Calendar, Wallet, RefreshCw, Target, Check, Plus, Loader2, ChevronDown } from 'lucide-react'
+import { Settings2, Coins, Calendar, Wallet, RefreshCw, Target, Check, Plus, Loader2, ChevronDown, Copy, Users } from 'lucide-react'
 import { Card } from '../../components/ui/Card'
 import { Button } from '../../components/ui/Button'
 import { Field, inputCls } from '../../components/ui/Field'
@@ -22,6 +22,9 @@ function initForm(settings) {
     price_per_box: settings.price_per_box ?? DEFAULT_SESSION_CONFIG.price_per_box ?? 320000,
     estimated_shuttlecocks: settings.estimated_shuttlecocks ?? 6,
     current_fund: settings.current_fund ?? 0,
+    guest_fee_mode: settings.guest_fee_mode ?? 'split_all',
+    guest_fee_male: settings.guest_fee_male ?? 0,
+    guest_fee_female: settings.guest_fee_female ?? 0,
   }
 }
 
@@ -93,6 +96,9 @@ export function SettingsPage({ club, settings, sport, members, plan, pollTally, 
         price_per_box: num(form.price_per_box),
         estimated_shuttlecocks: num(form.estimated_shuttlecocks),
         current_fund: num(form.current_fund),
+        guest_fee_mode: form.guest_fee_mode,
+        guest_fee_male: num(form.guest_fee_male),
+        guest_fee_female: num(form.guest_fee_female),
         // backward-compat flat fields from first session config
         court_price_per_hour: first ? num(first.court_price_per_hour) : 120000,
         hours_per_session: first ? num(first.hours_per_session) : 2,
@@ -258,15 +264,89 @@ export function SettingsPage({ club, settings, sport, members, plan, pollTally, 
             </div>
           </div>
 
+          {/* Guest fee config */}
+          <div className={cx('mt-6', !canEdit && 'pointer-events-none opacity-70')}>
+            <p className="text-xs font-semibold uppercase tracking-wide text-slate-400 mb-4">
+              <span className="flex items-center gap-1.5"><Users className="h-3.5 w-3.5" />{t('set_guest_fee')}</span>
+            </p>
+            <p className="mb-4 text-xs text-slate-500">{t('set_guest_fee_hint')}</p>
+            <Field label={t('set_guest_mode')} icon={Users}>
+              <Segmented
+                value={form.guest_fee_mode}
+                onChange={(v) => setForm((f) => ({ ...f, guest_fee_mode: v }))}
+                disabled={!canEdit}
+                options={[
+                  { value: 'split_all',        label: t('set_guest_mode_split') },
+                  { value: 'fixed_by_gender',  label: t('set_guest_mode_fixed') },
+                  { value: 'split_shuttle',    label: t('set_guest_mode_shuttle') },
+                ]}
+              />
+            </Field>
+            <p className="mt-2 mb-4 text-xs text-slate-400 italic">
+              {form.guest_fee_mode === 'fixed_by_gender' && t('set_guest_fee_mode_hint_fixed')}
+              {form.guest_fee_mode === 'split_shuttle'   && t('set_guest_fee_mode_hint_shuttle')}
+              {form.guest_fee_mode === 'split_all'       && t('set_guest_fee_mode_hint_split')}
+            </p>
+            {(form.guest_fee_mode === 'fixed_by_gender' || form.guest_fee_mode === 'split_shuttle') && (
+              <div className="grid gap-4 sm:grid-cols-2 animate-fade-in">
+                {form.guest_fee_mode === 'fixed_by_gender' && (
+                  <Field label={t('set_guest_fee_male')} icon={Coins}>
+                    <div className="relative">
+                      <input type="number" min="0" className={cx(inputCls, 'pr-10 font-mono')}
+                        value={form.guest_fee_male ?? ''} disabled={!canEdit}
+                        onChange={(e) => setForm((f) => ({ ...f, guest_fee_male: e.target.value }))}
+                      />
+                      <span className="pointer-events-none absolute right-4 top-1/2 -translate-y-1/2 text-sm font-semibold text-slate-400">₫</span>
+                    </div>
+                  </Field>
+                )}
+                <Field label={t('set_guest_fee_female')} icon={Coins}>
+                  <div className="relative">
+                    <input type="number" min="0" className={cx(inputCls, 'pr-10 font-mono')}
+                      value={form.guest_fee_female ?? ''} disabled={!canEdit}
+                      onChange={(e) => setForm((f) => ({ ...f, guest_fee_female: e.target.value }))}
+                    />
+                    <span className="pointer-events-none absolute right-4 top-1/2 -translate-y-1/2 text-sm font-semibold text-slate-400">₫</span>
+                  </div>
+                </Field>
+              </div>
+            )}
+          </div>
+
           {canEdit && (
             <Button variant="primary" size="lg" className="mt-6 w-full" onClick={save} disabled={busy}>
               {busy ? <><Loader2 className="h-5 w-5 animate-spin" /> {t('saving')}</> : <>{t('save')} <Check className="h-5 w-5 text-lime-400" /></>}
             </Button>
           )}
         </Card>
+
       </div>
 
       <div className="space-y-6">
+        {/* PollTap link token */}
+        {canEdit && club.polltap_link_token && (
+          <Card>
+            <div className="flex items-center gap-2">
+              <Copy className="h-5 w-5 text-slate-400" />
+              <h3 className="text-sm font-bold text-slate-900">{t('polltap_token_label')}</h3>
+            </div>
+            <p className="mt-1 text-xs text-slate-500">{t('polltap_token_hint')}</p>
+            <div className="mt-3 flex items-center gap-2">
+              <code className="flex-1 rounded-xl border border-slate-200 bg-slate-50 px-3 py-2 font-mono text-xs text-slate-700 break-all select-all">
+                {club.polltap_link_token}
+              </code>
+              <button
+                onClick={() => {
+                  navigator.clipboard.writeText(club.polltap_link_token)
+                  toast(t('polltap_token_copied'))
+                }}
+                className="grid h-9 w-9 shrink-0 place-items-center rounded-xl border border-slate-200 bg-white text-slate-500 transition hover:border-slate-300 hover:text-slate-700"
+              >
+                <Copy className="h-4 w-4" />
+              </button>
+            </div>
+          </Card>
+        )}
         <MembersPanel
           club={club} members={members} plan={plan} pollTally={pollTally}
           hostName={hostName} hostAvatar={hostAvatar} currentUserId={currentUserId}
