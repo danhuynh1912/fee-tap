@@ -288,11 +288,21 @@ export function SessionLogPage({ club, logs, settings, members, sport, canEdit, 
 
   // Find next unlogged future session and open PollTap create-vote URL
   function openCreateVote() {
-    const today = new Date().toISOString().slice(0, 10)
-    const next = [...sessions]
-      .sort((a, b) => (a.date < b.date ? -1 : 1))
-      .find((s) => s.date > today && !s.log)
-    const date = next?.date || today
+    const today = new Date()
+    // Look ahead up to 14 days to find the next scheduled play day
+    const playWeekdays = new Set(
+      configs.flatMap((c) => c.weekday !== null && c.weekday !== undefined ? [c.weekday] : [])
+    )
+    let nextDate = null
+    for (let i = 1; i <= 14; i++) {
+      const d = new Date(today)
+      d.setDate(d.getDate() + i)
+      if (playWeekdays.has(d.getDay())) {
+        nextDate = d.toISOString().slice(0, 10)
+        break
+      }
+    }
+    const date = nextDate || today.toISOString().slice(0, 10)
     // Default deadline = same day 20:00 local → convert to datetime-local format
     const deadlineDt = `${date}T20:00`
     const matchDt    = `${date}T08:00`
