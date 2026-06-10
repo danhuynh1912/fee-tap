@@ -176,7 +176,10 @@ export function ClubLayout({ session, club, setClub, path, toast }) {
         <div className="flex-1 px-5 py-8 pb-24 mx-auto w-full max-w-[1460px]">
           <div className="hidden md:flex flex-wrap items-center justify-between gap-4 mb-8">
             <h1 className="flex items-center gap-2 text-2xl font-black tracking-tight text-slate-900">
-              <Building2 className="h-6 w-6 text-slate-300" /> {club.name}
+              {tab === 'settings'
+                ? <><Settings2 className="h-6 w-6 text-slate-300" /> {t('set_title')}</>
+                : <><Building2 className="h-6 w-6 text-slate-300" /> {club.name}</>
+              }
             </h1>
           </div>
 
@@ -203,7 +206,7 @@ export function ClubLayout({ session, club, setClub, path, toast }) {
           {tab === 'log' && (
             <SessionLogPage
               club={club} logs={logs} settings={settings} members={members} sport={sport}
-              canEdit={canEdit} onChanged={reload} toast={toast}
+              canEdit={canEdit} onChanged={reload} toast={toast} user={session?.user}
             />
           )}
 

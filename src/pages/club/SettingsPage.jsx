@@ -1,6 +1,6 @@
-import { useState, useEffect, useCallback } from 'react'
+import { useState, useEffect, useCallback, useMemo } from 'react'
 import { useTranslation } from 'react-i18next'
-import { Settings2, Coins, Calendar, Wallet, RefreshCw, Target, Check, Plus, Loader2, ChevronDown, Copy, Users } from 'lucide-react'
+import { Settings2, Coins, Calendar, Wallet, RefreshCw, Target, Check, Plus, Loader2, ChevronDown, Users, TrendingUp } from 'lucide-react'
 import { Card } from '../../components/ui/Card'
 import { Button } from '../../components/ui/Button'
 import { Field, inputCls } from '../../components/ui/Field'
@@ -8,9 +8,9 @@ import { Segmented } from '../../components/ui/Segmented'
 import { WeekdayPicker } from '../../components/club/WeekdayPicker'
 import { SessionBreakdown } from '../../components/club/SessionBreakdown'
 import { MembersPanel } from './MembersPanel'
-import { cx, num } from '../../lib/utils'
+import { cx, num, fmtVND, fmtNum } from '../../lib/utils'
 import { supabase } from '../../lib/supabase'
-import { resolvePeriods, sessionsForPeriod, formatPeriodLabel, monthName, getSessionConfigs } from '../../engine/forecast'
+import { resolvePeriods, sessionsForPeriod, formatPeriodLabel, monthName, getSessionConfigs, computeAll } from '../../engine/forecast'
 import { DEFAULT_SESSION_CONFIG } from '../../constants'
 
 function initForm(settings) {
@@ -150,30 +150,41 @@ export function SettingsPage({ club, settings, sport, members, plan, pollTally, 
     finally { setTopUpBusy(false) }
   }
 
+  const memberCount = members.filter((m) => m.user_id !== club.owner_id).length + (hostName ? 1 : 0)
+  const liveAll = useMemo(() => {
+    const synth = {
+      ...settings,
+      play_weekdays: form.play_weekdays,
+      session_configs: form.session_configs,
+      price_per_box: num(form.price_per_box),
+      estimated_shuttlecocks: num(form.estimated_shuttlecocks),
+      current_fund: num(form.current_fund),
+    }
+    return computeAll(synth, memberCount, sport.hasEquipment)
+  }, [form, memberCount, sport.hasEquipment, settings])
+
+  const cardTitleCls = 'flex items-center gap-2.5 text-base font-bold text-slate-900'
+
   return (
     <div className="grid gap-6 lg:grid-cols-3">
-      <div className="lg:col-span-2">
+      <div className="lg:col-span-2 space-y-5">
+
+        {/* Card 1: Weekday schedule */}
         <Card>
-          <div className="flex items-center gap-2">
-            <Settings2 className="h-5 w-5 text-slate-400" />
-            <h3 className="text-lg font-bold text-slate-900">{t('set_title')}</h3>
+          <div className={cardTitleCls}>
+            <Calendar className="h-5 w-5 text-slate-400" />
+            <span>{t('set_playdays')}</span>
           </div>
-          <p className="mt-3 text-sm text-slate-500">{t('set_sub')}</p>
+          <p className="mt-1 mb-5 text-sm text-slate-500">{t('set_playdays_hint')}</p>
 
-          {/* Weekday picker */}
-          <div className="mt-6">
-            <Field label={t('set_playdays')} icon={Calendar} hint={t('set_playdays_hint')}>
-              <WeekdayPicker
-                value={playDays}
-                onChange={handleWeekdaysChange}
-                disabled={!canEdit}
-              />
-            </Field>
-          </div>
+          <WeekdayPicker
+            value={playDays}
+            onChange={handleWeekdaysChange}
+            disabled={!canEdit}
+          />
 
-          {/* Per-session config cards */}
           {sortedConfigs.length > 0 && (
-            <div className={cx('mt-6 space-y-4', !canEdit && 'pointer-events-none opacity-70')}>
+            <div className={cx('mt-5 space-y-4', !canEdit && 'pointer-events-none opacity-70')}>
               <p className="text-xs font-semibold uppercase tracking-wide text-slate-400">{t('set_day_settings')}</p>
               {sortedConfigs.map((sc) => (
                 <SessionConfigCard
@@ -190,10 +201,16 @@ export function SettingsPage({ club, settings, sport, members, plan, pollTally, 
               ))}
             </div>
           )}
+        </Card>
 
-          {/* Shared / global settings */}
-          <div className={cx('mt-6', !canEdit && 'pointer-events-none opacity-70')}>
-            <p className="text-xs font-semibold uppercase tracking-wide text-slate-400 mb-4">{t('set_global_settings')}</p>
+        {/* Card 2: Global settings */}
+        <Card>
+          <div className={cardTitleCls}>
+            <Settings2 className="h-5 w-5 text-slate-400" />
+            <span>{t('set_global_settings')}</span>
+          </div>
+
+          <div className={cx('mt-5', !canEdit && 'pointer-events-none opacity-70')}>
             <div className="grid gap-5 sm:grid-cols-2">
               {sport.hasEquipment && (
                 <>
@@ -265,11 +282,7 @@ export function SettingsPage({ club, settings, sport, members, plan, pollTally, 
           </div>
 
           {/* Guest fee config */}
-          <div className={cx('mt-6', !canEdit && 'pointer-events-none opacity-70')}>
-            <p className="text-xs font-semibold uppercase tracking-wide text-slate-400 mb-4">
-              <span className="flex items-center gap-1.5"><Users className="h-3.5 w-3.5" />{t('set_guest_fee')}</span>
-            </p>
-            <p className="mb-4 text-xs text-slate-500">{t('set_guest_fee_hint')}</p>
+          <div className={cx('mt-5', !canEdit && 'pointer-events-none opacity-70')}>
             <Field label={t('set_guest_mode')} icon={Users}>
               <Segmented
                 value={form.guest_fee_mode}
@@ -312,41 +325,67 @@ export function SettingsPage({ club, settings, sport, members, plan, pollTally, 
               </div>
             )}
           </div>
-
-          {canEdit && (
-            <Button variant="primary" size="lg" className="mt-6 w-full" onClick={save} disabled={busy}>
-              {busy ? <><Loader2 className="h-5 w-5 animate-spin" /> {t('saving')}</> : <>{t('save')} <Check className="h-5 w-5 text-lime-400" /></>}
-            </Button>
-          )}
         </Card>
+
+        {/* Save button — outside cards */}
+        {canEdit && (
+          <Button variant="primary" size="lg" className="w-full" onClick={save} disabled={busy}>
+            {busy ? <><Loader2 className="h-5 w-5 animate-spin" /> {t('saving')}</> : <>{t('save')} <Check className="h-5 w-5 text-lime-400" /></>}
+          </Button>
+        )}
 
       </div>
 
-      <div className="space-y-6">
-        {/* PollTap link token */}
-        {canEdit && club.polltap_link_token && (
-          <Card>
-            <div className="flex items-center gap-2">
-              <Copy className="h-5 w-5 text-slate-400" />
-              <h3 className="text-sm font-bold text-slate-900">{t('polltap_token_label')}</h3>
+      <div className="space-y-5">
+        {/* Live cost estimate */}
+        <Card>
+          <div className={cardTitleCls}>
+            <TrendingUp className="h-5 w-5 text-slate-400" />
+            <span>{t('set_cost_preview_title')}</span>
+          </div>
+          <p className="mt-1 mb-4 text-xs text-slate-500">{t('set_cost_preview_sub')}</p>
+
+          {liveAll.venues.length === 0 ? (
+            <p className="text-sm text-slate-400 text-center py-4">{t('set_no_days')}</p>
+          ) : (
+            <div className="rounded-2xl border border-slate-100 bg-slate-50 p-4 space-y-3">
+              {/* Period label(s) */}
+              <p className="text-xs font-semibold text-slate-500">
+                {[...new Set(liveAll.venues.map((v) => formatPeriodLabel(v.period, i18n.language)))].join(' · ')}
+              </p>
+
+              <div className="space-y-2">
+                <div className="flex justify-between text-sm">
+                  <span className="text-slate-500">{t('set_cost_sessions')}</span>
+                  <span className="font-mono font-semibold text-slate-900">{fmtNum(liveAll.totalScheduled)}</span>
+                </div>
+                <div className="flex justify-between text-sm">
+                  <span className="text-slate-500">{t('set_cost_court')}</span>
+                  <span className="font-mono font-semibold text-slate-900">{fmtVND(liveAll.totalMonthlyCourtCost)}</span>
+                </div>
+                {sport.hasEquipment && (
+                  <div className="flex justify-between text-sm">
+                    <span className="text-slate-500">{t('set_cost_shuttle')}</span>
+                    <span className="font-mono font-semibold text-slate-900">{fmtVND(liveAll.shuttleCost)}</span>
+                  </div>
+                )}
+              </div>
+
+              <div className="border-t border-slate-200 pt-2 flex justify-between">
+                <span className="text-sm font-bold text-slate-800">{t('set_cost_total')}</span>
+                <span className="font-mono text-base font-black text-slate-900">{fmtVND(liveAll.totalMonthlyCost)}</span>
+              </div>
+
+              {memberCount > 0 && (
+                <div className="flex justify-between rounded-xl bg-lime-400/20 px-3 py-2">
+                  <span className="text-xs font-semibold text-slate-700">{t('set_cost_per_member')}</span>
+                  <span className="font-mono text-sm font-black text-slate-900">{fmtVND(liveAll.suggestedFee)}</span>
+                </div>
+              )}
             </div>
-            <p className="mt-1 text-xs text-slate-500">{t('polltap_token_hint')}</p>
-            <div className="mt-3 flex items-center gap-2">
-              <code className="flex-1 rounded-xl border border-slate-200 bg-slate-50 px-3 py-2 font-mono text-xs text-slate-700 break-all select-all">
-                {club.polltap_link_token}
-              </code>
-              <button
-                onClick={() => {
-                  navigator.clipboard.writeText(club.polltap_link_token)
-                  toast(t('polltap_token_copied'))
-                }}
-                className="grid h-9 w-9 shrink-0 place-items-center rounded-xl border border-slate-200 bg-white text-slate-500 transition hover:border-slate-300 hover:text-slate-700"
-              >
-                <Copy className="h-4 w-4" />
-              </button>
-            </div>
-          </Card>
-        )}
+          )}
+        </Card>
+
         <MembersPanel
           club={club} members={members} plan={plan} pollTally={pollTally}
           hostName={hostName} hostAvatar={hostAvatar} currentUserId={currentUserId}

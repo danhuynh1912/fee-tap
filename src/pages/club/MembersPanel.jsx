@@ -57,7 +57,7 @@ export function MembersPanel({ club, members, plan, pollTally, hostName, hostAva
       <div className="flex flex-wrap items-center justify-between gap-2">
         <div className="flex items-center gap-2">
           <Users className="h-5 w-5 text-slate-400" />
-          <h3 className="text-lg font-bold text-slate-900">{t('mem_title')}</h3>
+          <h3 className="text-base font-bold text-slate-900">{t('mem_title')}</h3>
         </div>
         <Badge tone={atLimit ? 'amber' : plan === 'pro' ? 'volt' : 'slate'}>
           {plan === 'pro' ? t('mem_sub_pro', { count }) : t('mem_sub_free', { count })}

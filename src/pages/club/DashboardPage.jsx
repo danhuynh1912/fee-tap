@@ -1,8 +1,8 @@
-import { useMemo, useState } from 'react'
+import { useMemo, useState, useEffect } from 'react'
 import { useTranslation } from 'react-i18next'
 import {
   PieChart, Users, TrendingUp, TrendingDown, AlertTriangle, BarChart3,
-  FileSpreadsheet, FileText, Activity, Target, Wallet, ArrowRight, Receipt, X, Info,
+  FileSpreadsheet, FileText, Activity, Wallet, ArrowRight, Receipt, X, Info, Settings2, SlidersHorizontal,
 } from 'lucide-react'
 import { Card } from '../../components/ui/Card'
 import { Badge } from '../../components/ui/Badge'
@@ -10,9 +10,10 @@ import { Button } from '../../components/ui/Button'
 import { Modal } from '../../components/ui/Modal'
 import { InfoTip } from '../../components/club/InfoTip'
 import { ProLock } from '../../components/monetize/ProLock'
+import { DashboardConfigDrawer } from '../../components/club/DashboardConfigDrawer'
 import { MembersPanel } from './MembersPanel'
 import {
-  computeAll, formatPeriodLabel, getSessionConfigs, resolvePeriods,
+  computeAll, formatPeriodLabel, getSessionConfigs,
 } from '../../engine/forecast'
 import { fmtVND, fmtNum, num, cx } from '../../lib/utils'
 import { BALLS_PER_BOX } from '../../constants'
@@ -83,10 +84,17 @@ function AdvancedForecast({ totalMonthlyCost, plan, canEdit, onUnlock }) {
   )
 }
 
-function ForecastDashboard({ settings, memberCount, plan, sport, canEdit, onUnlock, logs, fundTxns }) {
+function ForecastDashboard({ settings, memberCount, plan, sport, canEdit, onUnlock, logs, fundTxns, sections: sectionsProp }) {
   const { t, i18n } = useTranslation()
   const hasEquipment = sport?.hasEquipment ?? true
   const [spentTipOpen, setSpentTipOpen] = useState(false)
+  const [sections, setSections] = useState(() => sectionsProp || {})
+
+  useEffect(() => {
+    setSections(sectionsProp || {})
+  }, [sectionsProp])
+
+  const show = (key) => sections[key] !== false
 
   const all = useMemo(() => computeAll(settings, memberCount, hasEquipment), [settings, memberCount, hasEquipment])
   const sessionConfigs = useMemo(() => getSessionConfigs(settings), [settings])
@@ -176,6 +184,10 @@ function ForecastDashboard({ settings, memberCount, plan, sport, canEdit, onUnlo
   const txCount = (fundTxns || []).length
   const sessionProgress = all.totalScheduled > 0 ? Math.min(1, all.totalHappened / all.totalScheduled) : 0
 
+  // Base fee: pure cost ÷ members, no fund dependency
+  const baseFee = all.suggestedFee
+  const nextBaseFee = memberCount > 0 ? Math.ceil(all.nextTotalCost / memberCount) : 0
+
   // Next cycle: inherit surplus/deficit from current period
   const nextNetCost = all.nextTotalCost - projectedBalance // surplus reduces, deficit adds
   const nextAdjustedFee = memberCount > 0 ? Math.ceil(Math.max(0, nextNetCost) / memberCount) : 0
@@ -232,20 +244,24 @@ function ForecastDashboard({ settings, memberCount, plan, sport, canEdit, onUnlo
               {all.totalHappened} {t('dash_sessions_happened')}
             </p>
           </div>
-          <div className="rounded-2xl bg-slate-800/60 px-3 py-3 sm:px-4">
-            <p className="text-[10px] font-semibold uppercase tracking-wide text-slate-500">{t('dash_remaining_forecast')}</p>
-            <p className="mt-1.5 font-mono text-sm sm:text-base font-black text-slate-300">~{fmtVND(remainingForecast)}</p>
-            <p className="mt-0.5 text-[10px] text-slate-500">{all.totalScheduled - all.totalHappened} {t('dash_sessions_future')}</p>
-          </div>
-          <div className={cx('rounded-2xl px-3 py-3 sm:px-4', projectedSurplus ? 'bg-lime-400/15' : 'bg-red-500/20')}>
-            <p className="text-[10px] font-semibold uppercase tracking-wide text-slate-500">{t('dash_end_of_period')}</p>
-            <p className={cx('mt-1.5 font-mono text-sm sm:text-base font-black', projectedSurplus ? 'text-lime-400' : 'text-red-400')}>
-              {projectedSurplus ? '+' : '−'}{fmtVND(Math.abs(projectedBalance))}
-            </p>
-            <span className={cx('mt-0.5 text-[10px] font-bold', projectedSurplus ? 'text-lime-400' : 'text-red-400')}>
-              {projectedSurplus ? t('bal_surplus') : t('bal_deficit')}
-            </span>
-          </div>
+          {show('remaining_forecast') && (
+            <div className="rounded-2xl bg-slate-800/60 px-3 py-3 sm:px-4">
+              <p className="text-[10px] font-semibold uppercase tracking-wide text-slate-500">{t('dash_remaining_forecast')}</p>
+              <p className="mt-1.5 font-mono text-sm sm:text-base font-black text-slate-300">~{fmtVND(remainingForecast)}</p>
+              <p className="mt-0.5 text-[10px] text-slate-500">{all.totalScheduled - all.totalHappened} {t('dash_sessions_future')}</p>
+            </div>
+          )}
+          {show('end_of_period') && canEdit && (
+            <div className={cx('rounded-2xl px-3 py-3 sm:px-4', projectedSurplus ? 'bg-lime-400/15' : 'bg-red-500/20')}>
+              <p className="text-[10px] font-semibold uppercase tracking-wide text-slate-500">{t('dash_end_of_period')}</p>
+              <p className={cx('mt-1.5 font-mono text-sm sm:text-base font-black', projectedSurplus ? 'text-lime-400' : 'text-red-400')}>
+                {projectedSurplus ? '+' : '−'}{fmtVND(Math.abs(projectedBalance))}
+              </p>
+              <span className={cx('mt-0.5 text-[10px] font-bold', projectedSurplus ? 'text-lime-400' : 'text-red-400')}>
+                {projectedSurplus ? t('bal_surplus') : t('bal_deficit')}
+              </span>
+            </div>
+          )}
         </div>
 
         {all.totalScheduled > 0 && (
@@ -261,58 +277,81 @@ function ForecastDashboard({ settings, memberCount, plan, sport, canEdit, onUnlo
         )}
       </div>
 
-      {/* Projected result callout */}
-      {projectedSurplus ? (
-        <div className="flex flex-wrap items-center gap-4 rounded-3xl border border-lime-200 bg-lime-50 p-5">
-          <span className="grid h-12 w-12 shrink-0 place-items-center rounded-2xl bg-lime-400 text-slate-900">
-            <TrendingUp className="h-6 w-6" />
-          </span>
-          <div className="flex-1 min-w-0">
-            <p className="font-bold text-slate-900">{t('dash_proj_surplus_title')}</p>
-            <p className="text-sm text-slate-600">
-              {t('dash_proj_surplus_body')} <span className="font-mono font-bold text-lime-700">{fmtVND(projectedBalance)}</span>
-            </p>
-          </div>
-          {memberCount > 0 && (
+      {/* Base fee + total cost breakdown — always visible */}
+      {memberCount > 0 && (
+        <div className="rounded-3xl border border-slate-100 bg-white p-5">
+          <div className="flex flex-wrap items-center gap-4">
+            {/* Total cycle cost */}
+            <div className="flex-1 min-w-0">
+              <p className="text-xs font-semibold uppercase tracking-wide text-slate-400">{t('dash_cycle_total_est')}</p>
+              <p className="mt-1 font-mono text-2xl font-black text-slate-900">{fmtVND(all.totalMonthlyCost)}</p>
+              <p className="mt-0.5 text-[10px] text-slate-400">{all.totalScheduled} {t('dash_sessions')} · {all.venues.length} {t('dash_court_cost').toLowerCase()}</p>
+            </div>
+
+            {/* Per-member fee */}
             <div className="shrink-0 text-right">
-              <p className="text-[10px] text-slate-400 uppercase tracking-wide">{t('dash_suggested_fee')}</p>
-              <p className="font-mono text-2xl font-black text-slate-900">{fmtVND(all.suggestedFee)}</p>
-              <p className="text-[10px] text-slate-400">/ {t('member')} / {t('month')}</p>
-            </div>
-          )}
-        </div>
-      ) : (
-        <div className="overflow-hidden rounded-3xl border border-red-200 bg-red-50 p-5">
-          <div className="flex items-start gap-4">
-            <span className="grid h-12 w-12 shrink-0 place-items-center rounded-2xl bg-red-500 text-white">
-              <AlertTriangle className="h-6 w-6" />
-            </span>
-            <div className="flex-1">
-              <p className="font-bold text-red-700">{t('dash_proj_deficit_title')}</p>
-              <p className="mt-1 text-sm text-slate-700">{t('dash_deficit_body', { amount: fmtVND(projectedDeficit) })}</p>
+              <p className="text-xs font-semibold uppercase tracking-wide text-slate-400">{t('dash_base_fee')}</p>
+              <p className="mt-1 font-mono text-2xl font-black text-lime-600">{fmtVND(baseFee)}</p>
+              <p className="mt-0.5 text-[10px] text-slate-400">/ {t('member')}</p>
             </div>
           </div>
-          {memberCount > 0 && (
-            <div className="mt-4 grid grid-cols-3 gap-3">
-              <div className="rounded-2xl bg-white/70 p-3 text-center">
-                <p className="text-[10px] text-slate-400 uppercase tracking-wide">{t('dash_proj_shortfall')}</p>
-                <p className="font-mono text-lg font-black text-red-600">{fmtVND(projectedDeficit)}</p>
-              </div>
-              <div className="rounded-2xl bg-white/70 p-3 text-center">
-                <p className="text-[10px] text-slate-400 uppercase tracking-wide">{t('dash_member_count')}</p>
-                <p className="font-mono text-lg font-black text-slate-900">{memberCount}</p>
-              </div>
-              <div className="rounded-2xl bg-slate-900 p-3 text-center">
-                <p className="text-[10px] text-slate-400 uppercase tracking-wide">{t('dash_per_member')}</p>
-                <p className="font-mono text-lg font-black text-lime-400">{fmtVND(perMemberTopUp)}</p>
-              </div>
-            </div>
-          )}
         </div>
       )}
 
+      {/* Projected result callout — admin only, configurable */}
+      {show('deficit_callout') && canEdit && (
+        projectedSurplus ? (
+          <div className="flex flex-wrap items-center gap-4 rounded-3xl border border-lime-200 bg-lime-50 p-5">
+            <span className="grid h-12 w-12 shrink-0 place-items-center rounded-2xl bg-lime-400 text-slate-900">
+              <TrendingUp className="h-6 w-6" />
+            </span>
+            <div className="flex-1 min-w-0">
+              <p className="font-bold text-slate-900">{t('dash_proj_surplus_title')}</p>
+              <p className="text-sm text-slate-600">
+                {t('dash_proj_surplus_body')} <span className="font-mono font-bold text-lime-700">{fmtVND(projectedBalance)}</span>
+              </p>
+            </div>
+            {memberCount > 0 && (
+              <div className="shrink-0 text-right">
+                <p className="text-[10px] text-slate-400 uppercase tracking-wide">{t('dash_topup_fee')}</p>
+                <p className="font-mono text-2xl font-black text-slate-900">{fmtVND(0)}</p>
+                <p className="text-[10px] text-slate-400">/ {t('member')}</p>
+              </div>
+            )}
+          </div>
+        ) : (
+          <div className="overflow-hidden rounded-3xl border border-red-200 bg-red-50 p-5">
+            <div className="flex items-start gap-4">
+              <span className="grid h-12 w-12 shrink-0 place-items-center rounded-2xl bg-red-500 text-white">
+                <AlertTriangle className="h-6 w-6" />
+              </span>
+              <div className="flex-1">
+                <p className="font-bold text-red-700">{t('dash_proj_deficit_title')}</p>
+                <p className="mt-1 text-sm text-slate-700">{t('dash_deficit_body', { amount: fmtVND(projectedDeficit) })}</p>
+              </div>
+            </div>
+            {memberCount > 0 && (
+              <div className="mt-4 grid grid-cols-3 gap-3">
+                <div className="rounded-2xl bg-white/70 p-3 text-center">
+                  <p className="text-[10px] text-slate-400 uppercase tracking-wide">{t('dash_proj_shortfall')}</p>
+                  <p className="font-mono text-lg font-black text-red-600">{fmtVND(projectedDeficit)}</p>
+                </div>
+                <div className="rounded-2xl bg-white/70 p-3 text-center">
+                  <p className="text-[10px] text-slate-400 uppercase tracking-wide">{t('dash_member_count')}</p>
+                  <p className="font-mono text-lg font-black text-slate-900">{memberCount}</p>
+                </div>
+                <div className="rounded-2xl bg-slate-900 p-3 text-center">
+                  <p className="text-[10px] text-slate-400 uppercase tracking-wide">{t('dash_topup_fee')}</p>
+                  <p className="font-mono text-lg font-black text-lime-400">{fmtVND(perMemberTopUp)}</p>
+                </div>
+              </div>
+            )}
+          </div>
+        )
+      )}
+
       {/* Per-venue cost cards */}
-      {all.venues.length > 0 && (
+      {show('venue_cards') && all.venues.length > 0 && (
         <div className="grid gap-3 sm:grid-cols-2">
           {all.venues.map((v, i) => (
             <VenueCard key={v.weekday ?? i} venue={v} lang={i18n.language} t={t} />
@@ -321,23 +360,38 @@ function ForecastDashboard({ settings, memberCount, plan, sport, canEdit, onUnlo
       )}
 
       {/* Per-cycle cost breakdown */}
-      {(() => {
+      {show('cost_by_cycle') && (() => {
         const shuttlePerSession = hasEquipment
           ? num(settings.estimated_shuttlecocks) * num(settings.price_per_box) / BALLS_PER_BOX
           : 0
         const venueRows = all.venues.map((v) => {
-          const shuttleCost = hasEquipment ? v.totalSessions * shuttlePerSession : 0
+          // Split shuttle: happened sessions (logged actual + unlogged→est) vs future (est)
+          const { start, end } = periodDateRange(v.period)
+          const wd = v.weekday !== null && v.weekday !== undefined ? Number(v.weekday) : null
+          const venueLogs = wd !== null
+            ? (logs || []).filter((l) => l.played_on >= start && l.played_on <= end && new Date(l.played_on + 'T12:00:00').getDay() === wd)
+            : []
+          const happenedCount = v.happened          // sessions already played (logged or not)
+          const futureCount = Math.max(0, v.totalSessions - happenedCount)
+          // For happened: use real shuttle_cost from log, fall back to estimate for unlogged ones
+          const shuttleHappened = hasEquipment
+            ? venueLogs.reduce((s, l) => s + num(l.shuttle_cost), 0)
+              + Math.max(0, happenedCount - venueLogs.length) * shuttlePerSession
+            : 0
+          const shuttleFuture = hasEquipment ? futureCount * shuttlePerSession : 0
+          const shuttleCost = shuttleHappened + shuttleFuture
           const shuttleBoxes = hasEquipment ? Math.ceil(v.totalSessions * num(settings.estimated_shuttlecocks) / BALLS_PER_BOX) : 0
-          return { ...v, shuttleCost, shuttleBoxes, total: v.courtCost + shuttleCost }
+          return { ...v, shuttleCost, shuttleBoxes, shuttleHappened, shuttleFuture, happenedCount, futureCount, total: v.courtCost + shuttleCost }
         })
         const grandTotal = venueRows.reduce((s, r) => s + r.total, 0)
 
         return (
           <div className="rounded-2xl border border-slate-100 bg-white p-5">
-            <div className="flex items-center gap-2 text-slate-400 mb-4">
+            <div className="flex items-center gap-2 text-slate-400">
               <Wallet className="h-4 w-4" />
               <span className="text-xs font-semibold uppercase tracking-wide">{t('dash_cost_by_cycle')}</span>
             </div>
+            <p className="mt-1 mb-4 text-xs text-slate-400 italic">{t('dash_cost_by_cycle_note')}</p>
             <div className="space-y-4">
               {venueRows.map((v, i) => {
                 const dayLabel = v.weekday !== null && v.weekday !== undefined ? t(`wd_${v.weekday}`) : null
@@ -353,13 +407,26 @@ function ForecastDashboard({ settings, memberCount, plan, sport, canEdit, onUnlo
                         <span className="text-slate-500">{t('dash_court_cost')}</span>
                         <span className="font-mono font-semibold text-slate-900">{fmtVND(v.courtCost)}</span>
                       </div>
-                      {hasEquipment && (
+                      {hasEquipment && v.happenedCount > 0 && (
                         <div className="flex items-center justify-between text-sm">
                           <span className="text-slate-500">
-                            {t('dash_shuttle_cost')}
-                            <span className="ml-1 text-xs text-slate-400">({v.totalSessions} {t('dash_sessions')} · {v.shuttleBoxes} {t('dash_boxes')})</span>
+                            {t('dash_shuttle_actual_line', { n: v.happenedCount })}
                           </span>
-                          <span className="font-mono font-semibold text-slate-900">{fmtVND(v.shuttleCost)}</span>
+                          <span className="font-mono font-semibold text-slate-900">{fmtVND(v.shuttleHappened)}</span>
+                        </div>
+                      )}
+                      {hasEquipment && v.futureCount > 0 && (
+                        <div className="flex items-center justify-between text-sm">
+                          <span className="text-slate-400 italic">
+                            {t('dash_shuttle_est_line', { n: v.futureCount })}
+                          </span>
+                          <span className="font-mono font-semibold text-slate-400 italic">{fmtVND(v.shuttleFuture)}</span>
+                        </div>
+                      )}
+                      {hasEquipment && v.happenedCount === 0 && v.futureCount === 0 && (
+                        <div className="flex items-center justify-between text-sm">
+                          <span className="text-slate-500">{t('dash_shuttle_cost')}</span>
+                          <span className="font-mono font-semibold text-slate-900">{fmtVND(0)}</span>
                         </div>
                       )}
                       <div className="flex items-center justify-between text-sm pt-1 border-t border-slate-100">
@@ -403,23 +470,28 @@ function ForecastDashboard({ settings, memberCount, plan, sport, canEdit, onUnlo
             <p className="text-xs text-slate-400">{t('dash_total_cost')}</p>
             <p className="font-mono text-lg font-black text-slate-900">{fmtVND(all.nextTotalCost)}</p>
           </div>
-          <div className={cx('rounded-2xl p-3 text-center', projectedSurplus ? 'bg-lime-50' : 'bg-red-50')}>
-            <p className="text-xs text-slate-400">{t('dash_carryover')}</p>
-            <p className={cx('font-mono text-lg font-black', projectedSurplus ? 'text-lime-600' : 'text-red-500')}>
-              {projectedSurplus ? '+' : '−'}{fmtVND(Math.abs(projectedBalance))}
-            </p>
-          </div>
+          {/* Base fee for next cycle — visible to everyone */}
           <div className="rounded-2xl bg-slate-900 p-3 text-center">
-            <p className="text-xs text-slate-400">{t('dash_per_member')}</p>
-            <p className="font-mono text-lg font-black text-lime-400">{fmtVND(nextAdjustedFee)}</p>
-            {projectedBalance !== 0 && (
-              <p className="text-[10px] text-slate-500 mt-0.5">{t('dash_incl_carryover')}</p>
-            )}
+            <p className="text-xs text-slate-400">{t('dash_next_base_fee')}</p>
+            <p className="font-mono text-lg font-black text-lime-400">{fmtVND(nextBaseFee)}</p>
           </div>
+          {/* Adjusted fee with carryover — admin only */}
+          {canEdit && (
+            <div className={cx('rounded-2xl p-3 text-center', projectedSurplus ? 'bg-lime-50' : 'bg-red-50')}>
+              <p className="text-xs text-slate-400">{t('dash_next_topup_fee')}</p>
+              <p className={cx('font-mono text-lg font-black', projectedSurplus ? 'text-lime-600' : 'text-red-500')}>
+                {fmtVND(nextAdjustedFee)}
+              </p>
+              {projectedBalance !== 0 && (
+                <p className="text-[10px] text-slate-500 mt-0.5">{t('dash_incl_carryover')}</p>
+              )}
+            </div>
+          )}
         </div>
       </div>
 
       <AdvancedForecast totalMonthlyCost={all.totalMonthlyCost} plan={plan} canEdit={canEdit} onUnlock={onUnlock} />
+
 
       <Modal open={spentTipOpen} onClose={() => setSpentTipOpen(false)}>
         <div className="flex items-center justify-between mb-5">
@@ -528,13 +600,43 @@ function VenueCard({ venue, lang, t }) {
   )
 }
 
-export function DashboardPage({ club, settings, members, logs, fundTxns, pollTally, plan, sport, hostName, hostAvatar, currentUserId, canEdit, onUnlock, onChanged, toast }) {
-  // +1 to include the host (host is not in club_members table)
+export function DashboardPage({ club, settings, members, logs, fundTxns, pollTally, plan, sport, hostName, hostAvatar, currentUserId, canEdit, onUnlock, onChanged, onCloseSidebar, onConfigClose, toast }) {
+  const { t } = useTranslation()
   const memberCount = (pollTally?.count ?? members.filter((m) => m.user_id !== club.owner_id).length) + 1
+  const [configOpen, setConfigOpen] = useState(false)
+  const [sectionsOverride, setSectionsOverride] = useState(null)
+
+  const effectiveSections = sectionsOverride ?? settings?.dashboard_sections ?? {}
+
+  function openConfig() {
+    setSectionsOverride(settings?.dashboard_sections ?? {})
+    onCloseSidebar?.()
+    setConfigOpen(true)
+  }
+
+  function handleSectionsLive(updated) {
+    setSectionsOverride(updated)
+  }
+
+  function handleSectionsSaved(updated) {
+    setSectionsOverride(updated)
+    onChanged?.()
+  }
 
   return (
-    <div className="grid gap-6 lg:grid-cols-3">
+    <div className="relative grid gap-6 lg:grid-cols-3">
       <div className="lg:col-span-2">
+        {/* Config button above forecast */}
+        {canEdit && (
+          <div className="flex justify-end mb-3">
+            <button
+              onClick={openConfig}
+              className="inline-flex items-center gap-1.5 rounded-full border border-slate-200 bg-white px-3 py-1.5 text-xs font-semibold text-slate-600 shadow-sm hover:border-slate-300 hover:text-slate-900 transition active:scale-95"
+            >
+              <SlidersHorizontal className="h-3.5 w-3.5" /> {t('dash_config_btn')}
+            </button>
+          </div>
+        )}
         <ForecastDashboard
           settings={settings}
           memberCount={memberCount}
@@ -544,6 +646,7 @@ export function DashboardPage({ club, settings, members, logs, fundTxns, pollTal
           onUnlock={onUnlock}
           logs={logs}
           fundTxns={fundTxns}
+          sections={effectiveSections}
         />
       </div>
       <div className="space-y-6">
@@ -561,6 +664,19 @@ export function DashboardPage({ club, settings, members, logs, fundTxns, pollTal
           toast={toast}
         />
       </div>
+
+      {/* Right config drawer — slides over MembersPanel */}
+      {canEdit && (
+        <DashboardConfigDrawer
+          open={configOpen}
+          onClose={() => { setConfigOpen(false); onConfigClose?.() }}
+          clubId={club.id}
+          sections={effectiveSections}
+          venueCount={settings.play_weekdays?.length ?? 1}
+          onSaved={handleSectionsSaved}
+          onLiveChange={handleSectionsLive}
+        />
+      )}
     </div>
   )
 }
