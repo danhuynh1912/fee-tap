@@ -7,7 +7,7 @@ export function PreJoinPage({ clubId, onGoogle, busy }) {
 
   function handleSignIn() {
     localStorage.setItem('feetap_pending_join', clubId)
-    onGoogle()
+    onGoogle(`/join/${clubId}`)
   }
 
   return (

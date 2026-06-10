@@ -96,12 +96,12 @@ export function useAuth() {
     setMyClubs((prev) => [...prev, club])
   }
 
-  async function signInGoogle() {
+  async function signInGoogle(redirectPath = '') {
     setSigninBusy(true)
     try {
       const { error } = await supabase.auth.signInWithOAuth({
         provider: 'google',
-        options: { redirectTo: window.location.origin },
+        options: { redirectTo: window.location.origin + (redirectPath || '') },
       })
       if (error) throw error
     } catch (e) {
