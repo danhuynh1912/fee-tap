@@ -4,8 +4,9 @@ import { useTranslation } from 'react-i18next'
 import { supabase } from '../../../lib/supabase'
 import { cx, fmtDate } from '../../../lib/utils'
 import { Button } from '../../ui/Button'
-import { inputCls } from '../../ui/Field'
 import { getSessionConfigs } from '../../../engine/forecast'
+
+const darkInputCls = 'w-full rounded-2xl border border-slate-700 bg-slate-800 px-4 py-3 text-white placeholder:text-slate-500 outline-none transition focus:border-lime-400 focus:ring-4 focus:ring-lime-400/10'
 
 function nextPlayDate(settings) {
   const configs = getSessionConfigs(settings)
@@ -111,7 +112,7 @@ export function AdminVoteForm({ vote, closed, filledSlots, club, settings, membe
             <label className="mb-1 block text-xs font-semibold text-slate-400">{t('vote_max_slots')}</label>
             <input
               type="number" min="1" max="50"
-              className={cx(inputCls, 'bg-slate-800 border-slate-700 text-white placeholder:text-slate-500')}
+              className={darkInputCls}
               value={form.maxSlots}
               onChange={(e) => setForm((f) => ({ ...f, maxSlots: e.target.value }))}
             />
@@ -120,7 +121,7 @@ export function AdminVoteForm({ vote, closed, filledSlots, club, settings, membe
             <label className="mb-1 block text-xs font-semibold text-slate-400">{t('vote_match_datetime')}</label>
             <input
               type="datetime-local"
-              className={cx(inputCls, 'bg-slate-800 border-slate-700 text-white')}
+              className={darkInputCls}
               value={form.matchDatetime}
               onChange={(e) => setForm((f) => ({ ...f, matchDatetime: e.target.value }))}
             />
@@ -129,7 +130,7 @@ export function AdminVoteForm({ vote, closed, filledSlots, club, settings, membe
             <label className="mb-1 block text-xs font-semibold text-slate-400">{t('vote_deadline')}</label>
             <input
               type="datetime-local"
-              className={cx(inputCls, 'bg-slate-800 border-slate-700 text-white')}
+              className={darkInputCls}
               value={form.deadline}
               onChange={(e) => setForm((f) => ({ ...f, deadline: e.target.value }))}
             />
@@ -168,7 +169,7 @@ export function AdminVoteForm({ vote, closed, filledSlots, club, settings, membe
           <label className="mb-1 block text-xs font-semibold text-slate-400">{t('vote_max_slots')}</label>
           <input
             type="number" min="1" max="50"
-            className={cx(inputCls, 'bg-slate-800 border-slate-700 text-white placeholder:text-slate-500')}
+            className={darkInputCls}
             defaultValue={vote.max_slots}
             onBlur={(e) => {
               const v = parseInt(e.target.value, 10)
@@ -180,7 +181,7 @@ export function AdminVoteForm({ vote, closed, filledSlots, club, settings, membe
           <label className="mb-1 block text-xs font-semibold text-slate-400">{t('vote_deadline')}</label>
           <input
             type="datetime-local"
-            className={cx(inputCls, 'bg-slate-800 border-slate-700 text-white')}
+            className={darkInputCls}
             defaultValue={toDatetimeLocal(new Date(vote.deadline))}
             onBlur={(e) => {
               const val = e.target.value
@@ -192,7 +193,7 @@ export function AdminVoteForm({ vote, closed, filledSlots, club, settings, membe
 
       <Button
         variant={vote.is_closed ? 'volt' : 'danger'}
-        className={cx('mt-4 w-full', !vote.is_closed && 'bg-slate-800 border-slate-700 text-white hover:bg-slate-700')}
+        className="mt-4 w-full"
         onClick={toggleClosed}
         disabled={busy}
       >

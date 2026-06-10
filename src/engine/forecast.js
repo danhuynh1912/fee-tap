@@ -1,10 +1,14 @@
 import { num } from '../lib/utils'
-import { BALLS_PER_BOX, DEFAULT_SESSION_CONFIG } from '../constants'
+import { BALLS_PER_BOX } from '../constants'
+
+// ---------------------------------------------------------------------------
+// Calendar helpers
+// ---------------------------------------------------------------------------
 
 const mIdx = (y, m0) => y * 12 + m0
 const fromIdx = (i) => ({ year: Math.floor(i / 12), month0: ((i % 12) + 12) % 12 })
 
-function countWeekdays(year, month0, weekdays) {
+function countWeekdaysInMonth(year, month0, weekdays) {
   const set = new Set(weekdays)
   const last = new Date(year, month0 + 1, 0).getDate()
   const breakdown = {}
@@ -22,49 +26,24 @@ function makePeriod(kind, startIdx, len) {
   return { kind, startIdx, len, months }
 }
 
-export function resolvePeriods(s, now = new Date()) {
-  const cycle = s.billing_cycle === 'quarter' ? 'quarter' : 'month'
-  const here = mIdx(now.getFullYear(), now.getMonth())
-  if (cycle === 'month') {
-    return { cycle, current: makePeriod('month', here, 1), next: makePeriod('month', here + 1, 1) }
-  }
-  const anchor = Math.min(12, Math.max(1, Math.round(num(s.quarter_start_month, 1)))) - 1
-  const off = (((now.getMonth() - anchor) % 3) + 3) % 3
-  const start = here - off
-  return { cycle, current: makePeriod('quarter', start, 3), next: makePeriod('quarter', start + 3, 3) }
-}
-
-export function sessionsForPeriod(s, period) {
-  const wds = Array.isArray(s.play_weekdays) ? s.play_weekdays : []
-  if (!wds.length) {
-    return { total: Math.round(num(s.sessions_per_week) * 4 * period.len), breakdown: {}, fallback: true }
-  }
+function sessionsForPeriod(weekdays, period) {
+  if (!weekdays.length) return { total: 0, breakdown: {} }
   let total = 0
   const breakdown = {}
   for (const { year, month0 } of period.months) {
-    const c = countWeekdays(year, month0, wds)
+    const c = countWeekdaysInMonth(year, month0, weekdays)
     total += c.total
     for (const k in c.breakdown) breakdown[k] = (breakdown[k] || 0) + c.breakdown[k]
   }
-  return { total, breakdown, fallback: false }
+  return { total, breakdown }
 }
 
-export function sessionsHappenedByNow(s, period, today = new Date()) {
-  const wds = Array.isArray(s.play_weekdays) ? s.play_weekdays.map(Number) : []
+function sessionsHappenedByNow(weekdays, period, today = new Date()) {
+  const wdSet = new Set(weekdays.map(Number))
   const { year: sy, month0: sm0 } = period.months[0]
   const lastM = period.months[period.months.length - 1]
   const periodEnd = new Date(lastM.year, lastM.month0 + 1, 0)
   const cutoff = today <= periodEnd ? today : periodEnd
-
-  if (!wds.length) {
-    const periodStart = new Date(sy, sm0, 1)
-    const totalDays = (periodEnd - periodStart) / 86400000 + 1
-    const elapsedDays = Math.max(0, Math.floor((cutoff - periodStart) / 86400000) + 1)
-    const totalSess = Math.round(num(s.sessions_per_week) * 4 * period.len)
-    return Math.min(totalSess, Math.floor((elapsedDays / totalDays) * totalSess))
-  }
-
-  const wdSet = new Set(wds)
   const periodStart = new Date(sy, sm0, 1)
   const cutoffDay = new Date(cutoff.getFullYear(), cutoff.getMonth(), cutoff.getDate())
   let count = 0
@@ -76,35 +55,170 @@ export function sessionsHappenedByNow(s, period, today = new Date()) {
   return count
 }
 
-export function computeCycle(s, period, memberCount, hasEquipment = true) {
-  const sess = sessionsForPeriod(s, period)
-  const totalSessions = sess.total
-  const priceMap = s.court_prices_by_weekday || {}
-  const defaultPrice = num(s.court_price_per_hour)
-  const hours = num(s.hours_per_session)
-  let courtCost = 0
-  if (sess.fallback || !Object.keys(sess.breakdown).length) {
-    courtCost = defaultPrice * hours * totalSessions
-  } else {
-    for (const [wd, count] of Object.entries(sess.breakdown)) {
-      const price = priceMap[wd] !== undefined ? num(priceMap[wd]) : defaultPrice
-      courtCost += price * hours * count
-    }
+// ---------------------------------------------------------------------------
+// Period resolution
+// ---------------------------------------------------------------------------
+
+function resolvePeriodForSlot(slot, now = new Date()) {
+  const here = mIdx(now.getFullYear(), now.getMonth())
+  if (slot.billing_cycle === 'quarter') {
+    const anchor = Math.min(12, Math.max(1, Math.round(num(slot.quarter_start_month, 1)))) - 1
+    const off = (((now.getMonth() - anchor) % 3) + 3) % 3
+    const start = here - off
+    return { current: makePeriod('quarter', start, 3), next: makePeriod('quarter', start + 3, 3) }
   }
-  const boxes = hasEquipment ? Math.ceil((totalSessions * num(s.estimated_shuttlecocks)) / BALLS_PER_BOX) : 0
-  const shuttleCost = hasEquipment ? boxes * num(s.price_per_box) : 0
-  const totalCost = courtCost + shuttleCost
-  const fund = num(s.current_fund)
-  const balance = fund - totalCost
-  const deficit = balance < 0 ? -balance : 0
-  const perMemberDeficit = memberCount > 0 ? Math.ceil(deficit / memberCount) : 0
-  const suggestedFee = memberCount > 0 ? Math.ceil(totalCost / memberCount) : 0
+  return { current: makePeriod('month', here, 1), next: makePeriod('month', here + 1, 1) }
+}
+
+// ---------------------------------------------------------------------------
+// Collection deadline
+//
+// renewal_day = day-of-month in the month BEFORE the period starts.
+// e.g. quarterly T5-T7, renewal_day=25 → deadline = April 25
+// ---------------------------------------------------------------------------
+
+export function slotCollectionDeadline(slot, period) {
+  if (!slot.renewal_day) return null
+  const { year: sy, month0: sm0 } = period.months[0]
+  const deadlineIdx = mIdx(sy, sm0) - 1
+  const { year, month0 } = fromIdx(deadlineIdx)
+  const day = Math.min(slot.renewal_day, new Date(year, month0 + 1, 0).getDate())
+  return new Date(year, month0, day)
+}
+
+// ---------------------------------------------------------------------------
+// computeSlot — full forecast for one court slot
+// ---------------------------------------------------------------------------
+
+export function computeSlot(slot, now = new Date()) {
+  const weekdays = Array.isArray(slot.weekdays) ? slot.weekdays : []
+  const periods = resolvePeriodForSlot(slot, now)
+
+  const sess = sessionsForPeriod(weekdays, periods.current)
+  const nextSess = sessionsForPeriod(weekdays, periods.next)
+  const happened = sessionsHappenedByNow(weekdays, periods.current, now)
+
+  const price = num(slot.price_per_hour)
+  const hours = num(slot.hours_per_session)
+  const courtCost = price * hours * sess.total
+  const nextCourtCost = price * hours * nextSess.total
+
+  const currentDeadline = slotCollectionDeadline(slot, periods.current)
+  const nextDeadline = slotCollectionDeadline(slot, periods.next)
+
+  const msPerDay = 86400000
+  const daysUntilNext = nextDeadline ? Math.ceil((nextDeadline - now) / msPerDay) : null
+
   return {
-    period, totalSessions, breakdown: sess.breakdown, fallback: sess.fallback,
-    courtCost, boxes, shuttleCost, totalCost, fund, balance, deficit,
-    perMemberDeficit, suggestedFee,
+    slot,
+    period: periods.current,
+    nextPeriod: periods.next,
+    totalSessions: sess.total,
+    breakdown: sess.breakdown,
+    nextSessions: nextSess.total,
+    courtCost,
+    nextCourtCost,
+    happened,
+    currentDeadline,
+    nextDeadline,
+    daysUntilNext,
+    isDeadlineSoon: daysUntilNext !== null && daysUntilNext <= 30 && daysUntilNext >= 0,
   }
 }
+
+// ---------------------------------------------------------------------------
+// Shuttle helpers
+// ---------------------------------------------------------------------------
+
+export function estimateShuttle(slots, shuttleConfig, now = new Date()) {
+  const here = mIdx(now.getFullYear(), now.getMonth())
+  const currentMonth = makePeriod('month', here, 1)
+  const totalSessions = slots.reduce((sum, slot) => {
+    return sum + sessionsForPeriod(Array.isArray(slot.weekdays) ? slot.weekdays : [], currentMonth).total
+  }, 0)
+  const boxes = Math.ceil((totalSessions * num(shuttleConfig.estimated_shuttlecocks)) / BALLS_PER_BOX)
+  const cost = boxes * num(shuttleConfig.price_per_box)
+  return { totalSessions, boxes, cost }
+}
+
+export function inventoryStatus(shuttleStock, slots, shuttleConfig, now = new Date()) {
+  const boxesLeft = num(shuttleStock)
+  const tubesLeft = boxesLeft * BALLS_PER_BOX
+  const tubesPerSession = num(shuttleConfig.estimated_shuttlecocks)
+
+  const here = mIdx(now.getFullYear(), now.getMonth())
+  const currentMonth = makePeriod('month', here, 1)
+  const sessionsPerMonth = slots.reduce((sum, slot) => {
+    return sum + sessionsForPeriod(Array.isArray(slot.weekdays) ? slot.weekdays : [], currentMonth).total
+  }, 0)
+
+  const tubesPerMonth = sessionsPerMonth * tubesPerSession
+  const sessionsLeft = tubesPerSession > 0 ? Math.floor(tubesLeft / tubesPerSession) : 0
+
+  let estimatedEmptyDate = null
+  if (tubesPerMonth > 0 && boxesLeft > 0) {
+    estimatedEmptyDate = new Date(now.getTime() + (tubesLeft / tubesPerMonth) * 30.44 * 86400000)
+  }
+
+  // Only count refill boxes needed BEYOND current stock
+  const tubesNeededThisMonth = sessionsPerMonth * tubesPerSession
+  const tubesShort = Math.max(0, tubesNeededThisMonth - tubesLeft)
+  const refillBoxes = tubesShort > 0 ? Math.ceil(tubesShort / BALLS_PER_BOX) : 0
+  const refillCost = refillBoxes * num(shuttleConfig.price_per_box)
+  // cost = amount that still needs to be paid (0 if stock is sufficient)
+  const cost = refillCost
+
+  return { boxesLeft, sessionsLeft, estimatedEmptyDate, refillBoxes, refillCost, cost }
+}
+
+// ---------------------------------------------------------------------------
+// computePaymentTimeline — aggregates all slots into running + upcoming
+// ---------------------------------------------------------------------------
+
+export function computePaymentTimeline(slots, settings, memberCount, now = new Date()) {
+  if (!slots || !slots.length) {
+    return { running: [], upcoming: [], shuttleThisMonth: null, totalUpcomingPerMember: 0, effectiveMemberCount: memberCount }
+  }
+
+  const slotResults = slots.map((slot) => computeSlot(slot, now))
+  const running = [...slotResults]
+  const upcoming = slotResults.filter((r) => r.nextDeadline)
+    .sort((a, b) => a.nextDeadline - b.nextDeadline)
+
+  const hasEquipment = settings._hasEquipment !== false
+  let shuttleThisMonth = null
+  if (hasEquipment) {
+    shuttleThisMonth = settings.shuttle_mode === 'inventory'
+      ? { mode: 'inventory', ...inventoryStatus(settings.shuttle_stock, slots, settings, now) }
+      : { mode: 'estimate', ...estimateShuttle(slots, settings, now) }
+  }
+
+  const effectiveMemberCount = resolveFeeMemberCount(settings, memberCount)
+  const soonCourtCost = upcoming.reduce((sum, r) => sum + r.nextCourtCost, 0)
+  const shuttlePerSession = hasEquipment && settings.shuttle_mode !== 'inventory'
+    ? num(settings.estimated_shuttlecocks) * num(settings.price_per_box) / BALLS_PER_BOX
+    : 0
+  const soonShuttleCost = upcoming.reduce((sum, r) => sum + r.nextSessions * shuttlePerSession, 0)
+  const totalUpcomingPerMember = effectiveMemberCount > 0
+    ? Math.ceil((soonCourtCost + soonShuttleCost) / effectiveMemberCount) : 0
+
+  return { running, upcoming, shuttleThisMonth, totalUpcomingPerMember, soonCourtCost, soonShuttleCost, effectiveMemberCount }
+}
+
+// ---------------------------------------------------------------------------
+// Fee member count — respects fee_split_mode + committed vote
+// ---------------------------------------------------------------------------
+
+export function resolveFeeMemberCount(settings, totalMembers, committedCount = null) {
+  if (settings.fee_split_mode === 'committed_only' && committedCount !== null) {
+    return committedCount
+  }
+  return totalMembers
+}
+
+// ---------------------------------------------------------------------------
+// Format helpers
+// ---------------------------------------------------------------------------
 
 export function formatPeriodLabel(period, lang) {
   const locale = lang === 'vi' ? 'vi-VN' : 'en-US'
@@ -122,138 +236,165 @@ export function monthName(m1, lang) {
   return new Date(2000, m1 - 1, 1).toLocaleDateString(locale, { month: 'long' })
 }
 
-// Returns an array of per-weekday session configs.
-// If session_configs is populated (new format), use that.
-// Otherwise synthesise from legacy flat fields for backward compat.
+// ---------------------------------------------------------------------------
+// Guest revenue (unchanged)
+// ---------------------------------------------------------------------------
+
 export function calcGuestRevenue({ mode, guestMale, guestFemale, feeMale, feeFemale, shuttleCost, courtCost, memberCount }) {
   const gm = Math.round(guestMale) || 0
   const gf = Math.round(guestFemale) || 0
   if (!gm && !gf) return 0
-
   if (mode === 'fixed_by_gender')
     return gm * (feeMale || 0) + gf * (feeFemale || 0)
-
   if (mode === 'split_shuttle') {
     const femalePart = gf * (feeFemale || 0)
     const totalMales = Math.max(1, (memberCount || 1) + gm)
-    const perMale = Math.round((shuttleCost || 0) / totalMales)
-    return femalePart + gm * perMale
+    return femalePart + gm * Math.round((shuttleCost || 0) / totalMales)
+  }
+  const totalPlayers = Math.max(1, (memberCount || 1) + gm + gf)
+  return (gm + gf) * Math.round(((courtCost || 0) + (shuttleCost || 0)) / totalPlayers)
+}
+
+// ---------------------------------------------------------------------------
+// Migration helper — synthesize court_slots rows from legacy session_configs
+// Called once by useClubData when court_slots is empty for a club
+// ---------------------------------------------------------------------------
+
+export function synthesizeSlotsFromLegacy(settings) {
+  const raw = settings.session_configs
+  const configs = Array.isArray(raw) && raw.length ? raw : null
+
+  if (!configs) {
+    const weekdays = Array.isArray(settings.play_weekdays) ? settings.play_weekdays : []
+    return weekdays.map((wd, i) => ({
+      club_id: settings.club_id,
+      name: `Sân ${i + 1}`,
+      venue_name: null,
+      weekdays: [wd],
+      price_per_hour: num(settings.court_prices_by_weekday?.[wd]) || num(settings.court_price_per_hour) || 0,
+      hours_per_session: num(settings.hours_per_session) || 2,
+      payment_mode: settings.court_payment_mode || 'session',
+      billing_cycle: settings.billing_cycle || 'month',
+      quarter_start_month: settings.quarter_start_month || 1,
+      renewal_day: null,
+      sort_order: i,
+    }))
   }
 
-  // split_all
-  const totalPlayers = Math.max(1, (memberCount || 1) + gm + gf)
-  const perHead = Math.round(((courtCost || 0) + (shuttleCost || 0)) / totalPlayers)
-  return (gm + gf) * perHead
+  return configs.map((sc, i) => ({
+    club_id: settings.club_id,
+    name: `Sân ${i + 1}`,
+    venue_name: null,
+    weekdays: sc.weekday !== null && sc.weekday !== undefined ? [sc.weekday] : [],
+    price_per_hour: num(sc.court_price_per_hour) || 0,
+    hours_per_session: num(sc.hours_per_session) || 2,
+    payment_mode: sc.court_payment_mode || 'session',
+    billing_cycle: sc.billing_cycle || 'month',
+    quarter_start_month: sc.quarter_start_month || 1,
+    renewal_day: null,
+    sort_order: i,
+  }))
+}
+
+// ---------------------------------------------------------------------------
+// Legacy shims — keep old callers working during transition; remove in Phase 6
+// ---------------------------------------------------------------------------
+
+export function resolvePeriods(s, now = new Date()) {
+  return resolvePeriodForSlot({
+    billing_cycle: s.billing_cycle || 'month',
+    quarter_start_month: s.quarter_start_month || 1,
+  }, now)
 }
 
 export function getSessionConfigs(settings) {
   const raw = settings.session_configs
-  if (Array.isArray(raw) && raw.length > 0) return raw
-
+  if (Array.isArray(raw) && raw.length) return raw
   const weekdays = Array.isArray(settings.play_weekdays) ? settings.play_weekdays : []
   const priceMap = settings.court_prices_by_weekday || {}
   const base = {
-    court_price_per_hour: num(settings.court_price_per_hour) || DEFAULT_SESSION_CONFIG.court_price_per_hour,
-    hours_per_session: num(settings.hours_per_session) || DEFAULT_SESSION_CONFIG.hours_per_session,
-    court_payment_mode: settings.court_payment_mode || DEFAULT_SESSION_CONFIG.court_payment_mode,
-    billing_cycle: settings.billing_cycle || DEFAULT_SESSION_CONFIG.billing_cycle,
-    quarter_start_month: num(settings.quarter_start_month) || DEFAULT_SESSION_CONFIG.quarter_start_month,
+    court_price_per_hour: num(settings.court_price_per_hour) || 120000,
+    hours_per_session: num(settings.hours_per_session) || 2,
+    court_payment_mode: settings.court_payment_mode || 'session',
+    billing_cycle: settings.billing_cycle || 'month',
+    quarter_start_month: num(settings.quarter_start_month) || 1,
   }
-
   if (!weekdays.length) return [{ ...base, weekday: null }]
-
   return weekdays.map((wd) => ({
-    ...base,
-    weekday: wd,
-    court_price_per_hour:
-      priceMap[wd] !== undefined ? num(priceMap[wd]) : base.court_price_per_hour,
+    ...base, weekday: wd,
+    court_price_per_hour: priceMap[wd] !== undefined ? num(priceMap[wd]) : base.court_price_per_hour,
   }))
 }
 
-// Computes full forecast across all session configs, normalised to monthly.
-// Returns per-venue results plus aggregated monthly totals.
-export function computeAll(settings, memberCount, hasEquipment = true, now = new Date()) {
-  const configs = getSessionConfigs(settings)
+export function computeAll(settings, memberCount, hasEquipment = true, now = new Date(), actualSlots = null) {
+  const slots = (actualSlots && actualSlots.length) ? actualSlots : synthesizeSlotsFromLegacy(settings)
+  const settingsWithEquip = { ...settings, _hasEquipment: hasEquipment }
+  const timeline = computePaymentTimeline(slots, settingsWithEquip, memberCount, now)
 
-  const venues = configs.map((sc) => {
-    const wds = sc.weekday !== null && sc.weekday !== undefined ? [sc.weekday] : []
-    const scWithDays = { ...sc, play_weekdays: wds, sessions_per_week: 1 }
-    const periods = resolvePeriods(sc, now)
-    const sess = sessionsForPeriod(scWithDays, periods.current)
-    const nextSess = sessionsForPeriod(scWithDays, periods.next)
-    const price = num(sc.court_price_per_hour)
-    const hours = num(sc.hours_per_session)
-    const courtCost = price * hours * sess.total
-    const nextCourtCost = price * hours * nextSess.total
-    // Normalise to monthly so mixed cycles are comparable
-    const divisor = sc.billing_cycle === 'quarter' ? 3 : 1
-    const monthlyCourtCost = courtCost / divisor
-    const nextMonthlyCourtCost = nextCourtCost / divisor
-    const happened = sessionsHappenedByNow(scWithDays, periods.current, now)
-    return {
-      weekday: sc.weekday,
-      billing_cycle: sc.billing_cycle,
-      court_payment_mode: sc.court_payment_mode,
-      period: periods.current,
-      nextPeriod: periods.next,
-      totalSessions: sess.total,
-      nextSessions: nextSess.total,
-      breakdown: sess.breakdown,
-      courtCost,
-      monthlyCourtCost,
-      nextMonthlyCourtCost,
-      happened,
-    }
-  })
-
-  const totalMonthlyCourtCost = venues.reduce((s, v) => s + v.monthlyCourtCost, 0)
-  // Monthly-equivalent session count drives shuttle calculation
-  const totalMonthlySessions = venues.reduce((s, v) => {
-    return s + v.totalSessions / (v.billing_cycle === 'quarter' ? 3 : 1)
+  const totalMonthlyCourtCost = timeline.running.reduce((s, r) => {
+    const divisor = r.slot.billing_cycle === 'quarter' ? 3 : 1
+    return s + r.courtCost / divisor
   }, 0)
-
-  const boxes = hasEquipment
-    ? Math.ceil((totalMonthlySessions * num(settings.estimated_shuttlecocks)) / BALLS_PER_BOX)
-    : 0
-  const shuttleCost = hasEquipment ? boxes * num(settings.price_per_box) : 0
+  // Actual period cost — no normalization (quarterly shows full quarter cost)
+  const totalPeriodCourtCost = timeline.running.reduce((s, r) => s + r.courtCost, 0)
+  const shuttleCost = timeline.shuttleThisMonth?.cost || 0
   const totalMonthlyCost = totalMonthlyCourtCost + shuttleCost
-
+  const totalPeriodCost = totalPeriodCourtCost + shuttleCost
   const fund = num(settings.current_fund)
   const balance = fund - totalMonthlyCost
   const deficit = balance < 0 ? -balance : 0
-  const suggestedFee = memberCount > 0 ? Math.ceil(totalMonthlyCost / memberCount) : 0
+  const suggestedFee = memberCount > 0 ? Math.ceil(totalPeriodCost / memberCount) : 0
   const perMemberDeficit = memberCount > 0 && deficit > 0 ? Math.ceil(deficit / memberCount) : 0
-
-  const nextMonthlyCourtCost = venues.reduce((s, v) => s + v.nextMonthlyCourtCost, 0)
-  const nextMonthlySessions = venues.reduce((s, v) => {
-    return s + v.nextSessions / (v.billing_cycle === 'quarter' ? 3 : 1)
-  }, 0)
-  const nextBoxes = hasEquipment
-    ? Math.ceil((nextMonthlySessions * num(settings.estimated_shuttlecocks)) / BALLS_PER_BOX)
-    : 0
-  const nextShuttleCost = hasEquipment ? nextBoxes * num(settings.price_per_box) : 0
-  const nextTotalCost = nextMonthlyCourtCost + nextShuttleCost
-  const nextSuggestedFee = memberCount > 0 ? Math.ceil(nextTotalCost / memberCount) : 0
-
-  const totalHappened = venues.reduce((s, v) => s + v.happened, 0)
-  const totalScheduled = venues.reduce((s, v) => s + v.totalSessions, 0)
+  const totalHappened = timeline.running.reduce((s, r) => s + r.happened, 0)
+  const totalScheduled = timeline.running.reduce((s, r) => s + r.totalSessions, 0)
+  // Unique sessions = count distinct play dates (multiple courts same day = 1 session)
+  const periodWeekdayMap = new Map()
+  for (const r of timeline.running) {
+    const key = JSON.stringify(r.period)
+    if (!periodWeekdayMap.has(key)) periodWeekdayMap.set(key, { period: r.period, weekdays: new Set() })
+    for (const wd of (r.slot.weekdays || [])) periodWeekdayMap.get(key).weekdays.add(wd)
+  }
+  let uniqueScheduled = 0, uniqueHappened = 0
+  for (const { period, weekdays } of periodWeekdayMap.values()) {
+    uniqueScheduled += sessionsForPeriod([...weekdays], period).total
+    uniqueHappened += sessionsHappenedByNow([...weekdays], period, now)
+  }
+  const venues = timeline.running.map((r) => ({
+    weekday: r.slot.weekdays?.[0] ?? null,
+    name: r.slot.name ?? null,
+    venue_name: r.slot.venue_name ?? null,
+    billing_cycle: r.slot.billing_cycle,
+    court_payment_mode: r.slot.payment_mode,
+    period: r.period,
+    nextPeriod: r.nextPeriod,
+    totalSessions: r.totalSessions,
+    nextSessions: r.nextSessions,
+    breakdown: r.breakdown,
+    courtCost: r.courtCost,
+    monthlyCourtCost: r.courtCost / (r.slot.billing_cycle === 'quarter' ? 3 : 1),
+    nextMonthlyCourtCost: r.nextCourtCost / (r.slot.billing_cycle === 'quarter' ? 3 : 1),
+    happened: r.happened,
+  }))
 
   return {
     venues,
     totalMonthlyCourtCost,
-    totalMonthlySessions,
+    totalMonthlySessions: timeline.shuttleThisMonth?.totalSessions || 0,
     shuttleCost,
-    boxes,
+    boxes: timeline.shuttleThisMonth?.boxes || 0,
     totalMonthlyCost,
+    totalPeriodCost,
     fund,
     balance,
     deficit,
     suggestedFee,
     perMemberDeficit,
-    nextTotalCost,
-    nextSuggestedFee,
-    nextSessions: venues.reduce((s, v) => s + v.nextSessions, 0),
+    nextTotalCost: totalMonthlyCost,
+    nextSuggestedFee: suggestedFee,
+    nextSessions: timeline.running.reduce((s, r) => s + r.nextSessions, 0),
     totalHappened,
     totalScheduled,
+    uniqueScheduled,
+    uniqueHappened,
   }
 }

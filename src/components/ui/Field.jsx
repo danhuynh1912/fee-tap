@@ -4,10 +4,12 @@ export const inputCls =
 export function Field({ label, icon: Icon, hint, children }) {
   return (
     <label className="block">
-      <span className="flex items-center gap-2 text-sm font-medium text-slate-700 mb-2">
-        {Icon && <Icon className="w-4 h-4 text-slate-400" />}
-        {label}
-        {hint && <span className="text-slate-400 font-normal">· {hint}</span>}
+      <span className="flex flex-col gap-0.5 mb-2">
+        <span className="flex items-center gap-2 text-sm font-medium text-slate-700">
+          {Icon && <Icon className="w-4 h-4 text-slate-400" />}
+          {label}
+        </span>
+        {hint && <span className="text-xs text-slate-400 font-normal pl-6">{hint}</span>}
       </span>
       {children}
     </label>

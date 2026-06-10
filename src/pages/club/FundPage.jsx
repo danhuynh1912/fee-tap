@@ -1,6 +1,6 @@
 import { useState } from 'react'
 import { useTranslation } from 'react-i18next'
-import { Plus, Wallet, TrendingUp, Loader2 } from 'lucide-react'
+import { Plus, Wallet, TrendingUp, TrendingDown, Loader2 } from 'lucide-react'
 import { Button } from '../../components/ui/Button'
 import { inputCls } from '../../components/ui/Field'
 import { cx, num, fmtVND, fmtDate } from '../../lib/utils'
@@ -98,18 +98,29 @@ export function FundPage({ club, fundTxns, settings, canEdit, onTopUp, toast }) 
             {t('fund_history_empty')}
           </li>
         )}
-        {fundTxns.map((tx) => (
-          <li key={tx.id} className="flex items-center gap-3 rounded-2xl border border-slate-100 bg-white px-4 py-3">
-            <span className="grid h-9 w-9 shrink-0 place-items-center rounded-xl bg-lime-50 text-lime-600">
-              <TrendingUp className="h-4 w-4" />
-            </span>
-            <div className="min-w-0 flex-1">
-              <p className="text-sm font-semibold text-slate-900">{tx.note || t('fund_topup_default_note')}</p>
-              <p className="text-xs text-slate-400">{fmtDate(tx.created_at?.slice(0, 10))}</p>
-            </div>
-            <p className="font-mono text-base font-black text-lime-600">+{fmtVND(num(tx.amount))}</p>
-          </li>
-        ))}
+        {fundTxns.map((tx) => {
+          const isPositive = num(tx.amount) >= 0
+          return (
+            <li key={tx.id} className={cx(
+              'flex items-center gap-3 rounded-2xl border px-4 py-3',
+              isPositive ? 'border-slate-100 bg-white' : 'border-red-100 bg-red-50'
+            )}>
+              <span className={cx(
+                'grid h-9 w-9 shrink-0 place-items-center rounded-xl',
+                isPositive ? 'bg-lime-50 text-lime-600' : 'bg-red-100 text-red-500'
+              )}>
+                {isPositive ? <TrendingUp className="h-4 w-4" /> : <TrendingDown className="h-4 w-4" />}
+              </span>
+              <div className="min-w-0 flex-1">
+                <p className="text-sm font-semibold text-slate-900">{tx.note || t('fund_topup_default_note')}</p>
+                <p className="text-xs text-slate-400">{fmtDate(tx.created_at?.slice(0, 10))}</p>
+              </div>
+              <p className={cx('font-mono text-base font-black', isPositive ? 'text-lime-600' : 'text-red-500')}>
+                {isPositive ? '+' : ''}{fmtVND(num(tx.amount))}
+              </p>
+            </li>
+          )
+        })}
       </ul>
     </div>
   )

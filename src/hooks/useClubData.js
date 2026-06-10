@@ -1,9 +1,11 @@
 import { useState, useEffect, useCallback } from 'react'
 import { supabase, isConfigured } from '../lib/supabase'
 import { DEFAULT_SETTINGS } from '../constants'
+import { synthesizeSlotsFromLegacy } from '../engine/forecast'
 
 export function useClubData(clubId) {
   const [settings, setSettings] = useState(null)
+  const [slots, setSlots] = useState([])
   const [members, setMembers] = useState([])
   const [logs, setLogs] = useState([])
   const [fundTxns, setFundTxns] = useState([])
@@ -12,16 +14,34 @@ export function useClubData(clubId) {
 
   const loadAll = useCallback(async () => {
     if (!clubId) return
-    const [{ data: s }, { data: m }, { data: lg }, { data: ft }] = await Promise.all([
+    const [{ data: s }, { data: sl }, { data: m }, { data: lg }, { data: ft }] = await Promise.all([
       supabase.from('club_settings').select('*').eq('club_id', clubId).maybeSingle(),
+      supabase.from('court_slots').select('*').eq('club_id', clubId).order('sort_order'),
       supabase.from('club_members').select('*').eq('club_id', clubId).order('created_at', { ascending: true }),
       supabase.from('session_logs').select('*').eq('club_id', clubId).order('played_on', { ascending: false }),
       supabase.from('fund_transactions').select('*').eq('club_id', clubId).order('created_at', { ascending: false }),
     ])
 
-    setSettings(s ? { ...DEFAULT_SETTINGS, ...Object.fromEntries(Object.entries(s).filter(([, v]) => v !== null)) } : { club_id: clubId, ...DEFAULT_SETTINGS })
+    const mergedSettings = s
+      ? { ...DEFAULT_SETTINGS, ...Object.fromEntries(Object.entries(s).filter(([, v]) => v !== null)) }
+      : { club_id: clubId, ...DEFAULT_SETTINGS }
+    setSettings(mergedSettings)
 
-    // Enrich members with avatar from profiles (only for members who joined via OAuth)
+    // Auto-migrate: if no court_slots exist yet, synthesize from legacy session_configs
+    let resolvedSlots = sl || []
+    if (!resolvedSlots.length && (mergedSettings.session_configs?.length || mergedSettings.play_weekdays?.length)) {
+      const synthesized = synthesizeSlotsFromLegacy(mergedSettings)
+      if (synthesized.length) {
+        const { data: inserted } = await supabase
+          .from('court_slots')
+          .insert(synthesized)
+          .select()
+        resolvedSlots = inserted || synthesized
+      }
+    }
+    setSlots(resolvedSlots)
+
+    // Enrich members with avatar
     const userIds = (m || []).filter((r) => r.user_id).map((r) => r.user_id)
     let profileMap = {}
     if (userIds.length) {
@@ -54,6 +74,7 @@ export function useClubData(clubId) {
     const ch = supabase
       .channel(`club-${clubId}`)
       .on('postgres_changes', { event: '*', schema: 'public', table: 'club_settings', filter: `club_id=eq.${clubId}` }, loadAll)
+      .on('postgres_changes', { event: '*', schema: 'public', table: 'court_slots', filter: `club_id=eq.${clubId}` }, loadAll)
       .on('postgres_changes', { event: '*', schema: 'public', table: 'club_members', filter: `club_id=eq.${clubId}` }, loadAll)
       .on('postgres_changes', { event: '*', schema: 'public', table: 'session_logs', filter: `club_id=eq.${clubId}` }, loadAll)
       .on('postgres_changes', { event: '*', schema: 'public', table: 'fund_transactions', filter: `club_id=eq.${clubId}` }, loadAll)
@@ -61,5 +82,5 @@ export function useClubData(clubId) {
     return () => { supabase.removeChannel(ch) }
   }, [clubId, loadAll])
 
-  return { settings, setSettings, members, logs, fundTxns, pollTally, loading, reload: loadAll }
+  return { settings, setSettings, slots, setSlots, members, logs, fundTxns, pollTally, loading, reload: loadAll }
 }

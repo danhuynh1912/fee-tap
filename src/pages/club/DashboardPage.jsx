@@ -15,6 +15,7 @@ import { MembersPanel } from './MembersPanel'
 import {
   computeAll, formatPeriodLabel, getSessionConfigs,
 } from '../../engine/forecast'
+import { PaymentTimeline } from '../../components/club/PaymentTimeline'
 import { fmtVND, fmtNum, num, cx } from '../../lib/utils'
 import { BALLS_PER_BOX } from '../../constants'
 
@@ -84,7 +85,7 @@ function AdvancedForecast({ totalMonthlyCost, plan, canEdit, onUnlock }) {
   )
 }
 
-function ForecastDashboard({ settings, memberCount, plan, sport, canEdit, onUnlock, logs, fundTxns, sections: sectionsProp }) {
+function ForecastDashboard({ settings, slots, memberCount, committedCount, plan, sport, canEdit, onUnlock, logs, fundTxns, sections: sectionsProp }) {
   const { t, i18n } = useTranslation()
   const hasEquipment = sport?.hasEquipment ?? true
   const [spentTipOpen, setSpentTipOpen] = useState(false)
@@ -94,9 +95,13 @@ function ForecastDashboard({ settings, memberCount, plan, sport, canEdit, onUnlo
     setSections(sectionsProp || {})
   }, [sectionsProp])
 
-  const show = (key) => sections[key] !== false
+  const DEFAULT_SECTIONS = { running_slots: false, cost_by_cycle: false, deficit_callout: false }
+  const show = (key) => {
+    if (key in sections) return sections[key] !== false
+    return DEFAULT_SECTIONS[key] ?? true
+  }
 
-  const all = useMemo(() => computeAll(settings, memberCount, hasEquipment), [settings, memberCount, hasEquipment])
+  const all = useMemo(() => computeAll(settings, memberCount, hasEquipment, new Date(), slots), [settings, slots, memberCount, hasEquipment])
   const sessionConfigs = useMemo(() => getSessionConfigs(settings), [settings])
 
   function periodDateRange(period) {
@@ -108,8 +113,25 @@ function ForecastDashboard({ settings, memberCount, plan, sport, canEdit, onUnlo
     return { start, end }
   }
 
+  const isInventory = hasEquipment && settings.shuttle_mode === 'inventory'
+
+  // Shuttle purchase transactions in current periods (inventory mode source of truth)
+  const shuttleTxnsInPeriod = useMemo(() => {
+    if (!isInventory || !fundTxns?.length) return 0
+    // Collect all period date ranges from venues
+    const ranges = all.venues
+      .filter((v) => v.period)
+      .map((v) => periodDateRange(v.period))
+    if (!ranges.length) return 0
+    const periodStart = ranges.reduce((min, r) => r.start < min ? r.start : min, ranges[0].start)
+    const periodEnd = ranges.reduce((max, r) => r.end > max ? r.end : max, ranges[0].end)
+    return fundTxns
+      .filter((tx) => tx.type === 'shuttle_purchase' && tx.created_at >= periodStart && tx.created_at <= periodEnd + 'T23:59:59')
+      .reduce((s, tx) => s + Math.abs(num(tx.amount)), 0)
+  }, [isInventory, fundTxns, all.venues])
+
   // Actual spent = sessions already happened × estimated cost, refined by actual logs when available
-  const shuttlePerSession = hasEquipment
+  const shuttlePerSession = hasEquipment && !isInventory
     ? num(settings.estimated_shuttlecocks) * num(settings.price_per_box) / BALLS_PER_BOX
     : 0
 
@@ -122,11 +144,13 @@ function ForecastDashboard({ settings, memberCount, plan, sport, canEdit, onUnlo
     )
     const loggedCount = venueLogs.length
     const estimatedCount = Math.max(0, v.happened - loggedCount)
-    const venueLabel = v.weekday !== null && v.weekday !== undefined ? t(`wd_${v.weekday}`) : t('dash_court_cost')
+    const wdLabel = v.weekday !== null && v.weekday !== undefined ? t(`wd_${v.weekday}`) : null
+    const venueLabel = [v.name, v.venue_name, wdLabel].filter(Boolean).join(' · ') || t('dash_court_cost')
 
     if (v.court_payment_mode === 'cycle') {
-      const shuttleActual = venueLogs.reduce((s, l) => s + num(l.shuttle_cost), 0)
-      const shuttleEst = estimatedCount * shuttlePerSession
+      // In inventory mode shuttle cost comes from fund transactions, not per-session calc
+      const shuttleActual = isInventory ? 0 : venueLogs.reduce((s, l) => s + num(l.shuttle_cost), 0)
+      const shuttleEst = isInventory ? 0 : estimatedCount * shuttlePerSession
       const venueCost = v.courtCost + shuttleActual + shuttleEst
       acc.actualSpent += venueCost
       acc.spentBreakdown.push({
@@ -142,14 +166,16 @@ function ForecastDashboard({ settings, memberCount, plan, sport, canEdit, onUnlo
     } else {
       const sc = sessionConfigs.find((c) => c.weekday === v.weekday) || {}
       const courtPerSession = num(sc.court_price_per_hour) * num(sc.hours_per_session)
-      const costActual = venueLogs.reduce((s, l) => s + num(l.total_cost), 0)
-      const costEst = estimatedCount * (courtPerSession + shuttlePerSession)
-      const venueCost = costActual + costEst
+      const courtActual = venueLogs.reduce((s, l) => s + num(l.court_cost), 0)
+      const courtEst = estimatedCount * courtPerSession
+      const shuttleActual = isInventory ? 0 : venueLogs.reduce((s, l) => s + num(l.shuttle_cost), 0)
+      const shuttleEst = isInventory ? 0 : estimatedCount * shuttlePerSession
+      const venueCost = courtActual + courtEst + shuttleActual + shuttleEst
       acc.actualSpent += venueCost
       acc.spentBreakdown.push({
         label: venueLabel,
-        costActual,
-        costEst,
+        costActual: courtActual + shuttleActual,
+        costEst: courtEst + shuttleEst,
         loggedCount,
         estimatedCount,
         total: venueCost,
@@ -159,30 +185,55 @@ function ForecastDashboard({ settings, memberCount, plan, sport, canEdit, onUnlo
     return acc
   }, { actualSpent: 0, spentBreakdown: [] })
 
+  // In inventory mode: actual shuttle spend = recorded purchase transactions in this period
+  const totalActualSpent = isInventory ? actualSpent + shuttleTxnsInPeriod : actualSpent
+
   // Remaining = what still needs to come OUT of the fund for unplayed sessions
   const remainingForecast = useMemo(() => {
-    const shuttlePerSession = hasEquipment
-      ? num(settings.estimated_shuttlecocks) * num(settings.price_per_box) / BALLS_PER_BOX
-      : 0
+    if (isInventory) {
+      // Shuttle remaining: only if stock is insufficient
+      const tubesPerSession = num(settings.estimated_shuttlecocks) || 0
+      const totalSessionsLeft = all.venues.reduce((s, v) => s + Math.max(0, v.totalSessions - v.happened), 0)
+      const boxesLeft = num(settings.shuttle_stock)
+      const sessionsLeft = tubesPerSession > 0 ? Math.floor((boxesLeft * BALLS_PER_BOX) / tubesPerSession) : Infinity
+      const refillBoxes = sessionsLeft < totalSessionsLeft
+        ? Math.ceil(((totalSessionsLeft - sessionsLeft) * tubesPerSession) / BALLS_PER_BOX)
+        : 0
+      const shuttleRefillCost = refillBoxes > 0 ? refillBoxes * num(settings.price_per_box) : 0
+
+      const courtRemaining = all.venues.reduce((total, v) => {
+        const remaining = Math.max(0, v.totalSessions - v.happened)
+        if (v.court_payment_mode === 'cycle') return total // already paid lump sum
+        const sc = sessionConfigs.find((c) => c.weekday === v.weekday) || {}
+        return total + remaining * (num(sc.court_price_per_hour) * num(sc.hours_per_session))
+      }, 0)
+      return courtRemaining + shuttleRefillCost
+    }
+    const sps = hasEquipment ? num(settings.estimated_shuttlecocks) * num(settings.price_per_box) / BALLS_PER_BOX : 0
     return all.venues.reduce((total, v) => {
       const remaining = Math.max(0, v.totalSessions - v.happened)
-      if (v.court_payment_mode === 'cycle') {
-        // Court already paid as lump sum — only shuttle left
-        return total + remaining * shuttlePerSession
-      } else {
-        const sc = sessionConfigs.find((c) => c.weekday === v.weekday) || {}
-        const courtPerSession = num(sc.court_price_per_hour) * num(sc.hours_per_session)
-        return total + remaining * (courtPerSession + shuttlePerSession)
-      }
+      if (v.court_payment_mode === 'cycle') return total + remaining * sps
+      const sc = sessionConfigs.find((c) => c.weekday === v.weekday) || {}
+      const courtPerSession = num(sc.court_price_per_hour) * num(sc.hours_per_session)
+      return total + remaining * (courtPerSession + sps)
     }, 0)
-  }, [all.venues, sessionConfigs, settings, hasEquipment])
-  const projectedBalance = all.fund - actualSpent - remainingForecast
+  }, [all.venues, sessionConfigs, settings, hasEquipment, isInventory])
+  const projectedBalance = all.fund - totalActualSpent - remainingForecast
   const projectedSurplus = projectedBalance >= 0
   const projectedDeficit = projectedSurplus ? 0 : -projectedBalance
   const perMemberTopUp = memberCount > 0 ? Math.ceil(projectedDeficit / memberCount) : 0
-  const totalCollected = all.fund
-  const txCount = (fundTxns || []).length
-  const sessionProgress = all.totalScheduled > 0 ? Math.min(1, all.totalHappened / all.totalScheduled) : 0
+  // Total collected = only positive (top_up) transactions in current period
+  const { totalCollected, txCount } = useMemo(() => {
+    const ranges = all.venues.filter((v) => v.period).map((v) => periodDateRange(v.period))
+    if (!ranges.length) return { totalCollected: 0, txCount: 0 }
+    const periodStart = ranges.reduce((min, r) => r.start < min ? r.start : min, ranges[0].start)
+    const periodEnd = ranges.reduce((max, r) => r.end > max ? r.end : max, ranges[0].end)
+    const inPeriod = (fundTxns || []).filter(
+      (tx) => num(tx.amount) > 0 && tx.created_at >= periodStart && tx.created_at <= periodEnd + 'T23:59:59'
+    )
+    return { totalCollected: inPeriod.reduce((s, tx) => s + num(tx.amount), 0), txCount: inPeriod.length }
+  }, [fundTxns, all.venues])
+  const sessionProgress = all.uniqueScheduled > 0 ? Math.min(1, all.uniqueHappened / all.uniqueScheduled) : 0
 
   // Base fee: pure cost ÷ members, no fund dependency
   const baseFee = all.suggestedFee
@@ -217,16 +268,16 @@ function ForecastDashboard({ settings, memberCount, plan, sport, canEdit, onUnlo
 
         <div className="relative mt-5">
           <p className="text-xs font-semibold uppercase tracking-wide text-slate-400">{t('dash_fund_live')}</p>
-          <p className="mt-1 font-mono text-4xl sm:text-5xl font-black tabular-nums leading-none text-white">{fmtVND(all.fund - actualSpent)}</p>
+          <p className={cx('mt-1 font-mono text-4xl sm:text-5xl font-black tabular-nums leading-none', (all.fund - totalActualSpent) >= 0 ? 'text-lime-400' : 'text-red-400')}>{fmtVND(all.fund - totalActualSpent)}</p>
         </div>
 
-        <div className="relative mt-5 grid grid-cols-2 gap-2 sm:grid-cols-4 sm:gap-3">
-          <div className="rounded-2xl bg-lime-400/10 border border-lime-400/20 px-3 py-3 sm:px-4">
-            <p className="text-[10px] font-semibold uppercase tracking-wide text-lime-500">{t('dash_total_collected')}</p>
-            <p className="mt-1.5 font-mono text-sm sm:text-base font-black text-lime-400">{fmtVND(totalCollected)}</p>
+        <div className="relative mt-5 flex flex-wrap gap-2 sm:gap-3">
+          <div className="flex-1 rounded-2xl bg-slate-800/60 px-3 py-3 sm:px-4">
+            <p className="text-[10px] font-semibold uppercase tracking-wide text-slate-500">{t('dash_total_collected')}</p>
+            <p className="mt-1.5 font-mono text-sm sm:text-base font-black text-yellow-400">{fmtVND(totalCollected)}</p>
             <p className="mt-0.5 text-[10px] text-slate-500">{txCount} {t('dash_collections')}</p>
           </div>
-          <div className="rounded-2xl bg-slate-800/60 px-3 py-3 sm:px-4">
+          <div className="flex-1 rounded-2xl bg-slate-800/60 px-3 py-3 sm:px-4">
             <div className="flex items-center justify-between">
               <p className="text-[10px] font-semibold uppercase tracking-wide text-slate-500">{t('dash_actual_spent')}</p>
               <button
@@ -236,23 +287,23 @@ function ForecastDashboard({ settings, memberCount, plan, sport, canEdit, onUnlo
                 <Info className="h-3.5 w-3.5" />
               </button>
             </div>
-            <p className="mt-1.5 font-mono text-sm sm:text-base font-black text-white">{fmtVND(actualSpent)}</p>
+            <p className="mt-1.5 font-mono text-sm sm:text-base font-black text-white">{fmtVND(totalActualSpent)}</p>
             <p className="mt-0.5 text-[10px] text-slate-500">
               {all.venues.some((v) => v.court_payment_mode === 'cycle') && (
                 <span>{t('dash_actual_includes_lump')} · </span>
               )}
-              {all.totalHappened} {t('dash_sessions_happened')}
+              {all.uniqueHappened} {t('dash_sessions_label')} ({all.totalHappened} {t('dash_slots_label')}) {t('dash_sessions_happened')}
             </p>
           </div>
           {show('remaining_forecast') && (
-            <div className="rounded-2xl bg-slate-800/60 px-3 py-3 sm:px-4">
+            <div className="flex-1 rounded-2xl bg-slate-800/60 px-3 py-3 sm:px-4">
               <p className="text-[10px] font-semibold uppercase tracking-wide text-slate-500">{t('dash_remaining_forecast')}</p>
               <p className="mt-1.5 font-mono text-sm sm:text-base font-black text-slate-300">~{fmtVND(remainingForecast)}</p>
-              <p className="mt-0.5 text-[10px] text-slate-500">{all.totalScheduled - all.totalHappened} {t('dash_sessions_future')}</p>
+              <p className="mt-0.5 text-[10px] text-slate-500">{all.uniqueScheduled - all.uniqueHappened} {t('dash_sessions_future')}</p>
             </div>
           )}
           {show('end_of_period') && canEdit && (
-            <div className={cx('rounded-2xl px-3 py-3 sm:px-4', projectedSurplus ? 'bg-lime-400/15' : 'bg-red-500/20')}>
+            <div className={cx('flex-1 rounded-2xl px-3 py-3 sm:px-4', projectedSurplus ? 'bg-lime-400/15' : 'bg-red-500/20')}>
               <p className="text-[10px] font-semibold uppercase tracking-wide text-slate-500">{t('dash_end_of_period')}</p>
               <p className={cx('mt-1.5 font-mono text-sm sm:text-base font-black', projectedSurplus ? 'text-lime-400' : 'text-red-400')}>
                 {projectedSurplus ? '+' : '−'}{fmtVND(Math.abs(projectedBalance))}
@@ -264,14 +315,14 @@ function ForecastDashboard({ settings, memberCount, plan, sport, canEdit, onUnlo
           )}
         </div>
 
-        {all.totalScheduled > 0 && (
+        {all.uniqueScheduled > 0 && (
           <div className="relative mt-5">
             <div className="flex items-center justify-between mb-1.5">
               <span className="text-[10px] font-semibold uppercase tracking-wide text-slate-500">{t('dash_session_progress')}</span>
-              <span className="text-[10px] font-mono text-slate-400">{all.totalHappened} / {all.totalScheduled} {t('dash_sessions')}</span>
+              <span className="text-[10px] font-mono text-slate-400">{all.uniqueHappened} / {all.uniqueScheduled} {t('dash_sessions')}</span>
             </div>
             <div className="h-1.5 w-full overflow-hidden rounded-full bg-slate-800">
-              <div className="h-full rounded-full bg-lime-400 transition-all duration-500" style={{ width: `${sessionProgress * 100}%` }} />
+              <div className="h-full rounded-full bg-white transition-all duration-500" style={{ width: `${sessionProgress * 100}%` }} />
             </div>
           </div>
         )}
@@ -283,9 +334,13 @@ function ForecastDashboard({ settings, memberCount, plan, sport, canEdit, onUnlo
           <div className="flex flex-wrap items-center gap-4">
             {/* Total cycle cost */}
             <div className="flex-1 min-w-0">
-              <p className="text-xs font-semibold uppercase tracking-wide text-slate-400">{t('dash_cycle_total_est')}</p>
-              <p className="mt-1 font-mono text-2xl font-black text-slate-900">{fmtVND(all.totalMonthlyCost)}</p>
-              <p className="mt-0.5 text-[10px] text-slate-400">{all.totalScheduled} {t('dash_sessions')} · {all.venues.length} {t('dash_court_cost').toLowerCase()}</p>
+              <p className="text-xs font-semibold uppercase tracking-wide text-slate-400">
+                {t('dash_cycle_total_est')}{all.venues[0]?.period ? ` (${formatPeriodLabel(all.venues[0].period, i18n.language)})` : ''}
+              </p>
+              <p className="mt-1 font-mono text-2xl font-black text-slate-900">{fmtVND(all.totalPeriodCost ?? all.totalMonthlyCost)}</p>
+              <p className="mt-0.5 text-[10px] text-slate-400">
+                {all.uniqueScheduled} {t('dash_sessions_label')} ({all.totalScheduled} {t('dash_slots_label')}) + {t('dash_shuttle_cost').toLowerCase()}
+              </p>
             </div>
 
             {/* Per-member fee */}
@@ -350,13 +405,20 @@ function ForecastDashboard({ settings, memberCount, plan, sport, canEdit, onUnlo
         )
       )}
 
-      {/* Per-venue cost cards */}
-      {show('venue_cards') && all.venues.length > 0 && (
-        <div className="grid gap-3 sm:grid-cols-2">
-          {all.venues.map((v, i) => (
-            <VenueCard key={v.weekday ?? i} venue={v} lang={i18n.language} t={t} />
-          ))}
-        </div>
+      {/* Payment timeline — replaces per-venue cards */}
+      {show('venue_cards') && (
+        <PaymentTimeline
+          slots={slots || []}
+          settings={settings}
+          memberCount={memberCount}
+          committedCount={committedCount}
+          sport={sport}
+          showRunning={show('running_slots')}
+          canEdit={canEdit}
+          nextAdjustedFee={nextAdjustedFee}
+          projectedBalance={projectedBalance}
+          projectedSurplus={projectedSurplus}
+        />
       )}
 
       {/* Per-cycle cost breakdown */}
@@ -446,49 +508,6 @@ function ForecastDashboard({ settings, memberCount, plan, sport, canEdit, onUnlo
         )
       })()}
 
-      {/* Next cycle */}
-      <div className="rounded-3xl border border-slate-100 bg-white p-5">
-        <div className="flex flex-wrap items-center justify-between gap-2">
-          <div className="flex items-center gap-2 text-slate-400">
-            <ArrowRight className="h-4 w-4" />
-            <span className="text-xs font-semibold uppercase tracking-wide">{t('dash_next_cycle')}</span>
-          </div>
-          {all.nextTotalCost !== all.totalMonthlyCost && (
-            <Badge tone={all.nextTotalCost > all.totalMonthlyCost ? 'red' : 'volt'}
-              icon={all.nextTotalCost > all.totalMonthlyCost ? TrendingUp : TrendingDown}
-            >
-              {all.nextTotalCost > all.totalMonthlyCost ? '+' : '−'}{fmtVND(Math.abs(all.nextTotalCost - all.totalMonthlyCost))} {t('dash_vs_current')}
-            </Badge>
-          )}
-        </div>
-        <div className="mt-4 grid sm:grid-cols-4 gap-3">
-          <div className="rounded-2xl bg-slate-50 p-3 text-center">
-            <p className="text-xs text-slate-400">{t('dash_sessions')}</p>
-            <p className="font-mono text-lg font-black text-slate-900">{fmtNum(all.nextSessions)}</p>
-          </div>
-          <div className="rounded-2xl bg-slate-50 p-3 text-center">
-            <p className="text-xs text-slate-400">{t('dash_total_cost')}</p>
-            <p className="font-mono text-lg font-black text-slate-900">{fmtVND(all.nextTotalCost)}</p>
-          </div>
-          {/* Base fee for next cycle — visible to everyone */}
-          <div className="rounded-2xl bg-slate-900 p-3 text-center">
-            <p className="text-xs text-slate-400">{t('dash_next_base_fee')}</p>
-            <p className="font-mono text-lg font-black text-lime-400">{fmtVND(nextBaseFee)}</p>
-          </div>
-          {/* Adjusted fee with carryover — admin only */}
-          {canEdit && (
-            <div className={cx('rounded-2xl p-3 text-center', projectedSurplus ? 'bg-lime-50' : 'bg-red-50')}>
-              <p className="text-xs text-slate-400">{t('dash_next_topup_fee')}</p>
-              <p className={cx('font-mono text-lg font-black', projectedSurplus ? 'text-lime-600' : 'text-red-500')}>
-                {fmtVND(nextAdjustedFee)}
-              </p>
-              {projectedBalance !== 0 && (
-                <p className="text-[10px] text-slate-500 mt-0.5">{t('dash_incl_carryover')}</p>
-              )}
-            </div>
-          )}
-        </div>
-      </div>
 
       <AdvancedForecast totalMonthlyCost={all.totalMonthlyCost} plan={plan} canEdit={canEdit} onUnlock={onUnlock} />
 
@@ -560,7 +579,7 @@ function ForecastDashboard({ settings, memberCount, plan, sport, canEdit, onUnlo
 
         <div className="flex justify-between items-center mt-5 pt-4 border-t-2 border-slate-100">
           <span className="font-black text-slate-900">{t('total')}</span>
-          <span className="font-mono text-xl font-black text-slate-900">{fmtVND(actualSpent)}</span>
+          <span className="font-mono text-xl font-black text-slate-900">{fmtVND(totalActualSpent)}</span>
         </div>
       </Modal>
     </div>
@@ -600,9 +619,10 @@ function VenueCard({ venue, lang, t }) {
   )
 }
 
-export function DashboardPage({ club, settings, members, logs, fundTxns, pollTally, plan, sport, hostName, hostAvatar, currentUserId, canEdit, onUnlock, onChanged, onCloseSidebar, onConfigClose, toast }) {
+export function DashboardPage({ club, settings, slots, members, logs, fundTxns, pollTally, plan, sport, hostName, hostAvatar, currentUserId, canEdit, onUnlock, onChanged, onCloseSidebar, onConfigClose, toast }) {
   const { t } = useTranslation()
   const memberCount = (pollTally?.count ?? members.filter((m) => m.user_id !== club.owner_id).length) + 1
+  const committedCount = pollTally?.count ?? null
   const [configOpen, setConfigOpen] = useState(false)
   const [sectionsOverride, setSectionsOverride] = useState(null)
 
@@ -639,7 +659,9 @@ export function DashboardPage({ club, settings, members, logs, fundTxns, pollTal
         )}
         <ForecastDashboard
           settings={settings}
+          slots={slots}
           memberCount={memberCount}
+          committedCount={committedCount}
           plan={plan}
           sport={sport}
           canEdit={canEdit}

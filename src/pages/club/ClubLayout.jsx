@@ -33,7 +33,7 @@ export function ClubLayout({ session, club, setClub, path, toast }) {
   const [upsell, setUpsell] = useState(false)
   const [sidebarOpen, setSidebarOpen] = useState(false)
 
-  const { settings, setSettings, members, logs, fundTxns, pollTally, loading, reload } = useClubData(club.id)
+  const { settings, setSettings, slots, setSlots, members, logs, fundTxns, pollTally, loading, reload } = useClubData(club.id)
 
   const canEdit = isOwner && !previewMember
   const plan = club.plan || 'free'
@@ -178,7 +178,7 @@ export function ClubLayout({ session, club, setClub, path, toast }) {
             <h1 className="flex items-center gap-2 text-2xl font-black tracking-tight text-slate-900">
               {tab === 'settings'
                 ? <><Settings2 className="h-6 w-6 text-slate-300" /> {t('set_title')}</>
-                : <><Building2 className="h-6 w-6 text-slate-300" /> {club.name}</>
+                : <><Building2 className="h-6 w-6 text-slate-300" /> {t(`nav_${tab}`)}</>
               }
             </h1>
           </div>
@@ -186,7 +186,7 @@ export function ClubLayout({ session, club, setClub, path, toast }) {
 
           {tab === 'dashboard' && (
             <DashboardPage
-              club={club} settings={settings} members={members} logs={logs}
+              club={club} settings={settings} slots={slots} members={members} logs={logs}
               fundTxns={fundTxns} pollTally={pollTally} plan={plan} sport={sport}
               hostName={hostName} hostAvatar={hostAvatar} currentUserId={currentUserId}
               canEdit={canEdit} onUnlock={() => setUpsell(true)} onChanged={reload} toast={toast}
@@ -195,7 +195,7 @@ export function ClubLayout({ session, club, setClub, path, toast }) {
 
           {tab === 'settings' && (
             <SettingsPage
-              club={club} settings={settings} sport={sport} members={members}
+              club={club} settings={settings} slots={slots} sport={sport} members={members}
               plan={plan} pollTally={pollTally} canEdit={canEdit}
               hostName={hostName} hostAvatar={hostAvatar} currentUserId={currentUserId}
               onSaved={(p) => setSettings((s) => ({ ...s, ...p }))}
@@ -205,7 +205,7 @@ export function ClubLayout({ session, club, setClub, path, toast }) {
 
           {tab === 'log' && (
             <SessionLogPage
-              club={club} logs={logs} settings={settings} members={members} sport={sport}
+              club={club} logs={logs} settings={settings} slots={slots} members={members} sport={sport}
               canEdit={canEdit} onChanged={reload} toast={toast} user={session?.user}
             />
           )}

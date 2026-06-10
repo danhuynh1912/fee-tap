@@ -8,6 +8,7 @@ import { cx } from '../../lib/utils'
 const SECTIONS = [
   { key: 'remaining_forecast', labelKey: 'dash_section_remaining' },
   { key: 'end_of_period',      labelKey: 'dash_section_end_period',  adminOnly: true },
+  { key: 'running_slots',      labelKey: 'dash_section_running_slots' },
   { key: 'venue_cards',        labelKey: 'dash_section_venue_cards' },
   { key: 'cost_by_cycle',      labelKey: 'dash_section_cost_cycle' },
   { key: 'deficit_callout',    labelKey: 'dash_section_deficit',     adminOnly: true },
@@ -22,7 +23,11 @@ export function DashboardConfigDrawer({ open, onClose, clubId, sections, venueCo
     if (open) setLocal(sections || {})
   }, [open, sections])
 
-  const isVisible = (key) => local[key] !== false
+  const DEFAULT_SECTIONS = { running_slots: false, cost_by_cycle: false, deficit_callout: false }
+  const isVisible = (key) => {
+    if (key in local) return local[key] !== false
+    return DEFAULT_SECTIONS[key] ?? true
+  }
 
   async function save() {
     setSaving(true)

@@ -46,9 +46,12 @@ function GuestStepper({ label, value, onDecrement, onIncrement, disabled }) {
   )
 }
 
-export function SessionLogPage({ club, logs, settings, members, sport, canEdit, onChanged, toast, user }) {
+export function SessionLogPage({ club, logs, settings, slots, members, sport, canEdit, onChanged, toast, user }) {
   const { t } = useTranslation()
-  const [activeTab, setActiveTab] = useState('log')
+  const [activeTab, setActiveTab] = useState(() => {
+    const params = new URLSearchParams(window.location.search)
+    return params.get('tab') === 'vote' ? 'vote' : 'log'
+  })
   const [editingDate, setEditingDate] = useState(null)
   const [editForm, setEditForm] = useState({
     actual: '', note: '', voteId: '', guestMale: 0, guestFemale: 0,
@@ -65,14 +68,29 @@ export function SessionLogPage({ club, logs, settings, members, sport, canEdit, 
   const configs = useMemo(() => getSessionConfigs(settings), [settings])
   const hasSchedule = configs.some((c) => c.weekday !== null && c.weekday !== undefined)
 
+  // count how many slots fall on a given weekday (for shuttle estimation)
+  const slotCountByWeekday = useMemo(() => {
+    const map = {}
+    const src = (slots && slots.length) ? slots : configs.map((c) => ({ weekdays: [c.weekday] }))
+    for (const s of src) {
+      for (const wd of (s.weekdays || [])) {
+        if (wd !== null && wd !== undefined) map[wd] = (map[wd] || 0) + 1
+      }
+    }
+    return map
+  }, [slots, configs])
+
   const sessions = useMemo(() => {
     if (!hasSchedule) return []
     const today = new Date()
     const todayDay = new Date(today.getFullYear(), today.getMonth(), today.getDate())
     const all = []
+    // use unique weekdays from slots if available, else from configs
+    const uniqueConfigs = (slots && slots.length)
+      ? [...new Map(slots.flatMap((s) => (s.weekdays || []).map((wd) => [wd, { ...configs[0], weekday: wd, billing_cycle: s.billing_cycle || 'month' }])).filter(([wd]) => wd !== null && wd !== undefined)).values()]
+      : configs.filter((c) => c.weekday !== null && c.weekday !== undefined)
 
-    for (const sc of configs) {
-      if (sc.weekday === null || sc.weekday === undefined) continue
+    for (const sc of uniqueConfigs) {
       const period = resolvePeriods(sc).current
       const { year: sy, month0: sm0 } = period.months[0]
       const lastM = period.months[period.months.length - 1]
@@ -81,7 +99,8 @@ export function SessionLogPage({ club, logs, settings, members, sport, canEdit, 
       const d = new Date(sy, sm0, 1)
       while (d <= cutoffDay) {
         if (d.getDay() === sc.weekday) {
-          const dateStr = d.toISOString().slice(0, 10)
+          // use local date components to avoid UTC timezone shift
+          const dateStr = `${d.getFullYear()}-${String(d.getMonth() + 1).padStart(2, '0')}-${String(d.getDate()).padStart(2, '0')}`
           if (!all.find((s) => s.date === dateStr)) {
             all.push({
               date: dateStr,
@@ -96,7 +115,7 @@ export function SessionLogPage({ club, logs, settings, members, sport, canEdit, 
     }
 
     return all.sort((a, b) => (a.date < b.date ? 1 : -1))
-  }, [configs, logs, hasSchedule])
+  }, [configs, slots, logs, hasSchedule])
 
   const loggedCount = sessions.filter((s) => s.log).length
   const avgActual = loggedCount
@@ -335,8 +354,10 @@ export function SessionLogPage({ club, logs, settings, members, sport, canEdit, 
             {sessions.map(({ date, weekday, billing_cycle, log }) => {
               const isEditing = editingDate === date
               const isActual = !!log
-              const shuttleCount = isActual ? num(log.actual_shuttlecocks) : est
-              const diff = shuttleCount - est
+              const courtCount = slotCountByWeekday[weekday] || 1
+              const estTotal = est * courtCount
+              const shuttleCount = isActual ? num(log.actual_shuttlecocks) : estTotal
+              const diff = shuttleCount - estTotal
               const tone = diff > 0 ? 'red' : diff < 0 ? 'volt' : 'slate'
               const cost = isActual ? num(log.total_cost) : 0
               const cycleTag = billing_cycle === 'quarter' ? t('dash_court_note_quarter') : t('dash_court_note_month')
@@ -355,7 +376,7 @@ export function SessionLogPage({ club, logs, settings, members, sport, canEdit, 
                           <input
                             type="number" min="0" step="0.5" autoFocus
                             className={cx(inputCls, 'font-mono')}
-                            placeholder={`${t('log_actual')} (${est})`}
+                            placeholder={`${t('log_actual')} (${estTotal})`}
                             value={editForm.actual}
                             onChange={(e) => setEditForm((f) => ({ ...f, actual: e.target.value }))}
                           />
@@ -494,14 +515,31 @@ export function SessionLogPage({ club, logs, settings, members, sport, canEdit, 
 
       {/* ── Tab: Vote cho buổi kế tiếp ── */}
       {activeTab === 'vote' && (
-        <NextSessionVoteTab
-          club={club}
-          settings={settings}
-          members={members}
-          canEdit={canEdit}
-          user={user}
-          toast={toast}
-        />
+        <div className="space-y-3">
+          {canEdit && (
+            <div className="flex justify-end">
+              <button
+                onClick={() => {
+                  const url = `${window.location.origin}/club/${club.id}/log?tab=vote`
+                  navigator.clipboard.writeText(url)
+                  toast?.({ message: t('vote_link_copied'), tone: 'volt' })
+                }}
+                className="flex items-center gap-2 rounded-xl border border-slate-200 bg-white px-3 py-2 text-xs font-semibold text-slate-600 hover:border-slate-300 hover:text-slate-900 transition active:scale-[0.98]"
+              >
+                <Link className="h-3.5 w-3.5" />
+                {t('vote_copy_link')}
+              </button>
+            </div>
+          )}
+          <NextSessionVoteTab
+            club={club}
+            settings={settings}
+            members={members}
+            canEdit={canEdit}
+            user={user}
+            toast={toast}
+          />
+        </div>
       )}
     </div>
   )
