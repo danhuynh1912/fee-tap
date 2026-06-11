@@ -3,6 +3,7 @@ import { useTranslation } from 'react-i18next'
 import { Building2, ChevronDown, Check, Plus, LogOut, AlertTriangle } from 'lucide-react'
 import { cx } from '../../lib/utils'
 import { navigate } from '../../router'
+import { Modal } from '../ui/Modal'
 
 function Logo({ onClick }) {
   return (
@@ -109,6 +110,8 @@ function ClubSwitcher({ myClubs, activeClub, onSelectClub }) {
 
 export function Nav({ session, myClubs, activeClub, onSignOut, onSelectClub }) {
   const { t } = useTranslation()
+  const [confirmSignOut, setConfirmSignOut] = useState(false)
+
   return (
     <header className="sticky top-0 z-40 border-b border-slate-100 bg-white/70 backdrop-blur-xl">
       <div className={`mx-auto flex h-16 items-center gap-3 px-5 ${session ? '' : 'max-w-[1350px]'}`}>
@@ -126,7 +129,7 @@ export function Nav({ session, myClubs, activeClub, onSignOut, onSelectClub }) {
           <LangSwitch />
           {session && (
             <button
-              onClick={onSignOut}
+              onClick={() => setConfirmSignOut(true)}
               className="inline-flex items-center gap-2 rounded-full border border-slate-200 bg-white/70 py-1 pl-1 pr-3 text-sm font-medium text-slate-600 transition hover:border-slate-300"
               title={t('signOut')}
             >
@@ -141,6 +144,34 @@ export function Nav({ session, myClubs, activeClub, onSignOut, onSelectClub }) {
           )}
         </div>
       </div>
+
+      <Modal open={confirmSignOut} onClose={() => setConfirmSignOut(false)}>
+        <div className="space-y-4">
+          <div className="flex items-center gap-3">
+            <span className="grid h-10 w-10 shrink-0 place-items-center rounded-2xl bg-slate-900">
+              <LogOut className="h-5 w-5 text-lime-400" />
+            </span>
+            <div>
+              <p className="font-black text-slate-900">{t('signout_confirm_title')}</p>
+              <p className="text-sm text-slate-400 mt-0.5">{t('signout_confirm_sub')}</p>
+            </div>
+          </div>
+          <div className="flex gap-2 pt-1">
+            <button
+              onClick={() => setConfirmSignOut(false)}
+              className="flex-1 rounded-2xl border border-slate-200 py-2.5 text-sm font-semibold text-slate-600 hover:bg-slate-50 transition active:scale-[0.98]"
+            >
+              {t('cancel')}
+            </button>
+            <button
+              onClick={() => { setConfirmSignOut(false); onSignOut() }}
+              className="flex-1 rounded-2xl bg-slate-900 py-2.5 text-sm font-semibold text-white hover:bg-slate-800 transition active:scale-[0.98]"
+            >
+              {t('signOut')}
+            </button>
+          </div>
+        </div>
+      </Modal>
     </header>
   )
 }

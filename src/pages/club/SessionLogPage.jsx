@@ -10,7 +10,7 @@ import { Button } from '../../components/ui/Button'
 import { inputCls } from '../../components/ui/Field'
 import { cx, num, fmtDate, fmtVND, fmtNum } from '../../lib/utils'
 import { supabase } from '../../lib/supabase'
-import { resolvePeriods, getSessionConfigs, calcGuestRevenue } from '../../engine/forecast'
+import { resolvePeriods, getSessionConfigs, calcGuestRevenue, cycleLabelShort } from '../../engine/forecast'
 import { BALLS_PER_BOX } from '../../constants'
 import { NextSessionVoteTab } from '../../components/club/vote/NextSessionVoteTab'
 
@@ -47,7 +47,7 @@ function GuestStepper({ label, value, onDecrement, onIncrement, disabled }) {
 }
 
 export function SessionLogPage({ club, logs, settings, slots, members, sport, canEdit, onChanged, toast, user }) {
-  const { t } = useTranslation()
+  const { t, i18n } = useTranslation()
   const [activeTab, setActiveTab] = useState(() => {
     const params = new URLSearchParams(window.location.search)
     return params.get('tab') === 'vote' ? 'vote' : 'log'
@@ -87,7 +87,7 @@ export function SessionLogPage({ club, logs, settings, slots, members, sport, ca
     const all = []
     // use unique weekdays from slots if available, else from configs
     const uniqueConfigs = (slots && slots.length)
-      ? [...new Map(slots.flatMap((s) => (s.weekdays || []).map((wd) => [wd, { ...configs[0], weekday: wd, billing_cycle: s.billing_cycle || 'month' }])).filter(([wd]) => wd !== null && wd !== undefined)).values()]
+      ? [...new Map(slots.flatMap((s) => (s.weekdays || []).map((wd) => [wd, { ...configs[0], weekday: wd, cycle_months: s.cycle_months || 1, cycle_start_month: s.cycle_start_month || 1 }])).filter(([wd]) => wd !== null && wd !== undefined)).values()]
       : configs.filter((c) => c.weekday !== null && c.weekday !== undefined)
 
     for (const sc of uniqueConfigs) {
@@ -105,7 +105,7 @@ export function SessionLogPage({ club, logs, settings, slots, members, sport, ca
             all.push({
               date: dateStr,
               weekday: sc.weekday,
-              billing_cycle: sc.billing_cycle,
+              cycle_months: sc.cycle_months || 1,
               log: logs.find((l) => l.played_on === dateStr) || null,
             })
           }
@@ -351,7 +351,7 @@ export function SessionLogPage({ club, logs, settings, slots, members, sport, ca
             {sessions.length === 0 && hasSchedule && (
               <li className="rounded-2xl border border-dashed border-slate-200 py-10 text-center text-sm text-slate-400">{t('log_no_sessions_yet')}</li>
             )}
-            {sessions.map(({ date, weekday, billing_cycle, log }) => {
+            {sessions.map(({ date, weekday, cycle_months, log }) => {
               const isEditing = editingDate === date
               const isActual = !!log
               const courtCount = slotCountByWeekday[weekday] || 1
@@ -360,7 +360,7 @@ export function SessionLogPage({ club, logs, settings, slots, members, sport, ca
               const diff = shuttleCount - estTotal
               const tone = diff > 0 ? 'red' : diff < 0 ? 'volt' : 'slate'
               const cost = isActual ? num(log.total_cost) : 0
-              const cycleTag = billing_cycle === 'quarter' ? t('dash_court_note_quarter') : t('dash_court_note_month')
+              const cycleTag = cycleLabelShort(cycle_months || 1, i18n.language)
 
               return (
                 <li key={date} className={cx(

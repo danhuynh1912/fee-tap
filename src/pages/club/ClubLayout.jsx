@@ -198,6 +198,7 @@ export function ClubLayout({ session, club, setClub, path, toast }) {
               club={club} settings={settings} slots={slots} sport={sport} members={members}
               plan={plan} pollTally={pollTally} canEdit={canEdit}
               hostName={hostName} hostAvatar={hostAvatar} currentUserId={currentUserId}
+              logs={logs} fundTxns={fundTxns}
               onSaved={(p) => setSettings((s) => ({ ...s, ...p }))}
               onChanged={reload} onHitLimit={() => setUpsell(true)} toast={toast}
             />

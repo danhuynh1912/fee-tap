@@ -13,7 +13,7 @@ import { ProLock } from '../../components/monetize/ProLock'
 import { DashboardConfigDrawer } from '../../components/club/DashboardConfigDrawer'
 import { MembersPanel } from './MembersPanel'
 import {
-  computeAll, formatPeriodLabel, getSessionConfigs,
+  computeAll, formatPeriodLabel, getSessionConfigs, cycleLabelShort, resolveShuttlePeriodLabel,
 } from '../../engine/forecast'
 import { PaymentTimeline } from '../../components/club/PaymentTimeline'
 import { fmtVND, fmtNum, num, cx } from '../../lib/utils'
@@ -95,7 +95,7 @@ function ForecastDashboard({ settings, slots, memberCount, committedCount, plan,
     setSections(sectionsProp || {})
   }, [sectionsProp])
 
-  const DEFAULT_SECTIONS = { running_slots: false, cost_by_cycle: false, deficit_callout: false }
+  const DEFAULT_SECTIONS = { running_slots: false, cost_by_cycle: false, deficit_callout: false, carryover_row: false }
   const show = (key) => {
     if (key in sections) return sections[key] !== false
     return DEFAULT_SECTIONS[key] ?? true
@@ -333,21 +333,54 @@ function ForecastDashboard({ settings, slots, memberCount, committedCount, plan,
         <div className="rounded-3xl border border-slate-100 bg-white p-5">
           <div className="flex flex-wrap items-center gap-4">
             {/* Total cycle cost */}
-            <div className="flex-1 min-w-0">
-              <p className="text-xs font-semibold uppercase tracking-wide text-slate-400">
-                {t('dash_cycle_total_est')}{all.venues[0]?.period ? ` (${formatPeriodLabel(all.venues[0].period, i18n.language)})` : ''}
-              </p>
-              <p className="mt-1 font-mono text-2xl font-black text-slate-900">{fmtVND(all.totalPeriodCost ?? all.totalMonthlyCost)}</p>
-              <p className="mt-0.5 text-[10px] text-slate-400">
-                {all.uniqueScheduled} {t('dash_sessions_label')} ({all.totalScheduled} {t('dash_slots_label')}) + {t('dash_shuttle_cost').toLowerCase()}
-              </p>
+            <div className="flex-1 min-w-0 space-y-2">
+              <p className="text-xs font-semibold uppercase tracking-wide text-slate-400">{t('dash_cycle_total_est')}</p>
+              <p className="font-mono text-2xl font-black text-slate-900">{fmtVND(all.totalPeriodCost ?? all.totalMonthlyCost)}</p>
+              {(() => {
+                const courtLabel = all.venues[0]?.period ? formatPeriodLabel(all.venues[0].period, i18n.language) : null
+                const shuttleLabel = sport?.hasEquipment && all.shuttleCost > 0 ? resolveShuttlePeriodLabel(settings, i18n.language) : null
+                const sessionsText = <>
+                  {all.uniqueScheduled} {t('dash_sessions_label')}
+                  {all.uniqueScheduled !== all.totalScheduled && <> ({all.totalScheduled} {t('dash_slots_label')})</>}
+                </>
+                // Same period — show one compact row
+                if (!shuttleLabel || courtLabel === shuttleLabel) {
+                  return (
+                    <div className="flex items-center gap-2 text-xs text-slate-500">
+                      {courtLabel && <span className="font-semibold text-slate-700">{courtLabel}</span>}
+                      {courtLabel && <span className="text-slate-300">·</span>}
+                      <span className="text-slate-600">{sessionsText}</span>
+                    </div>
+                  )
+                }
+                // Different periods — show two labeled rows
+                return (
+                  <div className="flex flex-col gap-1">
+                    <div className="flex items-center gap-2 text-xs text-slate-500">
+                      <span className="font-semibold text-slate-400 w-20 shrink-0">{t('dash_label_court_cycle')}</span>
+                      <span className="font-semibold text-slate-700">{courtLabel}</span>
+                      <span className="text-slate-300">·</span>
+                      <span className="text-slate-600">{sessionsText}</span>
+                    </div>
+                    <div className="flex items-center gap-2 text-xs text-slate-500">
+                      <span className="font-semibold text-slate-400 w-20 shrink-0">{t('dash_label_shuttle_cycle')}</span>
+                      <span className="font-semibold text-slate-700">{shuttleLabel}</span>
+                    </div>
+                  </div>
+                )
+              })()}
             </div>
 
             {/* Per-member fee */}
-            <div className="shrink-0 text-right">
+            <div className="shrink-0 text-right space-y-1">
               <p className="text-xs font-semibold uppercase tracking-wide text-slate-400">{t('dash_base_fee')}</p>
-              <p className="mt-1 font-mono text-2xl font-black text-lime-600">{fmtVND(baseFee)}</p>
-              <p className="mt-0.5 text-[10px] text-slate-400">/ {t('member')}</p>
+              <p className="font-mono text-2xl font-black text-lime-600">{fmtVND(baseFee)}</p>
+              <p className="text-[10px] text-slate-400">/ {t('member')}</p>
+              {all.venues[0]?.currentDeadline && (
+                <p className="text-[11px] font-semibold text-amber-600">
+                  {t('timeline_deadline')} {all.venues[0].currentDeadline.toLocaleDateString(i18n.language === 'vi' ? 'vi-VN' : 'en-US')}
+                </p>
+              )}
             </div>
           </div>
         </div>
@@ -415,7 +448,7 @@ function ForecastDashboard({ settings, slots, memberCount, committedCount, plan,
           sport={sport}
           showRunning={show('running_slots')}
           canEdit={canEdit}
-          nextAdjustedFee={nextAdjustedFee}
+          nextAdjustedFee={show('carryover_row') ? nextAdjustedFee : 0}
           projectedBalance={projectedBalance}
           projectedSurplus={projectedSurplus}
         />
@@ -457,7 +490,7 @@ function ForecastDashboard({ settings, slots, memberCount, committedCount, plan,
             <div className="space-y-4">
               {venueRows.map((v, i) => {
                 const dayLabel = v.weekday !== null && v.weekday !== undefined ? t(`wd_${v.weekday}`) : null
-                const cycleLabel = v.billing_cycle === 'quarter' ? t('dash_court_note_quarter') : t('dash_court_note_month')
+                const cycleLabel = cycleLabelShort(v.cycle_months || 1, i18n.language)
                 return (
                   <div key={v.weekday ?? i}>
                     <div className="flex items-center gap-2 mb-2">
@@ -588,8 +621,7 @@ function ForecastDashboard({ settings, slots, memberCount, committedCount, plan,
 
 function VenueCard({ venue, lang, t }) {
   const periodLabel = formatPeriodLabel(venue.period, lang)
-  const isQuarter = venue.billing_cycle === 'quarter'
-  const cycleNote = isQuarter ? t('dash_court_note_quarter') : t('dash_court_note_month')
+  const cycleNote = cycleLabelShort(venue.cycle_months || 1, lang)
   const dayLabel = venue.weekday !== null && venue.weekday !== undefined
     ? t(`wd_${venue.weekday}`)
     : null

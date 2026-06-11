@@ -1,4 +1,5 @@
 import { User } from 'lucide-react'
+import { useTranslation } from 'react-i18next'
 
 function SlotTip({ text, children }) {
   return (
@@ -13,6 +14,7 @@ function SlotTip({ text, children }) {
 }
 
 export function SlotGrid({ filledSlots, maxSlots, attendees }) {
+  const { t } = useTranslation()
   const slots = []
   attendees.forEach((r) => {
     const count = 1 + (r.guests || 0)
@@ -21,7 +23,8 @@ export function SlotGrid({ filledSlots, maxSlots, attendees }) {
         filled: true,
         isMain: i === 0,
         initial: r.name.trim().charAt(0).toUpperCase(),
-        tooltip: i === 0 ? r.name : `${r.name}'s guest`,
+        avatar_url: i === 0 ? (r.avatar_url || null) : null,
+        tooltip: i === 0 ? r.name : t('vote_guest_of', { name: r.name }),
       })
     }
   })
@@ -34,10 +37,12 @@ export function SlotGrid({ filledSlots, maxSlots, attendees }) {
       {slots.map((slot, i) =>
         slot.filled ? (
           <SlotTip key={i} text={slot.tooltip}>
-            <div className="aspect-square rounded-xl bg-slate-900 flex items-center justify-center cursor-default">
-              {slot.isMain
-                ? <span className="text-sm font-black text-lime-400">{slot.initial}</span>
-                : <User className="h-3.5 w-3.5 text-slate-500" strokeWidth={2} />}
+            <div className="aspect-square rounded-xl bg-slate-900 flex items-center justify-center cursor-default overflow-hidden">
+              {slot.avatar_url
+                ? <img src={slot.avatar_url} alt={slot.initial} className="w-full h-full object-cover" onError={(e) => { e.currentTarget.style.display = 'none' }} />
+                : slot.isMain
+                  ? <span className="text-sm font-black text-lime-400">{slot.initial}</span>
+                  : <User className="h-5 w-5 text-slate-500" strokeWidth={1.5} />}
             </div>
           </SlotTip>
         ) : (

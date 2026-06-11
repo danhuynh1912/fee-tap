@@ -61,8 +61,8 @@ export function ResultsPanel({ vote, attendees, responses, filledSlots, meId }) 
                 </p>
                 <p className="text-xs text-slate-500">
                   {r.guests > 0
-                    ? `+${r.guests} guest${r.guests > 1 ? 's' : ''} · ${total} slots total`
-                    : '1 slot'}
+                    ? t(r.guests > 1 ? 'vote_result_guest_line_plural' : 'vote_result_guest_line', { guests: r.guests, total })
+                    : t('vote_result_one_slot')}
                 </p>
               </div>
               {r.guests > 0 && <Badge tone="volt" icon={Users}>{total}</Badge>}

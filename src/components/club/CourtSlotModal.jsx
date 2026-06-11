@@ -7,7 +7,7 @@ import { Field, inputCls } from '../ui/Field'
 import { Segmented } from '../ui/Segmented'
 import { WeekdayPicker } from './WeekdayPicker'
 import { cx, num, fmtVND, fmtNum } from '../../lib/utils'
-import { computeSlot, formatPeriodLabel, monthName } from '../../engine/forecast'
+import { computeSlot, formatPeriodLabel, monthName, cycleLabelShort } from '../../engine/forecast'
 
 const EMPTY_SLOT = {
   name: '',
@@ -16,8 +16,8 @@ const EMPTY_SLOT = {
   price_per_hour: '',
   hours_per_session: 2,
   payment_mode: 'session',
-  billing_cycle: 'month',
-  quarter_start_month: 1,
+  cycle_months: 1,
+  cycle_start_month: 1,
   renewal_day: '',
   sort_order: 0,
 }
@@ -49,7 +49,8 @@ export function CourtSlotModal({ slot, onSave, onClose }) {
       price_per_hour: num(form.price_per_hour),
       hours_per_session: num(form.hours_per_session) || 2,
       renewal_day: form.renewal_day ? Math.min(31, Math.max(1, parseInt(form.renewal_day, 10))) : null,
-      quarter_start_month: num(form.quarter_start_month) || 1,
+      cycle_months: Math.max(1, parseInt(form.cycle_months, 10) || 1),
+      cycle_start_month: Math.max(1, Math.min(12, parseInt(form.cycle_start_month, 10) || 1)),
     }
 
     if (isEdit) {
@@ -78,7 +79,8 @@ export function CourtSlotModal({ slot, onSave, onClose }) {
     ...form,
     price_per_hour: num(form.price_per_hour),
     hours_per_session: num(form.hours_per_session) || 2,
-    quarter_start_month: num(form.quarter_start_month) || 1,
+    cycle_months: Math.max(1, parseInt(form.cycle_months, 10) || 1),
+    cycle_start_month: Math.max(1, Math.min(12, parseInt(form.cycle_start_month, 10) || 1)),
   }
   const preview = previewSlot.weekdays.length && num(form.price_per_hour) > 0
     ? computeSlot(previewSlot) : null
@@ -134,7 +136,7 @@ export function CourtSlotModal({ slot, onSave, onClose }) {
         {/* Ngày đánh */}
         <div>
           <p className="text-sm font-medium text-slate-700 mb-2">{t('slot_weekdays')}</p>
-          <WeekdayPicker value={form.weekdays} onChange={(v) => set('weekdays', v)} />
+          <WeekdayPicker value={form.weekdays} onChange={(v) => set('weekdays', v.slice(-1))} />
         </div>
 
         {/* Giá + giờ */}
@@ -158,17 +160,21 @@ export function CourtSlotModal({ slot, onSave, onClose }) {
             <Segmented value={form.payment_mode} onChange={(v) => set('payment_mode', v)}
               options={[{ value: 'session', label: t('court_mode_session') }, { value: 'cycle', label: t('court_mode_cycle') }]} />
           </Field>
-          <Field label={t('slot_billing_cycle')} icon={RefreshCw}>
-            <Segmented value={form.billing_cycle} onChange={(v) => set('billing_cycle', v)}
-              options={[{ value: 'month', label: t('month') }, { value: 'quarter', label: t('quarter') }]} />
+          <Field label={t('slot_billing_cycle')} icon={RefreshCw}
+            hint={cycleLabelShort(parseInt(form.cycle_months, 10) || 1, i18n.language)}>
+            <div className="relative">
+              <input type="number" min="1" max="12" className={cx(inputCls, 'pr-16 font-mono')}
+                value={form.cycle_months} onChange={(e) => set('cycle_months', e.target.value)} />
+              <span className="pointer-events-none absolute right-4 top-1/2 -translate-y-1/2 text-sm font-semibold text-slate-400">tháng</span>
+            </div>
           </Field>
         </div>
 
-        {/* Quarter start */}
-        {form.billing_cycle === 'quarter' && (
-          <Field label={t('slot_quarter_start')} icon={Calendar}>
-            <select className={inputCls} value={form.quarter_start_month}
-              onChange={(e) => set('quarter_start_month', e.target.value)}>
+        {/* Cycle start month — only when cycle > 1 month */}
+        {parseInt(form.cycle_months, 10) > 1 && (
+          <Field label={t('slot_cycle_start')} icon={Calendar}>
+            <select className={inputCls} value={form.cycle_start_month}
+              onChange={(e) => set('cycle_start_month', e.target.value)}>
               {Array.from({ length: 12 }, (_, i) => i + 1).map((m) => (
                 <option key={m} value={m}>{monthName(m, i18n.language)}</option>
               ))}

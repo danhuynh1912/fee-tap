@@ -1,6 +1,8 @@
+import { useTranslation } from 'react-i18next'
 import { cx } from '../../../lib/utils'
 
 export function SlotsHero({ filledSlots, maxSlots }) {
+  const { t } = useTranslation()
   const remaining = maxSlots - filledSlots
   const full = remaining === 0
   const pct = maxSlots > 0 ? filledSlots / maxSlots : 0
@@ -8,12 +10,12 @@ export function SlotsHero({ filledSlots, maxSlots }) {
   const isWarning  = !full && !isCritical && pct >= 0.5
 
   const accent = full
-    ? { text: 'text-slate-400', bg: 'bg-slate-50',  border: 'border-slate-200', label: 'FULL', sub: 'No slots remaining' }
+    ? { text: 'text-slate-400', bg: 'bg-slate-50',  border: 'border-slate-200', label: t('vote_filled'), sub: t('vote_slots_full_sub') }
     : isCritical
-    ? { text: 'text-red-500',   bg: 'bg-red-50',    border: 'border-red-100',   label: remaining, sub: `${remaining} slot${remaining > 1 ? 's' : ''} left — hurry!` }
+    ? { text: 'text-red-500',   bg: 'bg-red-50',    border: 'border-red-100',   label: remaining, sub: t(remaining > 1 ? 'vote_slots_critical_plural' : 'vote_slots_critical', { n: remaining }) }
     : isWarning
-    ? { text: 'text-amber-500', bg: 'bg-amber-50',  border: 'border-amber-100', label: remaining, sub: `${remaining} slot${remaining > 1 ? 's' : ''} remaining` }
-    : { text: 'text-lime-500',  bg: 'bg-lime-50',   border: 'border-lime-100',  label: remaining, sub: `${remaining} spot${remaining > 1 ? 's' : ''} open` }
+    ? { text: 'text-amber-500', bg: 'bg-amber-50',  border: 'border-amber-100', label: remaining, sub: t(remaining > 1 ? 'vote_slots_warning_plural' : 'vote_slots_warning', { n: remaining }) }
+    : { text: 'text-lime-500',  bg: 'bg-lime-50',   border: 'border-lime-100',  label: remaining, sub: t(remaining > 1 ? 'vote_slots_open_plural' : 'vote_slots_open', { n: remaining }) }
 
   return (
     <div className={cx('relative overflow-hidden rounded-2xl border p-5', accent.bg, accent.border)}>
@@ -41,7 +43,7 @@ export function SlotsHero({ filledSlots, maxSlots }) {
           <p className="font-black tabular-nums text-3xl text-slate-900">
             {filledSlots}<span className="text-lg font-medium text-slate-400">/{maxSlots}</span>
           </p>
-          <p className="mt-1 text-xs font-semibold uppercase tracking-wide text-slate-400">filled</p>
+          <p className="mt-1 text-xs font-semibold uppercase tracking-wide text-slate-400">{t('vote_slots_filled_label')}</p>
         </div>
       </div>
       <div className="relative mt-4 h-1.5 w-full overflow-hidden rounded-full bg-black/5">

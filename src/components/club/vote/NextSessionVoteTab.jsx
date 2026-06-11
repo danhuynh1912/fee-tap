@@ -15,7 +15,23 @@ export function NextSessionVoteTab({ club, settings, members, canEdit, user, toa
   const countdown = useCountdown(vote?.deadline)
   const closed = !!vote && (vote.is_closed || countdown.closed)
 
-  const attendees = useMemo(() => responses.filter((r) => r.attending), [responses])
+  const memberAvatarMap = useMemo(() => {
+    const map = Object.fromEntries(
+      (members || []).filter((m) => m.user_id).map((m) => [m.user_id, m.avatar_url])
+    )
+    // host may not be in club_members — add from club.owner
+    if (club?.owner_id && club?.owner?.avatar_url) {
+      map[club.owner_id] = club.owner.avatar_url
+    }
+    return map
+  }, [members, club])
+
+  const attendees = useMemo(() => responses.filter((r) => r.attending).map((r) => ({
+    ...r,
+    avatar_url: r.anonymous_user_id === user?.id
+      ? (user?.user_metadata?.avatar_url || null)
+      : (memberAvatarMap[r.anonymous_user_id] || null),
+  })), [responses, memberAvatarMap, user])
   const filledSlots = useMemo(
     () => attendees.reduce((sum, r) => sum + 1 + (r.guests || 0), 0),
     [attendees]

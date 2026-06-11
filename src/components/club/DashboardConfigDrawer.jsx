@@ -12,6 +12,7 @@ const SECTIONS = [
   { key: 'venue_cards',        labelKey: 'dash_section_venue_cards' },
   { key: 'cost_by_cycle',      labelKey: 'dash_section_cost_cycle' },
   { key: 'deficit_callout',    labelKey: 'dash_section_deficit',     adminOnly: true },
+  { key: 'carryover_row',      labelKey: 'dash_section_carryover',   adminOnly: true },
 ]
 
 export function DashboardConfigDrawer({ open, onClose, clubId, sections, venueCount = 1, onSaved, onLiveChange }) {
@@ -23,7 +24,7 @@ export function DashboardConfigDrawer({ open, onClose, clubId, sections, venueCo
     if (open) setLocal(sections || {})
   }, [open, sections])
 
-  const DEFAULT_SECTIONS = { running_slots: false, cost_by_cycle: false, deficit_callout: false }
+  const DEFAULT_SECTIONS = { running_slots: false, cost_by_cycle: false, deficit_callout: false, carryover_row: false }
   const isVisible = (key) => {
     if (key in local) return local[key] !== false
     return DEFAULT_SECTIONS[key] ?? true

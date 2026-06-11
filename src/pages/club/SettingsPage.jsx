@@ -3,6 +3,7 @@ import { useTranslation } from 'react-i18next'
 import {
   Settings2, Coins, Wallet, Check, Plus, Loader2, Users,
   TrendingUp, MapPin, Pencil, Trash2, GripVertical, Package, UserCheck,
+  RefreshCw, Calendar,
 } from 'lucide-react'
 import { Card } from '../../components/ui/Card'
 import { Button } from '../../components/ui/Button'
@@ -12,7 +13,7 @@ import { CourtSlotModal } from '../../components/club/CourtSlotModal'
 import { MembersPanel } from './MembersPanel'
 import { cx, num, fmtVND, fmtNum } from '../../lib/utils'
 import { supabase } from '../../lib/supabase'
-import { computeSlot, formatPeriodLabel } from '../../engine/forecast'
+import { computeSlot, formatPeriodLabel, cycleLabelShort, monthName, estimateShuttle, resolvePeriodForSlot } from '../../engine/forecast'
 
 // ─────────────────────────────────────────────────────────────────────────────
 // CourtSlotCard — one card in the slot list
@@ -38,7 +39,7 @@ function CourtSlotCard({ slot, canEdit, lang, onEdit, onDelete, t }) {
         <div className="mt-1 flex flex-wrap gap-x-3 gap-y-0.5 text-xs text-slate-500">
           <span>{wdLabels}</span>
           <span>{fmtVND(num(slot.price_per_hour))}/giờ · {slot.hours_per_session}h</span>
-          <span>{t(slot.billing_cycle === 'quarter' ? 'quarter' : 'month')}</span>
+          <span>{cycleLabelShort(slot.cycle_months || 1, lang)}</span>
           {slot.renewal_day && <span>{t('timeline_deadline')} {t('timeline_days_left', { n: `${slot.renewal_day}` })}</span>}
         </div>
         {result.totalSessions > 0 && (
@@ -64,7 +65,7 @@ function CourtSlotCard({ slot, canEdit, lang, onEdit, onDelete, t }) {
 // ─────────────────────────────────────────────────────────────────────────────
 // SettingsPage
 // ─────────────────────────────────────────────────────────────────────────────
-export function SettingsPage({ club, settings, slots: initialSlots, sport, members, plan, pollTally, hostName, hostAvatar, currentUserId, canEdit, onSaved, onChanged, onHitLimit, toast }) {
+export function SettingsPage({ club, settings, slots: initialSlots, sport, members, plan, pollTally, hostName, hostAvatar, currentUserId, canEdit, logs, fundTxns, onSaved, onChanged, onHitLimit, toast }) {
   const { t, i18n } = useTranslation()
 
   // ── global form (shuttle + fund + guest fees + fee split) ──
@@ -74,6 +75,8 @@ export function SettingsPage({ club, settings, slots: initialSlots, sport, membe
     current_fund: settings.current_fund ?? 0,
     shuttle_mode: settings.shuttle_mode ?? 'estimate',
     shuttle_stock: settings.shuttle_stock ?? 0,
+    shuttle_cycle_months: settings.shuttle_cycle_months ?? 1,
+    shuttle_cycle_start_month: settings.shuttle_cycle_start_month ?? 1,
     fee_split_mode: settings.fee_split_mode ?? 'committed_only',
     guest_fee_mode: settings.guest_fee_mode ?? 'split_all',
     guest_fee_male: settings.guest_fee_male ?? 0,
@@ -98,6 +101,26 @@ export function SettingsPage({ club, settings, slots: initialSlots, sport, membe
   const [editingSlot, setEditingSlot] = useState(null) // null=closed, {}=new, slot=edit
   const [slotBusy, setSlotBusy] = useState(false)
 
+  // ── fund setup (first-time mid-cycle) ───────────────────
+  const [fundSetupMode, setFundSetupMode] = useState(null) // null | 'from_now' | 'from_start'
+
+  const isFirstSetup = canEdit && Array.isArray(fundTxns) && fundTxns.length === 0
+
+  const actualSpent = useMemo(() => {
+    if (!isFirstSetup || !initialSlots?.length) return 0
+    const now = new Date()
+    const shuttlePerSession = num(form.estimated_shuttlecocks) * num(form.price_per_box) / 12
+    return initialSlots.reduce((total, slot) => {
+      const { happened, courtCost } = computeSlot(slot, now)
+      if (slot.payment_mode === 'cycle') {
+        // cycle mode: full period court cost is due regardless of sessions played
+        return total + courtCost + happened * shuttlePerSession
+      }
+      const courtPerSession = num(slot.price_per_hour) * num(slot.hours_per_session)
+      return total + happened * (courtPerSession + shuttlePerSession)
+    }, 0)
+  }, [isFirstSetup, initialSlots, form.price_per_box, form.estimated_shuttlecocks])
+
   const cardTitleCls = 'flex items-center gap-2.5 text-base font-bold text-slate-900'
 
   // ── save global settings ────────────────────────────────
@@ -114,6 +137,8 @@ export function SettingsPage({ club, settings, slots: initialSlots, sport, membe
         current_fund: num(form.current_fund),
         shuttle_mode: form.shuttle_mode,
         shuttle_stock: num(form.shuttle_stock),
+        shuttle_cycle_months: Math.max(1, parseInt(form.shuttle_cycle_months, 10) || 1),
+        shuttle_cycle_start_month: Math.max(1, Math.min(12, parseInt(form.shuttle_cycle_start_month, 10) || 1)),
         fee_split_mode: form.fee_split_mode,
         guest_fee_mode: form.guest_fee_mode,
         guest_fee_male: num(form.guest_fee_male),
@@ -121,16 +146,32 @@ export function SettingsPage({ club, settings, slots: initialSlots, sport, membe
         // backward-compat legacy columns — keep DB happy
         court_price_per_hour: firstSlot ? num(firstSlot.price_per_hour) : num(settings.court_price_per_hour) || 0,
         hours_per_session: firstSlot ? num(firstSlot.hours_per_session) : num(settings.hours_per_session) || 2,
-        billing_cycle: firstSlot?.billing_cycle ?? settings.billing_cycle ?? 'month',
         court_payment_mode: firstSlot?.payment_mode ?? settings.court_payment_mode ?? 'session',
         play_weekdays: firstSlot?.weekdays ?? settings.play_weekdays ?? [],
         sessions_per_week: slots.reduce((sum, s) => sum + (s.weekdays?.length || 0), 0) || settings.sessions_per_week || 0,
       }
+      // Apply fund setup (first-time mid-cycle) before saving fund balance
+      if (isFirstSetup && fundSetupMode) {
+        if (fundSetupMode === 'from_now' && actualSpent > 0) {
+          payload.current_fund = num(form.current_fund) + actualSpent
+          await supabase.from('fund_transactions').insert({
+            club_id: club.id, amount: actualSpent,
+            note: t('fund_setup_deduct_note'), type: 'manual',
+          })
+        } else {
+          // from_start: just insert a zero-amount marker so toggle disappears
+          await supabase.from('fund_transactions').insert({
+            club_id: club.id, amount: 0,
+            note: t('fund_setup_from_start'), type: 'manual',
+          })
+        }
+      }
+
       const { error } = await supabase.from('club_settings').upsert(payload, { onConflict: 'club_id' })
       if (error) throw error
       const oldFund = num(settings.current_fund)
       const newFund = num(form.current_fund)
-      if (newFund !== oldFund) {
+      if (!fundSetupMode && newFund !== oldFund) {
         await supabase.from('fund_transactions').insert({ club_id: club.id, amount: newFund - oldFund, note: t('fund_manual_adjust'), type: 'manual' })
       }
       toast(t('set_saved'))
@@ -231,14 +272,14 @@ export function SettingsPage({ club, settings, slots: initialSlots, sport, membe
       const r = computeSlot(slot)
       return sum + r.courtCost
     }, 0)
-    const shuttleSessions = slots.reduce((sum, slot) => {
-      const r = computeSlot(slot)
-      return sum + r.totalSessions
-    }, 0)
-
     let shuttleCost = 0
     let shuttleLabel = null
     if (sport.hasEquipment) {
+      const { totalSessions: shuttleSessions } = estimateShuttle(slots, {
+        ...form,
+        shuttle_cycle_months: parseInt(form.shuttle_cycle_months, 10) || 1,
+        shuttle_cycle_start_month: parseInt(form.shuttle_cycle_start_month, 10) || 1,
+      })
       if (form.shuttle_mode === 'inventory') {
         const boxesLeft = num(form.shuttle_stock)
         const tubesPerSession = num(form.estimated_shuttlecocks) || 6
@@ -328,20 +369,43 @@ export function SettingsPage({ club, settings, slots: initialSlots, sport, membe
                   </p>
 
                   {form.shuttle_mode === 'estimate' ? (
-                    <div className="grid gap-4 sm:grid-cols-2 animate-fade-in">
-                      <Field label={t('set_box_price')} icon={Coins} hint={t('set_box_hint')}>
-                        <div className="relative">
-                          <input type="number" min="0" className={cx(inputCls, 'pr-10 font-mono')}
-                            value={form.price_per_box ?? ''} disabled={!canEdit}
-                            onChange={(e) => setForm((f) => ({ ...f, price_per_box: e.target.value }))} />
-                          <span className="pointer-events-none absolute right-4 top-1/2 -translate-y-1/2 text-sm font-semibold text-slate-400">₫</span>
-                        </div>
-                      </Field>
-                      <Field label={t('set_shuttle')} icon={Package} hint={t('set_shuttle_hint')}>
-                        <input type="number" min="0" step="0.5" className={cx(inputCls, 'font-mono')}
-                          value={form.estimated_shuttlecocks ?? ''} disabled={!canEdit}
-                          onChange={(e) => setForm((f) => ({ ...f, estimated_shuttlecocks: e.target.value }))} />
-                      </Field>
+                    <div className="space-y-4 animate-fade-in">
+                      <div className="grid gap-4 sm:grid-cols-2">
+                        <Field label={t('set_box_price')} icon={Coins} hint={t('set_box_hint')}>
+                          <div className="relative">
+                            <input type="number" min="0" className={cx(inputCls, 'pr-10 font-mono')}
+                              value={form.price_per_box ?? ''} disabled={!canEdit}
+                              onChange={(e) => setForm((f) => ({ ...f, price_per_box: e.target.value }))} />
+                            <span className="pointer-events-none absolute right-4 top-1/2 -translate-y-1/2 text-sm font-semibold text-slate-400">₫</span>
+                          </div>
+                        </Field>
+                        <Field label={t('set_shuttle')} icon={Package} hint={t('set_shuttle_hint')}>
+                          <input type="number" min="0" step="0.5" className={cx(inputCls, 'font-mono')}
+                            value={form.estimated_shuttlecocks ?? ''} disabled={!canEdit}
+                            onChange={(e) => setForm((f) => ({ ...f, estimated_shuttlecocks: e.target.value }))} />
+                        </Field>
+                      </div>
+                      <div className="grid gap-4 sm:grid-cols-2">
+                        <Field label={t('shuttle_cycle')} icon={RefreshCw}
+                          hint={cycleLabelShort(parseInt(form.shuttle_cycle_months, 10) || 1, i18n.language)}>
+                          <div className="relative">
+                            <input type="number" min="1" max="12" className={cx(inputCls, 'pr-16 font-mono')}
+                              value={form.shuttle_cycle_months} disabled={!canEdit}
+                              onChange={(e) => setForm((f) => ({ ...f, shuttle_cycle_months: e.target.value }))} />
+                            <span className="pointer-events-none absolute right-4 top-1/2 -translate-y-1/2 text-sm font-semibold text-slate-400">tháng</span>
+                          </div>
+                        </Field>
+                        {parseInt(form.shuttle_cycle_months, 10) > 1 && (
+                          <Field label={t('shuttle_cycle_start')} icon={Calendar}>
+                            <select className={inputCls} value={form.shuttle_cycle_start_month} disabled={!canEdit}
+                              onChange={(e) => setForm((f) => ({ ...f, shuttle_cycle_start_month: e.target.value }))}>
+                              {Array.from({ length: 12 }, (_, i) => i + 1).map((m) => (
+                                <option key={m} value={m}>{monthName(m, i18n.language)}</option>
+                              ))}
+                            </select>
+                          </Field>
+                        )}
+                      </div>
                     </div>
                   ) : (
                     <div className="animate-fade-in space-y-3">
@@ -438,6 +502,45 @@ export function SettingsPage({ club, settings, slots: initialSlots, sport, membe
                         {t('cancel')}
                       </Button>
                     </div>
+                  </div>
+                )}
+
+                {/* First-time mid-cycle fund setup */}
+                {isFirstSetup && slots.length > 0 && num(form.price_per_box) > 0 && num(form.estimated_shuttlecocks) > 0 && (
+                  <div className="mt-3 rounded-2xl border border-amber-200 bg-amber-50 p-4 space-y-3 animate-fade-in">
+                    <p className="text-xs font-bold text-amber-800">{t('fund_setup_title')}</p>
+                    {actualSpent > 0 && (
+                      <p className="text-xs text-amber-700">{t('fund_setup_hint', { amount: fmtVND(actualSpent) })}</p>
+                    )}
+                    <div className="space-y-2">
+                      {[
+                        { val: 'from_now', labelKey: 'fund_setup_from_now', hintKey: 'fund_setup_from_now_hint' },
+                        { val: 'from_start', labelKey: 'fund_setup_from_start', hintKey: 'fund_setup_from_start_hint' },
+                      ].map(({ val, labelKey, hintKey }) => (
+                        <button
+                          key={val}
+                          onClick={() => setFundSetupMode(val)}
+                          className={cx(
+                            'w-full flex items-start gap-3 rounded-xl border px-3 py-2.5 text-left transition active:scale-[0.98]',
+                            fundSetupMode === val
+                              ? 'border-amber-400 bg-white'
+                              : 'border-amber-200 bg-white/60 hover:border-amber-300',
+                          )}
+                        >
+                          <span className={cx(
+                            'mt-0.5 h-4 w-4 shrink-0 rounded-full border-2 flex items-center justify-center transition',
+                            fundSetupMode === val ? 'border-amber-500 bg-amber-500' : 'border-amber-300',
+                          )}>
+                            {fundSetupMode === val && <span className="h-1.5 w-1.5 rounded-full bg-white" />}
+                          </span>
+                          <div>
+                            <p className="text-xs font-semibold text-slate-800">{t(labelKey)}</p>
+                            <p className="text-[11px] text-slate-500 mt-0.5">{t(hintKey)}</p>
+                          </div>
+                        </button>
+                      ))}
+                    </div>
+
                   </div>
                 )}
               </div>

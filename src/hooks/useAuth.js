@@ -12,8 +12,15 @@ export function useAuth() {
   // ── auth session ────────────────────────────────────────────────
   useEffect(() => {
     if (!isConfigured) { setAuthReady(true); return }
-    supabase.auth.getSession().then(({ data }) => {
-      setSession(data.session)
+    supabase.auth.getSession().then(async ({ data }) => {
+      const s = data.session
+      // If access token is expired (or about to expire in <60s), refresh immediately
+      if (s && s.expires_at && s.expires_at * 1000 < Date.now() + 60_000) {
+        const { data: refreshed } = await supabase.auth.refreshSession()
+        setSession(refreshed.session)
+      } else {
+        setSession(s)
+      }
       setAuthReady(true)
     })
     const { data: sub } = supabase.auth.onAuthStateChange((_e, incoming) => {
@@ -126,7 +133,9 @@ export function useAuth() {
     if (error) throw error
     const { data: clubData } = await supabase.from('clubs').select('*').eq('id', clubId).single()
     if (clubData) {
-      const newClub = { ...clubData, userRole: 'member' }
+      const { data: ownerProfile } = await supabase
+        .from('profiles').select('id, full_name, avatar_url').eq('id', clubData.owner_id).maybeSingle()
+      const newClub = { ...clubData, userRole: 'member', owner: ownerProfile || null }
       setMyClubs((prev) => prev.some((c) => c.id === clubId) ? prev : [...prev, newClub])
     }
   }

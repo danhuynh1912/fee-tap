@@ -206,7 +206,7 @@ export function VotePanel({ vote, closed, filledSlots, myResponse, userId, userN
         <p className="text-sm text-slate-600">{t('vote_no_identity')}</p>
         <input autoFocus className={cx(inputCls, 'mt-4')} placeholder={t('vote_name_ph')}
           value={guestName} onChange={(e) => setGuestName(e.target.value)} />
-        <Button variant="volt" className="mt-3 w-full" onClick={() => setNameModal(false)}>OK</Button>
+        <Button variant="volt" className="mt-3 w-full" onClick={() => setNameModal(false)}>{t('fund_topup_submit')}</Button>
       </Modal>
     </div>
   )

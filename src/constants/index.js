@@ -1,8 +1,6 @@
 export const FREE_MEMBER_LIMIT = 15
 export const BALLS_PER_BOX = 12
 export const PRO_PRICE_VND = 99000
-export const WEEKS_IN = { month: 4, quarter: 12 }
-
 export const SPORT_CONFIGS = {
   badminton:   { id: 'badminton',   labelKey: 'sport_badminton',   emoji: '🏸', hasEquipment: true },
   football:    { id: 'football',    labelKey: 'sport_football',    emoji: '⚽', hasEquipment: false },
@@ -18,8 +16,8 @@ export const DEFAULT_SESSION_CONFIG = {
   court_price_per_hour: '',
   hours_per_session: '',
   court_payment_mode: 'session',
-  billing_cycle: 'month',
-  quarter_start_month: 1,
+  cycle_months: 1,
+  cycle_start_month: 1,
 }
 
 export const DEFAULT_SETTINGS = {
@@ -29,8 +27,8 @@ export const DEFAULT_SETTINGS = {
   hours_per_session: '',
   sessions_per_week: '',
   play_weekdays: [],
-  quarter_start_month: Math.floor(new Date().getMonth() / 3) * 3 + 1,
-  billing_cycle: 'month',
+  cycle_months: 1,
+  cycle_start_month: 1,
   price_per_box: '',
   estimated_shuttlecocks: '',
   current_fund: 0,
