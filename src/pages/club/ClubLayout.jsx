@@ -2,7 +2,7 @@ import { useState } from 'react'
 import { useTranslation } from 'react-i18next'
 import {
   LayoutDashboard, Settings2, ClipboardList, History,
-  Building2, Crown, Zap, Eye, Menu, Link as LinkIcon, Loader2,
+  Building2, Crown, Zap, Eye, Menu, Link as LinkIcon, Loader2, LogOut,
 } from 'lucide-react'
 import { Badge } from '../../components/ui/Badge'
 import { Button } from '../../components/ui/Button'
@@ -25,7 +25,7 @@ function activeTab(path, clubId) {
   return 'dashboard'
 }
 
-export function ClubLayout({ session, club, setClub, path, toast }) {
+export function ClubLayout({ session, club, setClub, path, toast, onSignOut }) {
   const { t } = useTranslation()
   const role = club.userRole
   const isOwner = role === 'host'
@@ -153,6 +153,18 @@ export function ClubLayout({ session, club, setClub, path, toast }) {
             )}
           </div>
         </div>
+
+        {onSignOut && (
+          <div className="p-3 border-t border-slate-100 md:hidden">
+            <button
+              onClick={onSignOut}
+              className="w-full flex items-center gap-3 rounded-2xl bg-slate-900 px-4 py-3 text-sm font-semibold text-white hover:bg-slate-800 transition active:scale-[0.98]"
+            >
+              <LogOut className="h-4 w-4 shrink-0 text-lime-400" />
+              {t('signOut')}
+            </button>
+          </div>
+        )}
       </aside>
 
       {/* Main content */}

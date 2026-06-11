@@ -271,13 +271,13 @@ function ForecastDashboard({ settings, slots, memberCount, committedCount, plan,
           <p className={cx('mt-1 font-mono text-4xl sm:text-5xl font-black tabular-nums leading-none', (all.fund - totalActualSpent) >= 0 ? 'text-lime-400' : 'text-red-400')}>{fmtVND(all.fund - totalActualSpent)}</p>
         </div>
 
-        <div className="relative mt-5 flex flex-wrap gap-2 sm:gap-3">
-          <div className="flex-1 rounded-2xl bg-slate-800/60 px-3 py-3 sm:px-4">
+        <div className="relative mt-5 grid grid-cols-2 gap-2 sm:flex sm:flex-wrap sm:gap-3">
+          <div className="sm:flex-1 rounded-2xl bg-slate-800/60 px-3 py-3 sm:px-4">
             <p className="text-[10px] font-semibold uppercase tracking-wide text-slate-500">{t('dash_total_collected')}</p>
             <p className="mt-1.5 font-mono text-sm sm:text-base font-black text-yellow-400">{fmtVND(totalCollected)}</p>
             <p className="mt-0.5 text-[10px] text-slate-500">{txCount} {t('dash_collections')}</p>
           </div>
-          <div className="flex-1 rounded-2xl bg-slate-800/60 px-3 py-3 sm:px-4">
+          <div className="sm:flex-1 rounded-2xl bg-slate-800/60 px-3 py-3 sm:px-4">
             <div className="flex items-center justify-between">
               <p className="text-[10px] font-semibold uppercase tracking-wide text-slate-500">{t('dash_actual_spent')}</p>
               <button
@@ -296,14 +296,14 @@ function ForecastDashboard({ settings, slots, memberCount, committedCount, plan,
             </p>
           </div>
           {show('remaining_forecast') && (
-            <div className="flex-1 rounded-2xl bg-slate-800/60 px-3 py-3 sm:px-4">
+            <div className="sm:flex-1 rounded-2xl bg-slate-800/60 px-3 py-3 sm:px-4">
               <p className="text-[10px] font-semibold uppercase tracking-wide text-slate-500">{t('dash_remaining_forecast')}</p>
               <p className="mt-1.5 font-mono text-sm sm:text-base font-black text-slate-300">~{fmtVND(remainingForecast)}</p>
               <p className="mt-0.5 text-[10px] text-slate-500">{all.uniqueScheduled - all.uniqueHappened} {t('dash_sessions_future')}</p>
             </div>
           )}
           {show('end_of_period') && canEdit && (
-            <div className={cx('flex-1 rounded-2xl px-3 py-3 sm:px-4', projectedSurplus ? 'bg-lime-400/15' : 'bg-red-500/20')}>
+            <div className={cx('sm:flex-1 rounded-2xl px-3 py-3 sm:px-4', projectedSurplus ? 'bg-lime-400/15' : 'bg-red-500/20')}>
               <p className="text-[10px] font-semibold uppercase tracking-wide text-slate-500">{t('dash_end_of_period')}</p>
               <p className={cx('mt-1.5 font-mono text-sm sm:text-base font-black', projectedSurplus ? 'text-lime-400' : 'text-red-400')}>
                 {projectedSurplus ? '+' : '−'}{fmtVND(Math.abs(projectedBalance))}
@@ -330,58 +330,57 @@ function ForecastDashboard({ settings, slots, memberCount, committedCount, plan,
 
       {/* Base fee + total cost breakdown — always visible */}
       {memberCount > 0 && (
-        <div className="rounded-3xl border border-slate-100 bg-white p-5">
-          <div className="flex flex-wrap items-center gap-4">
-            {/* Total cycle cost */}
-            <div className="flex-1 min-w-0 space-y-2">
-              <p className="text-xs font-semibold uppercase tracking-wide text-slate-400">{t('dash_cycle_total_est')}</p>
-              <p className="font-mono text-2xl font-black text-slate-900">{fmtVND(all.totalPeriodCost ?? all.totalMonthlyCost)}</p>
-              {(() => {
-                const courtLabel = all.venues[0]?.period ? formatPeriodLabel(all.venues[0].period, i18n.language) : null
-                const shuttleLabel = sport?.hasEquipment && all.shuttleCost > 0 ? resolveShuttlePeriodLabel(settings, i18n.language) : null
-                const sessionsText = <>
-                  {all.uniqueScheduled} {t('dash_sessions_label')}
-                  {all.uniqueScheduled !== all.totalScheduled && <> ({all.totalScheduled} {t('dash_slots_label')})</>}
-                </>
-                // Same period — show one compact row
-                if (!shuttleLabel || courtLabel === shuttleLabel) {
-                  return (
-                    <div className="flex items-center gap-2 text-xs text-slate-500">
-                      {courtLabel && <span className="font-semibold text-slate-700">{courtLabel}</span>}
-                      {courtLabel && <span className="text-slate-300">·</span>}
-                      <span className="text-slate-600">{sessionsText}</span>
-                    </div>
-                  )
-                }
-                // Different periods — show two labeled rows
+        <div className="rounded-3xl border border-slate-100 bg-white p-5 space-y-4">
+          {/* Row 1: total cost + period meta */}
+          <div>
+            <p className="text-xs font-semibold uppercase tracking-wide text-slate-400 mb-1">{t('dash_cycle_total_est')}</p>
+            <p className="font-mono text-3xl font-black text-slate-900">{fmtVND(all.totalPeriodCost ?? all.totalMonthlyCost)}</p>
+            {(() => {
+              const courtLabel = all.venues[0]?.period ? formatPeriodLabel(all.venues[0].period, i18n.language) : null
+              const shuttleLabel = sport?.hasEquipment && all.shuttleCost > 0 ? resolveShuttlePeriodLabel(settings, i18n.language) : null
+              const sessionsText = <>
+                {all.uniqueScheduled} {t('dash_sessions_label')}
+                {all.uniqueScheduled !== all.totalScheduled && <> ({all.totalScheduled} {t('dash_slots_label')})</>}
+              </>
+              if (!shuttleLabel || courtLabel === shuttleLabel) {
                 return (
-                  <div className="flex flex-col gap-1">
-                    <div className="flex items-center gap-2 text-xs text-slate-500">
-                      <span className="font-semibold text-slate-400 w-20 shrink-0">{t('dash_label_court_cycle')}</span>
-                      <span className="font-semibold text-slate-700">{courtLabel}</span>
-                      <span className="text-slate-300">·</span>
-                      <span className="text-slate-600">{sessionsText}</span>
-                    </div>
-                    <div className="flex items-center gap-2 text-xs text-slate-500">
-                      <span className="font-semibold text-slate-400 w-20 shrink-0">{t('dash_label_shuttle_cycle')}</span>
-                      <span className="font-semibold text-slate-700">{shuttleLabel}</span>
-                    </div>
+                  <div className="mt-1.5 flex flex-wrap items-center gap-x-2 gap-y-0.5 text-xs text-slate-500">
+                    {courtLabel && <span className="font-semibold text-slate-700">{courtLabel}</span>}
+                    {courtLabel && <span className="text-slate-300">·</span>}
+                    <span>{sessionsText}</span>
                   </div>
                 )
-              })()}
-            </div>
+              }
+              return (
+                <div className="mt-1.5 flex flex-col gap-1">
+                  <div className="flex flex-wrap items-center gap-x-2 text-xs text-slate-500">
+                    <span className="font-semibold text-slate-400 w-20 shrink-0">{t('dash_label_court_cycle')}</span>
+                    <span className="font-semibold text-slate-700">{courtLabel}</span>
+                    <span className="text-slate-300">·</span>
+                    <span>{sessionsText}</span>
+                  </div>
+                  <div className="flex items-center gap-x-2 text-xs text-slate-500">
+                    <span className="font-semibold text-slate-400 w-20 shrink-0">{t('dash_label_shuttle_cycle')}</span>
+                    <span className="font-semibold text-slate-700">{shuttleLabel}</span>
+                  </div>
+                </div>
+              )
+            })()}
+          </div>
 
-            {/* Per-member fee */}
-            <div className="shrink-0 text-right space-y-1">
-              <p className="text-xs font-semibold uppercase tracking-wide text-slate-400">{t('dash_base_fee')}</p>
+          {/* Row 2: per-member fee + deadline */}
+          <div className="flex items-end justify-between gap-3 pt-3 border-t border-slate-100">
+            <div>
+              <p className="text-xs font-semibold uppercase tracking-wide text-slate-400 mb-1">{t('dash_base_fee')}</p>
               <p className="font-mono text-2xl font-black text-lime-600">{fmtVND(baseFee)}</p>
-              <p className="text-[10px] text-slate-400">/ {t('member')}</p>
-              {all.venues[0]?.currentDeadline && (
-                <p className="text-[11px] font-semibold text-amber-600">
-                  {t('timeline_deadline')} {all.venues[0].currentDeadline.toLocaleDateString(i18n.language === 'vi' ? 'vi-VN' : 'en-US')}
-                </p>
-              )}
+              <p className="text-[10px] text-slate-400 mt-0.5">/ {t('member')}</p>
             </div>
+            {all.venues[0]?.currentDeadline && (
+              <p className="text-[11px] font-semibold text-amber-600 text-right shrink-0">
+                {t('timeline_deadline')}<br />
+                {all.venues[0].currentDeadline.toLocaleDateString(i18n.language === 'vi' ? 'vi-VN' : 'en-US')}
+              </p>
+            )}
           </div>
         </div>
       )}

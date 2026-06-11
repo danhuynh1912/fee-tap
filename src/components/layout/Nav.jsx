@@ -15,7 +15,7 @@ function Logo({ onClick }) {
           <circle cx="23" cy="11" r="2" fill="#ccff00" />
         </svg>
       </span>
-      <span className="text-lg font-extrabold tracking-tight text-slate-900">
+      <span className="hidden sm:inline text-lg font-extrabold tracking-tight text-slate-900">
         SPO<span className="text-lime-500">FUND</span>
       </span>
     </button>
@@ -130,7 +130,7 @@ export function Nav({ session, myClubs, activeClub, onSignOut, onSelectClub }) {
           {session && (
             <button
               onClick={() => setConfirmSignOut(true)}
-              className="inline-flex items-center gap-2 rounded-full border border-slate-200 bg-white/70 py-1 pl-1 pr-3 text-sm font-medium text-slate-600 transition hover:border-slate-300"
+              className="hidden sm:inline-flex items-center gap-2 rounded-full border border-slate-200 bg-white/70 py-1 pl-1 pr-3 text-sm font-medium text-slate-600 transition hover:border-slate-300"
               title={t('signOut')}
             >
               <img

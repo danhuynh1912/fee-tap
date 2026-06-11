@@ -129,6 +129,7 @@ export default function App() {
           setClub={updateClub}
           path={path}
           toast={toast}
+          onSignOut={signOut}
         />
       )
     } else {
