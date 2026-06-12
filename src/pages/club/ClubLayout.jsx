@@ -1,4 +1,4 @@
-import { useState } from 'react'
+import { useState, useMemo } from 'react'
 import { useTranslation } from 'react-i18next'
 import {
   LayoutDashboard, Settings2, ClipboardList, History,
@@ -33,8 +33,13 @@ export function ClubLayout({ session, club, setClub, path, toast, onSignOut }) {
   const [upsell, setUpsell] = useState(false)
   const [sidebarOpen, setSidebarOpen] = useState(false)
 
-  const { settings, setSettings, slots, setSlots, members, logs, fundTxns, pollTally, loading, reload } = useClubData(club.id)
+  const { settings, setSettings, slots, setSlots, members, logs, fundTxns, collections, memberPayments, payosConfig, pollTally, loading, reload } = useClubData(club.id)
 
+  // Derive fund balance from append-only ledger (SSOT) instead of mutable current_fund field
+  const fundBalance = fundTxns.reduce((s, tx) => s + (Number(tx.amount) || 0), 0)
+  const effectiveSettings = settings ? { ...settings, current_fund: fundBalance } : settings
+
+  const currentUserId = session?.user?.id || null
   const canEdit = isOwner && !previewMember
   const plan = club.plan || 'free'
   const hostName = isOwner
@@ -43,7 +48,31 @@ export function ClubLayout({ session, club, setClub, path, toast, onSignOut }) {
   const hostAvatar = isOwner
     ? (session?.user?.user_metadata?.avatar_url || null)
     : (club.owner?.avatar_url || null)
-  const currentUserId = session?.user?.id || null
+
+  // Single source of truth for club members — deduplicated, host synthetic entry if not in club_members
+  const effectiveMembers = useMemo(() => {
+    const seen = new Set()
+    const deduped = members.filter((m) => {
+      if (seen.has(m.id)) return false
+      seen.add(m.id)
+      return true
+    })
+    const hostInMembers = deduped.some((m) => m.user_id === club.owner_id)
+    if (!hostInMembers && hostName && club.owner_id) {
+      deduped.unshift({
+        id: `host-${club.owner_id}`,
+        club_id: club.id,
+        user_id: club.owner_id,
+        name: hostName,
+        avatar_url: hostAvatar || null,
+        _synthetic: true,
+      })
+    }
+    return deduped
+  }, [members, club.owner_id, club.id, hostName, hostAvatar])
+
+  const currentMember = effectiveMembers.find((m) => m.user_id === currentUserId)
+  const currentMemberId = currentMember?.id || null
   const sport = SPORT_CONFIGS[club.sport_type] || SPORT_CONFIGS.badminton
   const tab = activeTab(path, club.id)
 
@@ -63,7 +92,7 @@ export function ClubLayout({ session, club, setClub, path, toast, onSignOut }) {
     { id: 'fund', label: t('nav_fund'), icon: History, path: `/club/${club.id}/fund` },
   ]
 
-  if (loading || !settings) {
+  if (loading || !effectiveSettings) {
     return (
       <div className="grid min-h-[70vh] place-items-center">
         <div className="flex items-center gap-3 text-slate-400">
@@ -198,8 +227,10 @@ export function ClubLayout({ session, club, setClub, path, toast, onSignOut }) {
 
           {tab === 'dashboard' && (
             <DashboardPage
-              club={club} settings={settings} slots={slots} members={members} logs={logs}
-              fundTxns={fundTxns} pollTally={pollTally} plan={plan} sport={sport}
+              club={club} settings={effectiveSettings} slots={slots} members={effectiveMembers} logs={logs}
+              fundTxns={fundTxns} collections={collections} memberPayments={memberPayments}
+              currentMemberId={currentMemberId} payosConfigured={!!payosConfig}
+              pollTally={pollTally} plan={plan} sport={sport}
               hostName={hostName} hostAvatar={hostAvatar} currentUserId={currentUserId}
               canEdit={canEdit} onUnlock={() => setUpsell(true)} onChanged={reload} toast={toast}
             />
@@ -207,7 +238,8 @@ export function ClubLayout({ session, club, setClub, path, toast, onSignOut }) {
 
           {tab === 'settings' && (
             <SettingsPage
-              club={club} settings={settings} slots={slots} sport={sport} members={members}
+              club={club} settings={effectiveSettings} slots={slots} sport={sport} members={effectiveMembers}
+              payosConfig={payosConfig}
               plan={plan} pollTally={pollTally} canEdit={canEdit}
               hostName={hostName} hostAvatar={hostAvatar} currentUserId={currentUserId}
               logs={logs} fundTxns={fundTxns}
@@ -218,14 +250,14 @@ export function ClubLayout({ session, club, setClub, path, toast, onSignOut }) {
 
           {tab === 'log' && (
             <SessionLogPage
-              club={club} logs={logs} settings={settings} slots={slots} members={members} sport={sport}
+              club={club} logs={logs} settings={settings} slots={slots} members={effectiveMembers} sport={sport}
               canEdit={canEdit} onChanged={reload} toast={toast} user={session?.user}
             />
           )}
 
           {tab === 'fund' && (
             <FundPage
-              club={club} fundTxns={fundTxns} settings={settings}
+              club={club} fundTxns={fundTxns} settings={effectiveSettings} members={effectiveMembers}
               canEdit={canEdit} onTopUp={reload} toast={toast}
             />
           )}

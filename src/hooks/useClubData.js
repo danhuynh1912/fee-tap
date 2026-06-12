@@ -9,18 +9,26 @@ export function useClubData(clubId) {
   const [members, setMembers] = useState([])
   const [logs, setLogs] = useState([])
   const [fundTxns, setFundTxns] = useState([])
+  const [collections, setCollections] = useState([])
+  const [memberPayments, setMemberPayments] = useState([])
+  const [payosConfig, setPayosConfig] = useState(null)
   const [pollTally, setPollTally] = useState(null)
   const [loading, setLoading] = useState(true)
 
   const loadAll = useCallback(async () => {
     if (!clubId) return
-    const [{ data: s }, { data: sl }, { data: m }, { data: lg }, { data: ft }] = await Promise.all([
-      supabase.from('club_settings').select('*').eq('club_id', clubId).maybeSingle(),
-      supabase.from('court_slots').select('*').eq('club_id', clubId).order('sort_order'),
-      supabase.from('club_members').select('*').eq('club_id', clubId).order('created_at', { ascending: true }),
-      supabase.from('session_logs').select('*').eq('club_id', clubId).order('played_on', { ascending: false }),
-      supabase.from('fund_transactions').select('*').eq('club_id', clubId).order('created_at', { ascending: false }),
-    ])
+    const [{ data: s }, { data: sl }, { data: m }, { data: lg }, { data: ft }, { data: cols }, { data: mpr }, { data: pc }] =
+      await Promise.all([
+        supabase.from('club_settings').select('*').eq('club_id', clubId).maybeSingle(),
+        supabase.from('court_slots').select('*').eq('club_id', clubId).order('sort_order'),
+        supabase.from('club_members').select('*').eq('club_id', clubId).order('created_at', { ascending: true }),
+        supabase.from('session_logs').select('*').eq('club_id', clubId).order('played_on', { ascending: false }),
+        supabase.from('fund_transactions').select('*').eq('club_id', clubId).order('created_at', { ascending: false }),
+        supabase.from('payment_collections').select('*').eq('club_id', clubId).order('period_start', { ascending: false }),
+        supabase.from('member_payment_records').select('*').eq('club_id', clubId),
+        // RLS: only owner gets a row; members get null — intentional
+        supabase.from('club_payment_config').select('club_id, webhook_configured').eq('club_id', clubId).maybeSingle(),
+      ])
 
     const mergedSettings = s
       ? { ...DEFAULT_SETTINGS, ...Object.fromEntries(Object.entries(s).filter(([, v]) => v !== null)) }
@@ -32,10 +40,7 @@ export function useClubData(clubId) {
     if (!resolvedSlots.length && (mergedSettings.session_configs?.length || mergedSettings.play_weekdays?.length)) {
       const synthesized = synthesizeSlotsFromLegacy(mergedSettings)
       if (synthesized.length) {
-        const { data: inserted } = await supabase
-          .from('court_slots')
-          .insert(synthesized)
-          .select()
+        const { data: inserted } = await supabase.from('court_slots').insert(synthesized).select()
         resolvedSlots = inserted || synthesized
       }
     }
@@ -45,13 +50,15 @@ export function useClubData(clubId) {
     const userIds = (m || []).filter((r) => r.user_id).map((r) => r.user_id)
     let profileMap = {}
     if (userIds.length) {
-      const { data: profs } = await supabase
-        .from('profiles').select('id, avatar_url').in('id', userIds)
+      const { data: profs } = await supabase.from('profiles').select('id, avatar_url').in('id', userIds)
       profileMap = Object.fromEntries((profs || []).map((p) => [p.id, p]))
     }
     setMembers((m || []).map((r) => ({ ...r, avatar_url: profileMap[r.user_id]?.avatar_url || null })))
     setLogs(lg || [])
     setFundTxns(ft || [])
+    setCollections(cols || [])
+    setMemberPayments(mpr || [])
+    setPayosConfig(pc || null)
 
     // Cross-query PollTap membership_cycle tally
     const { data: v } = await supabase
@@ -78,9 +85,11 @@ export function useClubData(clubId) {
       .on('postgres_changes', { event: '*', schema: 'public', table: 'club_members', filter: `club_id=eq.${clubId}` }, loadAll)
       .on('postgres_changes', { event: '*', schema: 'public', table: 'session_logs', filter: `club_id=eq.${clubId}` }, loadAll)
       .on('postgres_changes', { event: '*', schema: 'public', table: 'fund_transactions', filter: `club_id=eq.${clubId}` }, loadAll)
+      .on('postgres_changes', { event: '*', schema: 'public', table: 'payment_collections', filter: `club_id=eq.${clubId}` }, loadAll)
+      .on('postgres_changes', { event: '*', schema: 'public', table: 'member_payment_records', filter: `club_id=eq.${clubId}` }, loadAll)
       .subscribe()
     return () => { supabase.removeChannel(ch) }
   }, [clubId, loadAll])
 
-  return { settings, setSettings, slots, setSlots, members, logs, fundTxns, pollTally, loading, reload: loadAll }
+  return { settings, setSettings, slots, setSlots, members, logs, fundTxns, collections, memberPayments, payosConfig, pollTally, loading, reload: loadAll }
 }

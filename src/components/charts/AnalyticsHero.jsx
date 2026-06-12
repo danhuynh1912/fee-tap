@@ -15,7 +15,7 @@ export function AnalyticsHero({ className = '' }) {
         <div className="flex items-center justify-between">
           <div>
             <p className="text-xs font-semibold uppercase tracking-wider text-slate-500">Projected fund balance</p>
-            <p className="mt-1 font-mono text-2xl font-bold text-white tabular-nums">+ 4.820.000 ₫</p>
+            <p className="mt-1 font-mono text-2xl font-bold text-white tabular-nums">+ 4,820,000 ₫</p>
           </div>
           <span className="flex items-center gap-1.5 rounded-full bg-lime-400/10 px-3 py-1 text-xs font-semibold text-lime-400">
             <TrendingUp className="h-3.5 w-3.5" /> +18.4%

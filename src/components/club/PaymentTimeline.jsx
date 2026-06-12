@@ -1,9 +1,13 @@
-import { useMemo } from 'react'
+import { useMemo, useState } from 'react'
 import { useTranslation } from 'react-i18next'
-import { MapPin, AlertTriangle, Clock, Package, ChevronRight, Users } from 'lucide-react'
+import { MapPin, AlertTriangle, Clock, Package, Users, CheckCircle2, QrCode, PlusCircle, Loader2 } from 'lucide-react'
 import { cx, fmtVND, fmtNum } from '../../lib/utils'
 import { computePaymentTimeline, formatPeriodLabel } from '../../engine/forecast'
 import { Badge } from '../ui/Badge'
+import { Button } from '../ui/Button'
+import { supabase } from '../../lib/supabase'
+import { PaymentQRModal } from './PaymentQRModal'
+import { PaymentCollectionModal } from './PaymentCollectionModal'
 
 function DeadlineBadge({ daysUntilNext, t }) {
   if (daysUntilNext === null) return null
@@ -26,7 +30,6 @@ function ProgressBar({ value, max, tone = 'slate' }) {
   )
 }
 
-// ── Running slot card ─────────────────────────────────────────────────────────
 function RunningSlotCard({ result, lang, t }) {
   const { slot, period, totalSessions, happened, courtCost, currentDeadline } = result
   const pct = totalSessions > 0 ? Math.round((happened / totalSessions) * 100) : 0
@@ -47,7 +50,6 @@ function RunningSlotCard({ result, lang, t }) {
         </div>
         <span className="font-mono text-sm font-bold text-slate-900 shrink-0">{fmtVND(courtCost)}</span>
       </div>
-
       {totalSessions > 0 && (
         <div className="space-y-1">
           <ProgressBar value={happened} max={totalSessions} tone="volt" />
@@ -56,7 +58,6 @@ function RunningSlotCard({ result, lang, t }) {
           </p>
         </div>
       )}
-
       {currentDeadline && (
         <p className="text-xs text-slate-400 flex items-center gap-1">
           <Clock className="h-3 w-3" />
@@ -67,10 +68,8 @@ function RunningSlotCard({ result, lang, t }) {
   )
 }
 
-// ── Upcoming slot card ────────────────────────────────────────────────────────
 function UpcomingSlotCard({ result, lang, t }) {
   const { slot, nextPeriod, nextSessions, nextCourtCost } = result
-
   return (
     <div className="p-4 flex items-start justify-between gap-3 bg-white">
       <div className="min-w-0">
@@ -95,10 +94,8 @@ function UpcomingSlotCard({ result, lang, t }) {
   )
 }
 
-// ── Shuttle status card ───────────────────────────────────────────────────────
 function ShuttleCard({ shuttle, t }) {
   if (!shuttle) return null
-
   if (shuttle.mode === 'inventory') {
     const isLow = shuttle.sessionsLeft < 8
     return (
@@ -112,15 +109,11 @@ function ShuttleCard({ shuttle, t }) {
           {t('timeline_shuttle_stock', { n: shuttle.boxesLeft, sessions: shuttle.sessionsLeft })}
         </p>
         {shuttle.estimatedEmptyDate && (
-          <p className="text-xs text-slate-400">
-            {shuttle.estimatedEmptyDate.toLocaleDateString()}
-          </p>
+          <p className="text-xs text-slate-400">{shuttle.estimatedEmptyDate.toLocaleDateString()}</p>
         )}
       </div>
     )
   }
-
-  // estimate mode
   return (
     <div className="rounded-2xl border border-slate-100 bg-white p-4 space-y-2">
       <div className="flex items-center justify-between">
@@ -135,13 +128,47 @@ function ShuttleCard({ shuttle, t }) {
   )
 }
 
-// ── Payment group summary bar ─────────────────────────────────────────────────
-function GroupSummary({ courtCost, shuttleCost, effectiveCount, t, isLast, canEdit, nextAdjustedFee, projectedBalance, projectedSurplus }) {
+// ── Paid member avatars row ───────────────────────────────────────────────────
+function PaidAvatars({ paidPayments, members }) {
+  if (!paidPayments.length) return null
+  return (
+    <div className="flex items-center gap-1 flex-wrap">
+      {paidPayments.map((p) => {
+        const m = members.find((m) => m.id === p.member_id)
+        if (!m) return null
+        return m.avatar_url ? (
+          <img key={m.id} src={m.avatar_url} alt={m.name} title={m.name}
+            className="h-6 w-6 rounded-full border-2 border-white object-cover shadow-sm" />
+        ) : (
+          <div key={m.id} title={m.name}
+            className="h-6 w-6 rounded-full border-2 border-white bg-slate-900 grid place-items-center shadow-sm">
+            <span className="text-[8px] font-black text-lime-400">{m.name[0].toUpperCase()}</span>
+          </div>
+        )
+      })}
+    </div>
+  )
+}
+
+// ── Group summary bar ─────────────────────────────────────────────────────────
+function GroupSummary({
+  courtCost, shuttleCost, effectiveCount, t, isLast, canEdit,
+  nextAdjustedFee, projectedBalance, projectedSurplus,
+  collection, groupPayments, myRecord, currentMemberId, members,
+  onOpenCollection, onViewCollection, onPayQR, openingCollection,
+  payosConfigured,
+}) {
   const total = courtCost + shuttleCost
   const perMember = effectiveCount > 0 ? Math.ceil(total / effectiveCount) : 0
   if (total === 0) return null
+
+  const paidPayments = groupPayments.filter((p) => p.status === 'paid' || p.status === 'manual')
+  const paidCount = paidPayments.length
+  const totalMembers = effectiveCount || members.length
+  const myIsPaid = myRecord && (myRecord.status === 'paid' || myRecord.status === 'manual')
+
   return (
-    <div className={cx('bg-slate-900 text-white px-5 py-4 space-y-3', isLast ? '' : '')}>
+    <div className="bg-slate-900 text-white px-5 py-4 space-y-3">
       <div className="flex items-center justify-between">
         <div className="flex items-center gap-2">
           <Users className="h-4 w-4 text-slate-400" />
@@ -152,6 +179,7 @@ function GroupSummary({ courtCost, shuttleCost, effectiveCount, t, isLast, canEd
           <p className="text-xs text-slate-400 mt-0.5">{t('timeline_per_member')}</p>
         </div>
       </div>
+
       <div className="border-t border-slate-700 pt-3 space-y-1.5">
         {courtCost > 0 && (
           <div className="flex justify-between text-xs text-slate-400">
@@ -166,7 +194,8 @@ function GroupSummary({ courtCost, shuttleCost, effectiveCount, t, isLast, canEd
           </div>
         )}
       </div>
-      {canEdit && nextAdjustedFee > 0 && (
+
+      {canEdit && nextAdjustedFee > 0 && isLast && (
         <div className={cx('rounded-xl px-4 py-3 flex items-center justify-between mt-1', projectedSurplus ? 'bg-lime-900/40' : 'bg-red-900/30')}>
           <p className="text-xs text-slate-400">{t('dash_next_topup_fee')}</p>
           <div className="text-right">
@@ -179,14 +208,101 @@ function GroupSummary({ courtCost, shuttleCost, effectiveCount, t, isLast, canEd
           </div>
         </div>
       )}
+
+      {/* ── Payment collection status ── */}
+      <div className="border-t border-slate-700 pt-3 space-y-2">
+
+        {/* Admin: no collection yet → open button (always available) */}
+        {!collection && canEdit && (
+          <Button
+            variant="volt" size="sm" className="w-full"
+            onClick={onOpenCollection}
+            disabled={openingCollection}
+          >
+            {openingCollection
+              ? <Loader2 className="h-4 w-4 animate-spin" />
+              : <><PlusCircle className="h-4 w-4" /> {t('collection_open_btn')}</>
+            }
+          </Button>
+        )}
+
+        {/* Collection open: show member payment status */}
+        {collection && (
+          <>
+            {/* Paid member avatars */}
+            {paidPayments.length > 0 && (
+              <div className="flex items-center gap-2 flex-wrap">
+                <span className="text-xs text-slate-400">{t('collection_paid_members_label')}</span>
+                <PaidAvatars paidPayments={paidPayments} members={members} />
+              </div>
+            )}
+
+            {/* Paid count progress + admin view button */}
+            <div className="flex items-center justify-between gap-3">
+              <div className="flex items-center gap-2">
+                <CheckCircle2 className={cx('h-4 w-4', paidCount > 0 ? 'text-lime-400' : 'text-slate-600')} />
+                <span className="text-xs text-slate-400">
+                  {t('collection_paid_count', { paid: paidCount, total: totalMembers })}
+                </span>
+              </div>
+              {canEdit && (
+                <Button variant="darkSubtle" size="sm" onClick={onViewCollection}>
+                  {t('collection_view_btn')}
+                </Button>
+              )}
+            </div>
+
+            {/* Member own payment status + QR (if PayOS ready) */}
+            {!canEdit && currentMemberId && (
+              <div className="flex items-center justify-between gap-3">
+                {myIsPaid ? (
+                  <div className="flex items-center gap-2">
+                    <CheckCircle2 className="h-4 w-4 text-lime-400" />
+                    <span className="text-sm font-semibold text-lime-400">{t('payment_status_paid')}</span>
+                  </div>
+                ) : (
+                  <div className="flex items-center gap-2">
+                    <Clock className="h-4 w-4 text-slate-500" />
+                    <span className="text-sm text-slate-400">{t('payment_status_pending')}</span>
+                  </div>
+                )}
+                {/* QR button only when PayOS configured AND member has a record AND not yet paid */}
+                {!myIsPaid && myRecord && payosConfigured && (
+                  <Button variant="volt" size="sm" onClick={onPayQR}>
+                    <QrCode className="h-4 w-4" /> {t('payment_qr_btn')}
+                  </Button>
+                )}
+              </div>
+            )}
+          </>
+        )}
+      </div>
     </div>
   )
 }
 
+// ── Derive period_start string from a forecast period object ──────────────────
+function periodStart(period) {
+  if (!period?.months?.length) return null
+  const m = period.months[0]
+  return `${m.year}-${String(m.month0 + 1).padStart(2, '0')}-01`
+}
+
 // ── Main PaymentTimeline ──────────────────────────────────────────────────────
-export function PaymentTimeline({ slots, settings, memberCount, committedCount, sport, showRunning = true, canEdit = false, nextAdjustedFee = 0, projectedBalance = 0, projectedSurplus = true }) {
+export function PaymentTimeline({
+  slots, settings, memberCount, committedCount, sport,
+  showRunning = true, canEdit = false,
+  nextAdjustedFee = 0, projectedBalance = 0, projectedSurplus = true,
+  collections = [], memberPayments = [], currentMemberId = null,
+  payosConfigured = false, plan = 'free',
+  members = [], clubId, toast, onReload,
+}) {
   const { t, i18n } = useTranslation()
   const lang = i18n.language
+
+  const [openingGroup, setOpeningGroup] = useState(null)  // period_start of the group being opened
+  const [qrModal, setQrModal] = useState(null)            // { record, memberName }
+  const [collectionModal, setCollectionModal] = useState(null) // { collection, groupPayments }
 
   const settingsWithEquip = useMemo(() => ({
     ...settings,
@@ -202,42 +318,83 @@ export function PaymentTimeline({ slots, settings, memberCount, committedCount, 
   const openSpots = settings.fee_split_mode === 'total_members' && committedCount !== null
     ? Math.max(0, memberCount - committedCount) : 0
 
-  // Build payment groups — merge items whose deadlines fall in the same month
   const paymentGroups = useMemo(() => {
     const monthKey = (d) => d ? `${d.getFullYear()}-${d.getMonth()}` : 'no-deadline'
     const groups = new Map()
-
     const getOrCreate = (deadline, daysUntil) => {
       const key = monthKey(deadline)
       if (!groups.has(key)) {
         groups.set(key, { deadline, daysUntil, courtItems: [], shuttleItem: null })
       } else {
-        // Keep the earliest deadline in the group as the header
         const g = groups.get(key)
         if (deadline && (!g.deadline || deadline < g.deadline)) {
-          g.deadline = deadline
-          g.daysUntil = daysUntil
+          g.deadline = deadline; g.daysUntil = daysUntil
         }
       }
       return groups.get(key)
     }
-
     if (timeline.nextShuttleItem) {
       const g = getOrCreate(timeline.nextShuttleItem.deadline, timeline.nextShuttleItem.daysUntil)
       g.shuttleItem = timeline.nextShuttleItem
     }
-
     for (const r of timeline.upcoming) {
       const g = getOrCreate(r.nextDeadline, r.daysUntilNext)
       g.courtItems.push(r)
     }
-
     return [...groups.values()].sort((a, b) => {
-      if (!a.deadline) return 1
-      if (!b.deadline) return -1
+      if (!a.deadline) return 1; if (!b.deadline) return -1
       return a.deadline - b.deadline
     })
   }, [timeline])
+
+  async function openCollection(group, courtCost, shuttleCost) {
+    const ps = group.courtItems[0]?.nextPeriod
+      ? periodStart(group.courtItems[0].nextPeriod)
+      : group.shuttleItem?.period
+      ? periodStart(group.shuttleItem.period)
+      : null
+    if (!ps || !clubId) return
+
+    const perMember = effectiveCount > 0 ? Math.ceil((courtCost + shuttleCost) / effectiveCount) : 0
+    const title = group.courtItems[0]?.slot?.name
+      || (group.shuttleItem ? t('timeline_shuttle_estimate') : t('collection_open_btn'))
+
+    setOpeningGroup(ps)
+    try {
+      // Insert collection
+      const { data: col, error: colErr } = await supabase
+        .from('payment_collections')
+        .insert({
+          club_id: clubId,
+          period_start: ps,
+          deadline: group.deadline ? group.deadline.toISOString().slice(0, 10) : null,
+          title,
+          amount_per_member: perMember,
+          status: 'open',
+        })
+        .select()
+        .single()
+      if (colErr) throw colErr
+
+      // Insert one record per member
+      if (members.length > 0) {
+        const records = members.map((m) => ({
+          collection_id: col.id,
+          club_id: clubId,
+          member_id: m.id,
+          amount: perMember,
+        }))
+        const { error: rErr } = await supabase.from('member_payment_records').insert(records)
+        if (rErr) throw rErr
+      }
+
+      toast?.(t('collection_opened'))
+    } catch (e) {
+      toast?.(e.message || t('err_generic'))
+    } finally {
+      setOpeningGroup(null)
+    }
+  }
 
   if (!slots || !slots.length) {
     return (
@@ -251,7 +408,6 @@ export function PaymentTimeline({ slots, settings, memberCount, committedCount, 
 
   return (
     <div className="space-y-6">
-      {/* ── Running ── */}
       {showRunning && (
         <div>
           <p className="text-xs font-semibold uppercase tracking-wide text-slate-400 mb-3">{t('timeline_running_title')}</p>
@@ -263,7 +419,6 @@ export function PaymentTimeline({ slots, settings, memberCount, committedCount, 
         </div>
       )}
 
-      {/* ── Upcoming — one card per deadline group ── */}
       {paymentGroups.length > 0 && (
         <div className="space-y-4">
           <p className="text-xs font-semibold uppercase tracking-wide text-slate-400">{t('timeline_upcoming_title')}</p>
@@ -272,9 +427,18 @@ export function PaymentTimeline({ slots, settings, memberCount, committedCount, 
             const shuttleCost = group.shuttleItem?.cost ?? 0
             const isLastGroup = gi === paymentGroups.length - 1
 
+            // Match this group to a payment_collection by period_start
+            const ps = group.courtItems[0]?.nextPeriod
+              ? periodStart(group.courtItems[0].nextPeriod)
+              : group.shuttleItem?.period
+              ? periodStart(group.shuttleItem.period)
+              : null
+            const collection = ps ? collections.find((c) => c.period_start === ps) : null
+            const groupPayments = collection ? memberPayments.filter((p) => p.collection_id === collection.id) : []
+            const myRecord = currentMemberId ? groupPayments.find((p) => p.member_id === currentMemberId) : null
+
             return (
               <div key={gi} className="rounded-3xl border border-slate-200 overflow-hidden">
-                {/* deadline header */}
                 {group.deadline && (
                   <div className="flex items-center justify-between px-4 py-2.5 bg-slate-50 border-b border-slate-100">
                     <span className="text-xs font-semibold text-slate-500">
@@ -284,9 +448,7 @@ export function PaymentTimeline({ slots, settings, memberCount, committedCount, 
                   </div>
                 )}
 
-                {/* items */}
                 <div className="divide-y divide-slate-100">
-                  {/* shuttle item */}
                   {group.shuttleItem && (
                     <div className="p-4 flex items-start justify-between gap-3 bg-white">
                       <div className="min-w-0">
@@ -304,19 +466,11 @@ export function PaymentTimeline({ slots, settings, memberCount, committedCount, 
                       </div>
                     </div>
                   )}
-
-                  {/* court items */}
                   {group.courtItems.map((r, i) => (
-                    <UpcomingSlotCard
-                      key={r.slot.id || i}
-                      result={r} lang={lang}
-                      memberCount={effectiveCount}
-                      t={t}
-                    />
+                    <UpcomingSlotCard key={r.slot.id || i} result={r} lang={lang} memberCount={effectiveCount} t={t} />
                   ))}
                 </div>
 
-                {/* open spots warning — only on last group */}
                 {isLastGroup && openSpots > 0 && (
                   <div className="border-t border-amber-200 bg-amber-50 px-4 py-3 flex items-start gap-3">
                     <AlertTriangle className="h-4 w-4 text-amber-500 shrink-0 mt-0.5" />
@@ -327,23 +481,57 @@ export function PaymentTimeline({ slots, settings, memberCount, committedCount, 
                   </div>
                 )}
 
-                {/* per-group summary */}
                 <GroupSummary
                   courtCost={courtCost}
                   shuttleCost={shuttleCost}
                   effectiveCount={effectiveCount}
                   t={t}
                   isLast={isLastGroup}
-                  canEdit={canEdit && isLastGroup}
+                  canEdit={canEdit}
                   nextAdjustedFee={nextAdjustedFee}
                   projectedBalance={projectedBalance}
                   projectedSurplus={projectedSurplus}
+                  collection={collection}
+                  groupPayments={groupPayments}
+                  myRecord={myRecord}
+                  currentMemberId={currentMemberId}
+                  members={members}
+                  openingCollection={openingGroup === ps}
+                  onOpenCollection={() => openCollection(group, courtCost, shuttleCost)}
+                  onViewCollection={() => setCollectionModal({ collection, groupPayments })}
+                  onPayQR={() => {
+                    const m = members.find((m) => m.id === currentMemberId)
+                    setQrModal({ record: myRecord, memberName: m?.name || '' })
+                  }}
+                  isPro={plan === 'pro'}
+                  payosConfigured={payosConfigured}
                 />
               </div>
             )
           })}
         </div>
       )}
+
+      {/* QR payment modal (member) */}
+      <PaymentQRModal
+        open={!!qrModal}
+        onClose={() => setQrModal(null)}
+        record={qrModal?.record}
+        memberName={qrModal?.memberName}
+        toast={toast}
+      />
+
+      {/* Collection detail modal (admin) */}
+      <PaymentCollectionModal
+        open={!!collectionModal}
+        onClose={() => setCollectionModal(null)}
+        collection={collectionModal?.collection}
+        memberPayments={collectionModal ? memberPayments.filter((p) => p.collection_id === collectionModal.collection?.id) : []}
+        members={members}
+        toast={toast}
+        onSynced={onReload}
+        onChanged={() => { setCollectionModal(null); onReload?.() }}
+      />
     </div>
   )
 }

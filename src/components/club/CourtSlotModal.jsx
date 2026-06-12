@@ -6,7 +6,7 @@ import { Button } from '../ui/Button'
 import { Field, inputCls } from '../ui/Field'
 import { Segmented } from '../ui/Segmented'
 import { WeekdayPicker } from './WeekdayPicker'
-import { cx, num, fmtVND, fmtNum } from '../../lib/utils'
+import { cx, num, fmtVND, fmtNum, fmtInputNum, parseInputNum } from '../../lib/utils'
 import { computeSlot, formatPeriodLabel, monthName, cycleLabelShort } from '../../engine/forecast'
 
 const EMPTY_SLOT = {
@@ -143,8 +143,8 @@ export function CourtSlotModal({ slot, onSave, onClose }) {
         <div className="grid gap-4 sm:grid-cols-2">
           <Field label={t('slot_price')} icon={Coins}>
             <div className="relative">
-              <input type="number" min="0" className={cx(inputCls, 'pr-10 font-mono')}
-                value={form.price_per_hour} onChange={(e) => set('price_per_hour', e.target.value)} />
+              <input type="text" inputMode="numeric" className={cx(inputCls, 'pr-10 font-mono')}
+                value={fmtInputNum(form.price_per_hour)} onChange={(e) => set('price_per_hour', parseInputNum(e.target.value))} />
               <span className="pointer-events-none absolute right-4 top-1/2 -translate-y-1/2 text-sm font-semibold text-slate-400">₫</span>
             </div>
           </Field>

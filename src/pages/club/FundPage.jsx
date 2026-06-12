@@ -6,7 +6,7 @@ import { inputCls } from '../../components/ui/Field'
 import { cx, num, fmtVND, fmtDate } from '../../lib/utils'
 import { supabase } from '../../lib/supabase'
 
-export function FundPage({ club, fundTxns, settings, canEdit, onTopUp, toast }) {
+export function FundPage({ club, fundTxns, members, canEdit, onTopUp, toast }) {
   const { t } = useTranslation()
   const [topUpOpen, setTopUpOpen] = useState(false)
   const [amount, setAmount] = useState('')
@@ -18,11 +18,15 @@ export function FundPage({ club, fundTxns, settings, canEdit, onTopUp, toast }) 
     if (!amt || busy) return
     setBusy(true)
     try {
-      const newFund = num(settings.current_fund) + amt
-      const { error: e1 } = await supabase.from('fund_transactions').insert({ club_id: club.id, amount: amt, note: note.trim() || null })
-      if (e1) throw e1
-      const { error: e2 } = await supabase.from('club_settings').update({ current_fund: newFund }).eq('club_id', club.id)
-      if (e2) throw e2
+      // Append-only ledger: no current_fund update, no UPDATE to existing rows
+      const { error } = await supabase.from('fund_transactions').insert({
+        club_id: club.id,
+        amount: amt,
+        note: note.trim() || null,
+        type: 'top_up',
+        source: 'manual',
+      })
+      if (error) throw error
       toast(t('fund_added'))
       setAmount(''); setNote(''); setTopUpOpen(false)
       onTopUp()
@@ -30,7 +34,11 @@ export function FundPage({ club, fundTxns, settings, canEdit, onTopUp, toast }) 
     finally { setBusy(false) }
   }
 
-  const total = num(settings.current_fund)
+  // Balance always derived from ledger — single source of truth
+  const total = fundTxns.reduce((s, tx) => s + num(tx.amount), 0)
+
+  // Build member name lookup for attributed transactions
+  const memberMap = Object.fromEntries((members || []).map((m) => [m.id, m]))
 
   return (
     <div className="mx-auto max-w-2xl space-y-5">
@@ -88,7 +96,7 @@ export function FundPage({ club, fundTxns, settings, canEdit, onTopUp, toast }) 
         </div>
         <div className="text-right">
           <p className="text-xs text-slate-400">{t('dash_fund_live')}</p>
-          <p className="font-mono text-lg font-black text-white">{fmtVND(num(settings.current_fund))}</p>
+          <p className="font-mono text-lg font-black text-white">{fmtVND(total)}</p>
         </div>
       </div>
 
@@ -100,6 +108,10 @@ export function FundPage({ club, fundTxns, settings, canEdit, onTopUp, toast }) 
         )}
         {fundTxns.map((tx) => {
           const isPositive = num(tx.amount) >= 0
+          const memberName = tx.member_id ? memberMap[tx.member_id]?.name : null
+          const displayNote = tx.note || (memberName ? `${t('fund_topup_default_note')} — ${memberName}` : t('fund_topup_default_note'))
+          const isPayos = tx.source === 'payos'
+
           return (
             <li key={tx.id} className={cx(
               'flex items-center gap-3 rounded-2xl border px-4 py-3',
@@ -112,8 +124,16 @@ export function FundPage({ club, fundTxns, settings, canEdit, onTopUp, toast }) 
                 {isPositive ? <TrendingUp className="h-4 w-4" /> : <TrendingDown className="h-4 w-4" />}
               </span>
               <div className="min-w-0 flex-1">
-                <p className="text-sm font-semibold text-slate-900">{tx.note || t('fund_topup_default_note')}</p>
-                <p className="text-xs text-slate-400">{fmtDate(tx.created_at?.slice(0, 10))}</p>
+                <p className="text-sm font-semibold text-slate-900">{displayNote}</p>
+                <div className="flex items-center gap-2 mt-0.5">
+                  <p className="text-xs text-slate-400">{fmtDate(tx.created_at?.slice(0, 10))}</p>
+                  {isPayos && (
+                    <span className="rounded-full bg-cyan-50 px-2 py-0.5 text-[10px] font-semibold text-cyan-700">PayOS</span>
+                  )}
+                  {memberName && (
+                    <span className="text-xs text-slate-400">{memberName}</span>
+                  )}
+                </div>
               </div>
               <p className={cx('font-mono text-base font-black', isPositive ? 'text-lime-600' : 'text-red-500')}>
                 {isPositive ? '+' : ''}{fmtVND(num(tx.amount))}

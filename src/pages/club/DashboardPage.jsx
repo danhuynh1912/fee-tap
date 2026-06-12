@@ -85,7 +85,7 @@ function AdvancedForecast({ totalMonthlyCost, plan, canEdit, onUnlock }) {
   )
 }
 
-function ForecastDashboard({ settings, slots, memberCount, committedCount, plan, sport, canEdit, onUnlock, logs, fundTxns, sections: sectionsProp }) {
+function ForecastDashboard({ settings, slots, memberCount, committedCount, plan, sport, canEdit, onUnlock, logs, fundTxns, sections: sectionsProp, collections, memberPayments, currentMemberId, payosConfigured, members, clubId, toast, onChanged }) {
   const { t, i18n } = useTranslation()
   const hasEquipment = sport?.hasEquipment ?? true
   const [spentTipOpen, setSpentTipOpen] = useState(false)
@@ -450,6 +450,15 @@ function ForecastDashboard({ settings, slots, memberCount, committedCount, plan,
           nextAdjustedFee={show('carryover_row') ? nextAdjustedFee : 0}
           projectedBalance={projectedBalance}
           projectedSurplus={projectedSurplus}
+          collections={collections || []}
+          memberPayments={memberPayments || []}
+          currentMemberId={currentMemberId}
+          payosConfigured={payosConfigured}
+          plan={plan}
+          members={members || []}
+          clubId={clubId}
+          toast={toast}
+          onReload={onChanged}
         />
       )}
 
@@ -650,7 +659,7 @@ function VenueCard({ venue, lang, t }) {
   )
 }
 
-export function DashboardPage({ club, settings, slots, members, logs, fundTxns, pollTally, plan, sport, hostName, hostAvatar, currentUserId, canEdit, onUnlock, onChanged, onCloseSidebar, onConfigClose, toast }) {
+export function DashboardPage({ club, settings, slots, members, logs, fundTxns, collections, memberPayments, currentMemberId, payosConfigured, pollTally, plan, sport, hostName, hostAvatar, currentUserId, canEdit, onUnlock, onChanged, onCloseSidebar, onConfigClose, toast }) {
   const { t } = useTranslation()
   const memberCount = (pollTally?.count ?? members.filter((m) => m.user_id !== club.owner_id).length) + 1
   const committedCount = pollTally?.count ?? null
@@ -700,6 +709,14 @@ export function DashboardPage({ club, settings, slots, members, logs, fundTxns, 
           logs={logs}
           fundTxns={fundTxns}
           sections={effectiveSections}
+          collections={collections}
+          memberPayments={memberPayments}
+          currentMemberId={currentMemberId}
+          payosConfigured={payosConfigured}
+          members={members}
+          clubId={club.id}
+          toast={toast}
+          onChanged={onChanged}
         />
       </div>
       <div className="space-y-6">
