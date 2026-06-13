@@ -92,6 +92,37 @@ length of the FeeTap registration list.
 
 ---
 
+## 💳 PayOS payment integration
+
+SPOFUND supports per-club bank transfer collection via [PayOS](https://payos.vn) (VietQR). Each club host registers their own PayOS account and enters their keys in Settings — money goes directly to their bank account.
+
+### Setup (per club)
+1. Register at payos.vn and create a payment channel.
+2. In **Club Settings → PayOS**, enter **Client ID**, **API Key**, **Checksum Key**.
+3. In the PayOS Dashboard, set the webhook URL to:
+   ```
+   https://<supabase-project>.supabase.co/functions/v1/payos-webhook
+   ```
+
+### How it works
+- Host opens a **payment collection** for an upcoming billing period → system creates a `payment_collections` row and one `member_payment_records` row per member.
+- Fee per member is computed **live** from the forecast engine (not stored statically) — adjusts automatically when member count or settings change.
+- Member taps **Pay with QR** → Edge Function `create-payment` generates a PayOS payment link with the current live fee.
+- After bank transfer, PayOS calls the webhook → `confirm_member_payment` RPC marks the member as paid and appends an entry to the fund ledger.
+- If the modal is open when payment is confirmed, it transitions to a success screen and auto-closes after 7 seconds.
+
+### Key design decisions
+| Decision | Reason |
+|---|---|
+| `club_has_payos()` SECURITY DEFINER | Members can't read `club_payment_config` (RLS protects API keys), but need to know if PayOS is configured to show the QR button |
+| `liveAmount` passed to Edge Function | `member_payment_records.amount` can be stale; always use the live-computed fee |
+| QR cache invalidated on amount change | Prevents member paying wrong amount when member count changes mid-collection |
+| Webhook verifies with per-club checksum key | Multi-tenant — each club has its own PayOS account |
+| Actual PayOS `d.amount` written to DB before RPC | Fund ledger records what was actually transferred, not what was expected |
+| `--no-verify-jwt` on webhook function | PayOS has no Supabase JWT; security comes from HMAC signature verification instead |
+
+---
+
 ## 🔒 Security notes
 
 Writes (`club_settings`, `club_members`, `session_logs`, `clubs.plan`) are gated

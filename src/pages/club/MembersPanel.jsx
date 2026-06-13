@@ -35,8 +35,30 @@ export function MembersPanel({ club, members, plan, pollTally, hostName, hostAva
     if (atLimit) { onHitLimit(); return }
     setBusy(true)
     try {
-      const { error } = await supabase.from('club_members').insert({ club_id: club.id, name: name.trim() })
+      const { data: newMember, error } = await supabase
+        .from('club_members')
+        .insert({ club_id: club.id, name: name.trim() })
+        .select()
+        .single()
       if (error) throw error
+
+      // Auto-enroll new member into any open payment collections
+      const { data: openCols } = await supabase
+        .from('payment_collections')
+        .select('id, amount_per_member')
+        .eq('club_id', club.id)
+        .eq('status', 'open')
+      if (openCols?.length) {
+        await supabase.from('member_payment_records').insert(
+          openCols.map((c) => ({
+            collection_id: c.id,
+            club_id: club.id,
+            member_id: newMember.id,
+            amount: c.amount_per_member,
+          }))
+        )
+      }
+
       setName('')
       onChanged()
     } catch (e) { toast(e.message || t('err_generic')) }

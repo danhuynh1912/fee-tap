@@ -131,6 +131,34 @@ export function useAuth() {
       { onConflict: 'club_id,user_id', ignoreDuplicates: true }
     )
     if (error) throw error
+
+    // Auto-enroll into any open payment collections
+    const { data: newMember } = await supabase
+      .from('club_members')
+      .select('id')
+      .eq('club_id', clubId)
+      .eq('user_id', sess.user.id)
+      .single()
+    if (newMember) {
+      const { data: openCols } = await supabase
+        .from('payment_collections')
+        .select('id, amount_per_member')
+        .eq('club_id', clubId)
+        .eq('status', 'open')
+      if (openCols?.length) {
+        // Only insert records that don't already exist (idempotent)
+        const { data: existing } = await supabase
+          .from('member_payment_records')
+          .select('collection_id')
+          .eq('member_id', newMember.id)
+        const existingIds = new Set((existing || []).map((r) => r.collection_id))
+        const toInsert = openCols
+          .filter((c) => !existingIds.has(c.id))
+          .map((c) => ({ collection_id: c.id, club_id: clubId, member_id: newMember.id, amount: c.amount_per_member }))
+        if (toInsert.length) await supabase.from('member_payment_records').insert(toInsert)
+      }
+    }
+
     const { data: clubData } = await supabase.from('clubs').select('*').eq('id', clubId).single()
     if (clubData) {
       const { data: ownerProfile } = await supabase

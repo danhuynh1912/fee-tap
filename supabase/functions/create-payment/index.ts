@@ -19,7 +19,7 @@ serve(async (req) => {
   if (req.method === 'OPTIONS') return new Response('ok', { headers: CORS })
 
   try {
-    const { record_id } = await req.json()
+    const { record_id, amount: passedAmount } = await req.json()
     if (!record_id) return new Response(JSON.stringify({ error: 'record_id required' }), { status: 400, headers: CORS })
 
     // Service role: bypasses RLS to read club_payment_config + member info
@@ -39,8 +39,10 @@ serve(async (req) => {
       return new Response(JSON.stringify({ error: 'record_not_found' }), { status: 404, headers: CORS })
     }
 
-    // Idempotency: already has a PayOS order
-    if (rec.payos_order_code && rec.payos_checkout_url) {
+    const amount = passedAmount ?? rec.amount
+
+    // Idempotency: return cached order only if amount hasn't changed
+    if (rec.payos_order_code && rec.payos_checkout_url && amount === rec.amount) {
       return new Response(JSON.stringify({
         orderCode: rec.payos_order_code,
         checkoutUrl: rec.payos_checkout_url,
@@ -86,16 +88,20 @@ serve(async (req) => {
     // Description max 25 chars (visible in bank transfer note)
     const memberName: string = (rec.club_members as { name: string })?.name || 'Member'
     const shortName = memberName.split(' ').pop() || memberName
-    const description = `FEETAP ${shortName}`.slice(0, 25)
+    const periodStart: string = (rec.payment_collections as { period_start: string })?.period_start || ''
+    const periodStr = periodStart
+      ? (() => { const d = new Date(periodStart); return `T${d.getMonth() + 1}/${String(d.getFullYear()).slice(2)}` })()
+      : ''
+    const description = `SPOFUND ${periodStr} ${shortName}`.replace(/\s+/g, ' ').trim().slice(0, 25)
 
     const cancelUrl = `${appUrl}/club/${rec.club_id}`
     const returnUrl = `${appUrl}/club/${rec.club_id}`
 
     // PayOS signature: sorted key=value pairs joined by &
-    const sigData = `amount=${rec.amount}&cancelUrl=${cancelUrl}&description=${description}&orderCode=${orderCode}&returnUrl=${returnUrl}`
+    const sigData = `amount=${amount}&cancelUrl=${cancelUrl}&description=${description}&orderCode=${orderCode}&returnUrl=${returnUrl}`
     const signature = await hmacSha256(checksumKey, sigData)
 
-    const payload = { orderCode, amount: rec.amount, description, cancelUrl, returnUrl, signature }
+    const payload = { orderCode, amount, description, cancelUrl, returnUrl, signature }
 
     const payosRes = await fetch('https://api-merchant.payos.vn/v2/payment-requests', {
       method: 'POST',

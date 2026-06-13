@@ -252,8 +252,8 @@ function GroupSummary({
               )}
             </div>
 
-            {/* Member own payment status + QR (if PayOS ready) */}
-            {!canEdit && currentMemberId && (
+            {/* Member own payment status + QR (if PayOS ready) — shown for both member and admin */}
+            {currentMemberId && (
               <div className="flex items-center justify-between gap-3">
                 {myIsPaid ? (
                   <div className="flex items-center gap-2">
@@ -268,7 +268,7 @@ function GroupSummary({
                 )}
                 {/* QR button only when PayOS configured AND member has a record AND not yet paid */}
                 {!myIsPaid && myRecord && payosConfigured && (
-                  <Button variant="volt" size="sm" onClick={onPayQR}>
+                  <Button variant="volt" size="sm" onClick={() => onPayQR(perMember)}>
                     <QrCode className="h-4 w-4" /> {t('payment_qr_btn')}
                   </Button>
                 )}
@@ -376,9 +376,24 @@ export function PaymentTimeline({
         .single()
       if (colErr) throw colErr
 
-      // Insert one record per member
-      if (members.length > 0) {
-        const records = members.map((m) => ({
+      // Ensure synthetic host has a real club_members row before creating payment records
+      let resolvedMembers = members
+      const syntheticHost = members.find((m) => m._synthetic)
+      if (syntheticHost) {
+        const { data: hostRow } = await supabase
+          .from('club_members')
+          .upsert({ club_id: clubId, user_id: syntheticHost.user_id, name: syntheticHost.name },
+            { onConflict: 'club_id,user_id', ignoreDuplicates: false })
+          .select()
+          .single()
+        if (hostRow) {
+          resolvedMembers = members.map((m) => m._synthetic ? { ...m, id: hostRow.id, _synthetic: false } : m)
+        }
+      }
+
+      // Insert one record per member (all now have real UUIDs)
+      if (resolvedMembers.length > 0) {
+        const records = resolvedMembers.map((m) => ({
           collection_id: col.id,
           club_id: clubId,
           member_id: m.id,
@@ -499,9 +514,9 @@ export function PaymentTimeline({
                   openingCollection={openingGroup === ps}
                   onOpenCollection={() => openCollection(group, courtCost, shuttleCost)}
                   onViewCollection={() => setCollectionModal({ collection, groupPayments })}
-                  onPayQR={() => {
+                  onPayQR={(liveAmount) => {
                     const m = members.find((m) => m.id === currentMemberId)
-                    setQrModal({ record: myRecord, memberName: m?.name || '' })
+                    setQrModal({ record: myRecord, memberName: m?.name || '', liveAmount })
                   }}
                   isPro={plan === 'pro'}
                   payosConfigured={payosConfigured}
@@ -518,6 +533,7 @@ export function PaymentTimeline({
         onClose={() => setQrModal(null)}
         record={qrModal?.record}
         memberName={qrModal?.memberName}
+        liveAmount={qrModal?.liveAmount}
         toast={toast}
       />
 

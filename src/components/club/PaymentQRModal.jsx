@@ -6,25 +6,47 @@ import { Button } from '../ui/Button'
 import { cx, fmtVND } from '../../lib/utils'
 import { supabase } from '../../lib/supabase'
 
-export function PaymentQRModal({ open, onClose, record, memberName, toast }) {
+export function PaymentQRModal({ open, onClose, record, memberName, liveAmount, toast }) {
   const { t } = useTranslation()
   const [loading, setLoading] = useState(false)
   const [localRecord, setLocalRecord] = useState(record)
+  const [justPaid, setJustPaid] = useState(false)
 
   // Sync record from parent (realtime updates flow through here)
-  useEffect(() => { setLocalRecord(record) }, [record])
-
-  // Auto-generate QR when modal opens and no QR yet
+  // Detect transition to paid → trigger celebration then auto-close
   useEffect(() => {
-    if (open && localRecord && !localRecord.payos_order_code && localRecord.status === 'pending') {
+    const wasPending = localRecord?.status === 'pending'
+    const nowPaid = record?.status === 'paid' || record?.status === 'manual'
+    if (wasPending && nowPaid) {
+      setJustPaid(true)
+      toast?.(t('payment_qr_success'))
+      setTimeout(() => { setJustPaid(false); onClose() }, 7000)
+    }
+    setLocalRecord(record)
+  }, [record?.status]) // eslint-disable-line
+
+  // Auto-generate QR when modal opens, no QR yet, or amount has changed
+  useEffect(() => {
+    if (!open || !localRecord || localRecord.status !== 'pending') return
+    const amountChanged = liveAmount && liveAmount !== localRecord.amount
+    if (!localRecord.payos_order_code || amountChanged) {
       generateQR()
     }
-  }, [open, localRecord?.id]) // eslint-disable-line
+  }, [open, localRecord?.id, liveAmount]) // eslint-disable-line
 
   async function generateQR() {
     if (!localRecord || loading) return
     setLoading(true)
     try {
+      // Sync live-computed fee to DB; if amount changed, invalidate cached QR so a new one is created
+      if (liveAmount && liveAmount !== localRecord.amount) {
+        await supabase
+          .from('member_payment_records')
+          .update({ amount: liveAmount, payos_order_code: null, payos_checkout_url: null, payos_qr_code: null })
+          .eq('id', localRecord.id)
+        setLocalRecord((r) => ({ ...r, amount: liveAmount, payos_order_code: null, payos_checkout_url: null, payos_qr_code: null }))
+      }
+
       const { data: { session } } = await supabase.auth.getSession()
       const supabaseUrl = import.meta.env.VITE_SUPABASE_URL
 
@@ -34,7 +56,7 @@ export function PaymentQRModal({ open, onClose, record, memberName, toast }) {
           'Content-Type': 'application/json',
           'Authorization': `Bearer ${session?.access_token}`,
         },
-        body: JSON.stringify({ record_id: localRecord.id }),
+        body: JSON.stringify({ record_id: localRecord.id, amount: liveAmount ?? localRecord.amount }),
       })
       const json = await res.json()
       if (!res.ok || json.error) throw new Error(json.error || 'Lỗi tạo QR')
@@ -76,10 +98,23 @@ export function PaymentQRModal({ open, onClose, record, memberName, toast }) {
 
         {/* Paid state */}
         {isPaid && (
-          <div className="rounded-3xl bg-lime-50 border border-lime-200 p-6 text-center space-y-2">
-            <CheckCircle2 className="h-12 w-12 text-lime-500 mx-auto" />
-            <p className="font-black text-lg text-slate-900">{t('payment_qr_success')}</p>
-            <p className="font-mono text-2xl font-black text-lime-600">{fmtVND(localRecord?.amount ?? 0)}</p>
+          <div className={cx(
+            'rounded-3xl border p-8 text-center space-y-3 transition-all duration-500',
+            justPaid ? 'bg-lime-400 border-lime-400 scale-[1.02]' : 'bg-lime-50 border-lime-200'
+          )}>
+            <CheckCircle2 className={cx(
+              'mx-auto transition-all duration-500',
+              justPaid ? 'h-16 w-16 text-slate-900 animate-bounce' : 'h-12 w-12 text-lime-500'
+            )} />
+            <p className={cx('font-black text-xl', justPaid ? 'text-slate-900' : 'text-slate-900')}>
+              {justPaid ? t('payment_qr_just_paid') : t('payment_qr_success')}
+            </p>
+            <p className={cx('font-mono text-3xl font-black', justPaid ? 'text-slate-900' : 'text-lime-600')}>
+              {fmtVND(liveAmount ?? localRecord?.amount ?? 0)}
+            </p>
+            {justPaid && (
+              <p className="text-sm text-slate-700">{t('payment_qr_closing')}</p>
+            )}
           </div>
         )}
 
@@ -88,7 +123,7 @@ export function PaymentQRModal({ open, onClose, record, memberName, toast }) {
           <>
             <div className="text-center">
               <p className="text-xs text-slate-500 mb-1">{t('payment_qr_amount')}</p>
-              <p className="font-mono text-3xl font-black text-slate-900">{fmtVND(localRecord?.amount ?? 0)}</p>
+              <p className="font-mono text-3xl font-black text-slate-900">{fmtVND(liveAmount ?? localRecord?.amount ?? 0)}</p>
             </div>
 
             {/* QR image */}

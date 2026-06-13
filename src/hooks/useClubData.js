@@ -26,8 +26,8 @@ export function useClubData(clubId) {
         supabase.from('fund_transactions').select('*').eq('club_id', clubId).order('created_at', { ascending: false }),
         supabase.from('payment_collections').select('*').eq('club_id', clubId).order('period_start', { ascending: false }),
         supabase.from('member_payment_records').select('*').eq('club_id', clubId),
-        // RLS: only owner gets a row; members get null — intentional
-        supabase.from('club_payment_config').select('club_id, webhook_configured').eq('club_id', clubId).maybeSingle(),
+        // SECURITY DEFINER fn — safe for members to call, never exposes API keys
+        supabase.rpc('club_has_payos', { p_club_id: clubId }),
       ])
 
     const mergedSettings = s
@@ -58,7 +58,7 @@ export function useClubData(clubId) {
     setFundTxns(ft || [])
     setCollections(cols || [])
     setMemberPayments(mpr || [])
-    setPayosConfig(pc || null)
+    setPayosConfig(pc === true ? true : null)
 
     // Cross-query PollTap membership_cycle tally
     const { data: v } = await supabase

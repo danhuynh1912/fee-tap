@@ -6,3 +6,5 @@ dist-ssr
 *.local
 .DS_Store
 .vite
+supabase/.temp/
+.claude/
