@@ -438,6 +438,7 @@ export function PaymentTimeline({
       }
 
       toast?.(t('collection_opened'))
+      onReload?.()
     } catch (e) {
       toast?.(e.message || t('err_generic'))
     } finally {
