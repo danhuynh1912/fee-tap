@@ -1,4 +1,4 @@
-import { useCallback } from 'react'
+import { useCallback, useState, useRef, useEffect, lazy, Suspense } from 'react'
 import { useTranslation } from 'react-i18next'
 import { Loader2 } from 'lucide-react'
 import { Nav, ConfigWarning } from './components/layout/Nav'
@@ -8,13 +8,23 @@ import { usePath, matchPath, navigate } from './router'
 import { isConfigured } from './lib/supabase'
 
 import { SignInPage } from './pages/SignInPage'
-import { OnboardingPage } from './pages/OnboardingPage'
 import { ClubPickerPage } from './pages/ClubPickerPage'
 import { PreJoinPage } from './pages/PreJoinPage'
 import { WelcomeModal } from './pages/WelcomeModal'
-import { ClubLayout } from './pages/club/ClubLayout'
 
-import { useState, useRef, useEffect } from 'react'
+const OnboardingPage = lazy(() => import('./pages/OnboardingPage').then((m) => ({ default: m.OnboardingPage })))
+const ClubLayout = lazy(() => import('./pages/club/ClubLayout').then((m) => ({ default: m.ClubLayout })))
+
+function PageLoader() {
+  const { t } = useTranslation()
+  return (
+    <div className="grid flex-1 place-items-center">
+      <div className="flex items-center gap-3 text-slate-400">
+        <Loader2 className="h-5 w-5 animate-spin" /> {t('loading')}
+      </div>
+    </div>
+  )
+}
 
 export default function App() {
   const { t } = useTranslation()
@@ -115,18 +125,24 @@ export default function App() {
     )
   } else if (isNewPath) {
     body = (
-      <OnboardingPage
-        session={session}
-        toast={toast}
-        onClubReady={(c) => {
-          addClub({ ...c, userRole: 'host' })
-          navigate(`/club/${c.id}`)
-        }}
-      />
+      <Suspense fallback={<PageLoader />}>
+        <OnboardingPage
+          session={session}
+          toast={toast}
+          onClubReady={(c) => {
+            addClub({ ...c, userRole: 'host' })
+            navigate(`/club/${c.id}`)
+          }}
+        />
+      </Suspense>
     )
   } else if (clubId) {
     if (activeClub) {
-      body = <ClubLayout session={session} club={activeClub} setClub={updateClub} path={path} toast={toast} onSignOut={signOut} />
+      body = (
+        <Suspense fallback={<PageLoader />}>
+          <ClubLayout session={session} club={activeClub} setClub={updateClub} path={path} toast={toast} onSignOut={signOut} />
+        </Suspense>
+      )
     } else {
       body = (
         <div className="grid flex-1 place-items-center">
