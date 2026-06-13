@@ -79,7 +79,7 @@ serve(async (req) => {
     }
 
     const { payos_client_id: clientId, payos_api_key: apiKey, payos_checksum_key: checksumKey } = payosConfig
-    const appUrl = Deno.env.get('APP_URL') || 'https://feetap.vercel.app'
+    const appUrl = Deno.env.get('APP_URL') || 'https://spofund.vercel.app'
 
     // Get next unique order code from DB sequence
     const { data: seqData } = await supabase.rpc('next_payos_order_code')
