@@ -36,6 +36,7 @@ function ForecastDashboard({
   clubId,
   toast,
   onChanged,
+  liveFundBalance,
 }) {
   const hasEquipment = sport?.hasEquipment ?? true
   const [spentTipOpen, setSpentTipOpen] = useState(false)
@@ -177,6 +178,7 @@ function ForecastDashboard({
     <div className="space-y-5">
       <HeroCard
         all={{ ...all, memberCount }}
+        liveFundBalance={liveFundBalance}
         totalActualSpent={totalActualSpent}
         totalCollected={totalCollected}
         txCount={txCount}
@@ -263,6 +265,7 @@ export function DashboardPage({ toast }) {
     reload,
     openUpsell,
     closeSidebar,
+    liveFundBalance,
   } = useClub()
 
   const memberCount = (pollTally?.count ?? members.filter((m) => m.user_id !== club.owner_id).length) + 1
@@ -308,6 +311,7 @@ export function DashboardPage({ toast }) {
           clubId={club.id}
           toast={toast}
           onChanged={reload}
+          liveFundBalance={liveFundBalance}
         />
       </div>
 

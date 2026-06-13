@@ -9,7 +9,7 @@ import { cx, num, fmtVND, fmtDate } from '../../lib/utils'
 import { supabase } from '../../lib/supabase'
 
 export function FundPage({ toast }) {
-  const { club, fundTxns, members, canEdit, reload } = useClub()
+  const { club, fundTxns, members, canEdit, reload, liveFundBalance } = useClub()
   const onTopUp = reload
   const { t } = useTranslation()
   const [topUpOpen, setTopUpOpen] = useState(false)
@@ -116,7 +116,7 @@ export function FundPage({ toast }) {
         </div>
         <div className="text-right">
           <p className="text-xs text-slate-400">{t('dash_fund_live')}</p>
-          <p className="font-mono text-lg font-black text-white">{fmtVND(total)}</p>
+          <p className="font-mono text-lg font-black text-white">{fmtVND(liveFundBalance)}</p>
         </div>
       </div>
 

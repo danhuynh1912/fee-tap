@@ -15,6 +15,8 @@ import { SPORT_CONFIGS } from '../../constants'
 import { supabase } from '../../lib/supabase'
 import { handleError } from '../../lib/handleError'
 import { ClubContext } from '../../contexts/ClubContext'
+import { computeAll, getSessionConfigs, periodDateRange } from '../../engine/forecast'
+import { num } from '../../lib/utils'
 
 // Routes: /club/:id → dashboard, /club/:id/settings, /club/:id/log, /club/:id/fund
 function activeTab(path, clubId) {
@@ -70,6 +72,38 @@ export function ClubLayout({ session, club, setClub, path, toast, onSignOut }) {
   const currentMember = effectiveMembers.find((m) => m.user_id === currentUserId)
   const currentMemberId = currentMember?.id || null
   const sport = SPORT_CONFIGS[club.sport_type] || SPORT_CONFIGS.badminton
+
+  // Live fund = total inflows − actual spending (logged + estimated unlogged) — mirrors HeroCard
+  const liveFundBalance = useMemo(() => {
+    if (!effectiveSettings || !slots?.length) return fundBalance
+    const isInventory = sport?.trackInventory ?? false
+    const memberCount = effectiveMembers.length
+    const all = computeAll(effectiveSettings, memberCount, sport?.hasEquipment ?? true, new Date(), slots)
+    const sessionConfigs = getSessionConfigs(effectiveSettings)
+    const shuttlePerSession = !isInventory ? (num(effectiveSettings.estimated_shuttlecocks) * num(effectiveSettings.price_per_box)) / 12 : 0
+    const totalActualSpent = all.venues.reduce((sum, v) => {
+      if (v.weekday === null || v.weekday === undefined) return sum
+      const { start, end } = periodDateRange(v.period)
+      const wd = Number(v.weekday)
+      const venueLogs = (logs || []).filter(
+        (l) => l.played_on >= start && l.played_on <= end && new Date(l.played_on + 'T12:00:00').getDay() === wd
+      )
+      const loggedCount = venueLogs.length
+      const estimatedCount = Math.max(0, v.happened - loggedCount)
+      if (v.court_payment_mode === 'cycle') {
+        const shuttleActual = isInventory ? 0 : venueLogs.reduce((s, l) => s + num(l.shuttle_cost), 0)
+        const shuttleEst = isInventory ? 0 : estimatedCount * shuttlePerSession
+        return sum + v.courtCost + shuttleActual + shuttleEst
+      } else {
+        const sc = sessionConfigs.find((c) => c.weekday === v.weekday) || {}
+        const courtPerSession = num(sc.court_price_per_hour) * num(sc.hours_per_session)
+        const courtActual = venueLogs.reduce((s, l) => s + num(l.court_cost), 0)
+        const shuttleActual = isInventory ? 0 : venueLogs.reduce((s, l) => s + num(l.shuttle_cost), 0)
+        return sum + courtActual + estimatedCount * courtPerSession + shuttleActual + estimatedCount * shuttlePerSession
+      }
+    }, 0)
+    return fundBalance - totalActualSpent
+  }, [effectiveSettings, slots, effectiveMembers, logs, fundBalance, sport])
   const tab = activeTab(path, club.id)
 
   async function setPlan(next) {
@@ -102,6 +136,7 @@ export function ClubLayout({ session, club, setClub, path, toast, onSignOut }) {
     fundTxns,
     collections,
     memberPayments,
+    liveFundBalance,
     payosConfigured: !!payosConfig,
     payosConfig,
     pollTally,

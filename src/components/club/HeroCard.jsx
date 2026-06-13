@@ -5,6 +5,7 @@ import { formatPeriodLabel } from '../../engine/forecast'
 
 export function HeroCard({
   all,
+  liveFundBalance,
   totalActualSpent,
   totalCollected,
   txCount,
@@ -48,10 +49,10 @@ export function HeroCard({
         <p
           className={cx(
             'mt-1 font-mono text-4xl sm:text-5xl font-black tabular-nums leading-none',
-            all.fund - totalActualSpent >= 0 ? 'text-lime-400' : 'text-red-400'
+            liveFundBalance >= 0 ? 'text-lime-400' : 'text-red-400'
           )}
         >
-          {fmtVND(all.fund - totalActualSpent)}
+          {fmtVND(liveFundBalance)}
         </p>
       </div>
 
