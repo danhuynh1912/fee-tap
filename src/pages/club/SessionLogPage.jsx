@@ -1,9 +1,8 @@
 import { useState, useMemo, useCallback } from 'react'
 import { useTranslation } from 'react-i18next'
-import {
-  ClipboardList, Check, Gauge, AlertTriangle, Info, Calendar, Settings2, Trash2, Loader2,
-  Link, Users, TrendingUp, Vote,
-} from 'lucide-react'
+import { useClub } from '../../contexts/ClubContext'
+import { handleError } from '../../lib/handleError'
+import { ClipboardList, Check, Gauge, AlertTriangle, Info, Calendar, Settings2, Trash2, Loader2, Link, Users, TrendingUp, Vote } from 'lucide-react'
 import { Card } from '../../components/ui/Card'
 import { Badge } from '../../components/ui/Badge'
 import { Button } from '../../components/ui/Button'
@@ -32,13 +31,19 @@ function GuestStepper({ label, value, onDecrement, onIncrement, disabled }) {
     <div className="flex items-center justify-between">
       <p className="text-sm font-semibold text-slate-700">{label}</p>
       <div className="flex items-center gap-2">
-        <button onClick={onDecrement} disabled={value <= 0 || disabled}
-          className="grid h-8 w-8 place-items-center rounded-xl border border-slate-200 bg-white text-slate-700 transition hover:border-slate-300 disabled:opacity-30">
+        <button
+          onClick={onDecrement}
+          disabled={value <= 0 || disabled}
+          className="grid h-8 w-8 place-items-center rounded-xl border border-slate-200 bg-white text-slate-700 transition hover:border-slate-300 disabled:opacity-30"
+        >
           <span className="text-lg leading-none">−</span>
         </button>
         <span className="w-7 text-center font-mono text-lg font-black tabular-nums text-slate-900">{value}</span>
-        <button onClick={onIncrement} disabled={disabled}
-          className="grid h-8 w-8 place-items-center rounded-xl bg-slate-900 text-white transition hover:bg-slate-800 disabled:opacity-30">
+        <button
+          onClick={onIncrement}
+          disabled={disabled}
+          className="grid h-8 w-8 place-items-center rounded-xl bg-slate-900 text-white transition hover:bg-slate-800 disabled:opacity-30"
+        >
           <span className="text-lg leading-none">+</span>
         </button>
       </div>
@@ -46,7 +51,10 @@ function GuestStepper({ label, value, onDecrement, onIncrement, disabled }) {
   )
 }
 
-export function SessionLogPage({ club, logs, settings, slots, members, sport, canEdit, onChanged, toast, user }) {
+export function SessionLogPage({ toast }) {
+  const { club, logs, settings, slots, members, sport, canEdit, reload, session } = useClub()
+  const onChanged = reload
+  const user = session?.user
   const { t, i18n } = useTranslation()
   const [activeTab, setActiveTab] = useState(() => {
     const params = new URLSearchParams(window.location.search)
@@ -54,7 +62,11 @@ export function SessionLogPage({ club, logs, settings, slots, members, sport, ca
   })
   const [editingDate, setEditingDate] = useState(null)
   const [editForm, setEditForm] = useState({
-    actual: '', note: '', voteId: '', guestMale: 0, guestFemale: 0,
+    actual: '',
+    note: '',
+    voteId: '',
+    guestMale: 0,
+    guestFemale: 0,
   })
   const [busy, setBusy] = useState(false)
   const [nearbyVotes, setNearbyVotes] = useState([])
@@ -71,9 +83,9 @@ export function SessionLogPage({ club, logs, settings, slots, members, sport, ca
   // count how many slots fall on a given weekday (for shuttle estimation)
   const slotCountByWeekday = useMemo(() => {
     const map = {}
-    const src = (slots && slots.length) ? slots : configs.map((c) => ({ weekdays: [c.weekday] }))
+    const src = slots && slots.length ? slots : configs.map((c) => ({ weekdays: [c.weekday] }))
     for (const s of src) {
-      for (const wd of (s.weekdays || [])) {
+      for (const wd of s.weekdays || []) {
         if (wd !== null && wd !== undefined) map[wd] = (map[wd] || 0) + 1
       }
     }
@@ -86,9 +98,21 @@ export function SessionLogPage({ club, logs, settings, slots, members, sport, ca
     const todayDay = new Date(today.getFullYear(), today.getMonth(), today.getDate())
     const all = []
     // use unique weekdays from slots if available, else from configs
-    const uniqueConfigs = (slots && slots.length)
-      ? [...new Map(slots.flatMap((s) => (s.weekdays || []).map((wd) => [wd, { ...configs[0], weekday: wd, cycle_months: s.cycle_months || 1, cycle_start_month: s.cycle_start_month || 1 }])).filter(([wd]) => wd !== null && wd !== undefined)).values()]
-      : configs.filter((c) => c.weekday !== null && c.weekday !== undefined)
+    const uniqueConfigs =
+      slots && slots.length
+        ? [
+            ...new Map(
+              slots
+                .flatMap((s) =>
+                  (s.weekdays || []).map((wd) => [
+                    wd,
+                    { ...configs[0], weekday: wd, cycle_months: s.cycle_months || 1, cycle_start_month: s.cycle_start_month || 1 },
+                  ])
+                )
+                .filter(([wd]) => wd !== null && wd !== undefined)
+            ).values(),
+          ]
+        : configs.filter((c) => c.weekday !== null && c.weekday !== undefined)
 
     for (const sc of uniqueConfigs) {
       const period = resolvePeriods(sc).current
@@ -118,30 +142,33 @@ export function SessionLogPage({ club, logs, settings, slots, members, sport, ca
   }, [configs, slots, logs, hasSchedule])
 
   const loggedCount = sessions.filter((s) => s.log).length
-  const avgActual = loggedCount
-    ? sessions.filter((s) => s.log).reduce((sum, s) => sum + num(s.log.actual_shuttlecocks), 0) / loggedCount
-    : 0
+  const avgActual = loggedCount ? sessions.filter((s) => s.log).reduce((sum, s) => sum + num(s.log.actual_shuttlecocks), 0) / loggedCount : 0
   const runningHigh = loggedCount >= 2 && avgActual > est
 
-  const fetchNearbyVotes = useCallback(async (dateStr) => {
-    if (!club.id) return
-    setVotesLoading(true)
-    try {
-      const d = new Date(dateStr)
-      const from = new Date(d); from.setDate(from.getDate() - 1)
-      const to   = new Date(d); to.setDate(to.getDate() + 1)
-      const { data } = await supabase
-        .from('votes')
-        .select('id, title, match_date, is_closed')
-        .eq('club_id', club.id)
-        .gte('match_date', from.toISOString())
-        .lte('match_date', to.toISOString())
-        .order('match_date', { ascending: false })
-      setNearbyVotes(data || [])
-    } finally {
-      setVotesLoading(false)
-    }
-  }, [club.id])
+  const fetchNearbyVotes = useCallback(
+    async (dateStr) => {
+      if (!club.id) return
+      setVotesLoading(true)
+      try {
+        const d = new Date(dateStr)
+        const from = new Date(d)
+        from.setDate(from.getDate() - 1)
+        const to = new Date(d)
+        to.setDate(to.getDate() + 1)
+        const { data } = await supabase
+          .from('votes')
+          .select('id, title, match_date, is_closed')
+          .eq('club_id', club.id)
+          .gte('match_date', from.toISOString())
+          .lte('match_date', to.toISOString())
+          .order('match_date', { ascending: false })
+        setNearbyVotes(data || [])
+      } finally {
+        setVotesLoading(false)
+      }
+    },
+    [club.id]
+  )
 
   async function handleVoteSelect(voteId) {
     setEditForm((f) => ({ ...f, voteId, guestMale: 0, guestFemale: 0 }))
@@ -153,7 +180,7 @@ export function SessionLogPage({ club, logs, settings, slots, members, sport, ca
       .eq('vote_id', voteId)
       .eq('attending', true)
     if (!responses) return
-    const totalMale   = responses.reduce((s, r) => s + (r.guest_male_count   || 0), 0)
+    const totalMale = responses.reduce((s, r) => s + (r.guest_male_count || 0), 0)
     const totalFemale = responses.reduce((s, r) => s + (r.guest_female_count || 0), 0)
     const totalGuests = responses.reduce((s, r) => s + (r.guests || 0), 0)
     setPollSuggestion({ male: totalMale, female: totalFemale, total: totalGuests })
@@ -185,76 +212,107 @@ export function SessionLogPage({ club, logs, settings, slots, members, sport, ca
       const wd = new Date(editingDate).getDay()
       const sc = getSessionConfigs(settings).find((c) => c.weekday === wd) || getSessionConfigs(settings)[0] || {}
       const isCycleMode = sc.court_payment_mode === 'cycle'
-      const courtCost   = num(sc.court_price_per_hour) * num(sc.hours_per_session)
+      const courtCost = num(sc.court_price_per_hour) * num(sc.hours_per_session)
       const shuttleCost = hasEquipment ? Math.round(actualCount * (num(settings.price_per_box) / BALLS_PER_BOX)) : 0
-      const totalCost   = courtCost + shuttleCost
+      const totalCost = courtCost + shuttleCost
 
       const gm = editForm.guestMale || 0
       const gf = editForm.guestFemale || 0
       const guestRevenue = calcGuestRevenue({
         mode: settings.guest_fee_mode || 'split_all',
-        guestMale: gm, guestFemale: gf,
-        feeMale: num(settings.guest_fee_male), feeFemale: num(settings.guest_fee_female),
-        shuttleCost, courtCost, memberCount,
+        guestMale: gm,
+        guestFemale: gf,
+        feeMale: num(settings.guest_fee_male),
+        feeFemale: num(settings.guest_fee_female),
+        shuttleCost,
+        courtCost,
+        memberCount,
       })
 
       const existingLog = logs.find((l) => l.played_on === editingDate)
 
       if (existingLog) {
-        await supabase.from('session_logs').update({
-          actual_shuttlecocks: actualCount,
-          note: editForm.note.trim() || null,
-          court_cost: courtCost, shuttle_cost: shuttleCost, total_cost: totalCost,
-          vote_id: editForm.voteId || null,
-          guest_male: gm, guest_female: gf, guest_revenue: guestRevenue,
-        }).eq('id', existingLog.id)
+        await supabase
+          .from('session_logs')
+          .update({
+            actual_shuttlecocks: actualCount,
+            note: editForm.note.trim() || null,
+            court_cost: courtCost,
+            shuttle_cost: shuttleCost,
+            total_cost: totalCost,
+            vote_id: editForm.voteId || null,
+            guest_male: gm,
+            guest_female: gf,
+            guest_revenue: guestRevenue,
+          })
+          .eq('id', existingLog.id)
 
         const oldDeduct = isCycleMode ? num(existingLog.shuttle_cost) : num(existingLog.total_cost)
         const newDeduct = isCycleMode ? shuttleCost : totalCost
-        const fundAdj = (oldDeduct - newDeduct) + (guestRevenue - num(existingLog.guest_revenue))
+        const fundAdj = oldDeduct - newDeduct + (guestRevenue - num(existingLog.guest_revenue))
         if (fundAdj !== 0) {
-          await supabase.from('club_settings')
+          await supabase
+            .from('club_settings')
             .update({ current_fund: num(settings.current_fund) + fundAdj })
             .eq('club_id', club.id)
         }
         if (guestRevenue > 0) {
-          await supabase.from('fund_transactions').upsert({
-            club_id: club.id, amount: guestRevenue,
-            note: `${t('log_guest_section')} ${fmtDate(editingDate)}: ${gm}M ${gf}F`,
-            session_log_id: existingLog.id,
-          }, { onConflict: 'session_log_id' })
+          await supabase.from('fund_transactions').upsert(
+            {
+              club_id: club.id,
+              amount: guestRevenue,
+              note: `${t('log_guest_section')} ${fmtDate(editingDate)}: ${gm}M ${gf}F`,
+              session_log_id: existingLog.id,
+            },
+            { onConflict: 'session_log_id' }
+          )
         }
       } else {
         const { data: newLog, error: insertErr } = await supabase
           .from('session_logs')
           .insert({
-            club_id: club.id, played_on: editingDate,
-            actual_shuttlecocks: actualCount, note: editForm.note.trim() || null,
-            court_cost: courtCost, shuttle_cost: shuttleCost, total_cost: totalCost,
+            club_id: club.id,
+            played_on: editingDate,
+            actual_shuttlecocks: actualCount,
+            note: editForm.note.trim() || null,
+            court_cost: courtCost,
+            shuttle_cost: shuttleCost,
+            total_cost: totalCost,
             vote_id: editForm.voteId || null,
-            guest_male: gm, guest_female: gf, guest_revenue: guestRevenue,
+            guest_male: gm,
+            guest_female: gf,
+            guest_revenue: guestRevenue,
           })
-          .select('id').single()
+          .select('id')
+          .single()
         if (insertErr) throw insertErr
 
         const netChange = -(isCycleMode ? shuttleCost : totalCost) + guestRevenue
-        await supabase.from('club_settings')
+        await supabase
+          .from('club_settings')
           .update({ current_fund: Math.max(0, num(settings.current_fund) + netChange) })
           .eq('club_id', club.id)
 
         if (guestRevenue > 0) {
-          await supabase.from('fund_transactions').upsert({
-            club_id: club.id, amount: guestRevenue,
-            note: `${t('log_guest_section')} ${fmtDate(editingDate)}: ${gm}M ${gf}F`,
-            session_log_id: newLog.id,
-          }, { onConflict: 'session_log_id' })
+          await supabase.from('fund_transactions').upsert(
+            {
+              club_id: club.id,
+              amount: guestRevenue,
+              note: `${t('log_guest_section')} ${fmtDate(editingDate)}: ${gm}M ${gf}F`,
+              session_log_id: newLog.id,
+            },
+            { onConflict: 'session_log_id' }
+          )
         }
       }
 
       setEditingDate(null)
       onChanged()
-    } catch (e) { toast(e.message || t('err_generic')) }
-    finally { setBusy(false) }
+    } catch (e) {
+      handleError(e, toast, t)
+    } finally {
+      setBusy(false)
+    }
   }
 
   async function clearLog(log) {
@@ -267,12 +325,15 @@ export function SessionLogPage({ club, logs, settings, slots, members, sport, ca
       const restore = isCycleMode ? num(log.shuttle_cost) : num(log.total_cost)
       const fundAdj = restore - num(log.guest_revenue)
       if (fundAdj !== 0) {
-        await supabase.from('club_settings')
+        await supabase
+          .from('club_settings')
           .update({ current_fund: num(settings.current_fund) + fundAdj })
           .eq('club_id', club.id)
       }
       onChanged()
-    } catch (e) { toast(e.message || t('err_generic')) }
+    } catch (e) {
+      handleError(e, toast, t)
+    }
   }
 
   const previewGuestRevenue = useMemo(() => {
@@ -284,9 +345,13 @@ export function SessionLogPage({ club, logs, settings, slots, members, sport, ca
     const shuttleCost = hasEquipment ? Math.round(actualCount * (num(settings.price_per_box) / BALLS_PER_BOX)) : 0
     return calcGuestRevenue({
       mode: settings.guest_fee_mode || 'split_all',
-      guestMale: editForm.guestMale || 0, guestFemale: editForm.guestFemale || 0,
-      feeMale: num(settings.guest_fee_male), feeFemale: num(settings.guest_fee_female),
-      shuttleCost, courtCost, memberCount,
+      guestMale: editForm.guestMale || 0,
+      guestFemale: editForm.guestFemale || 0,
+      feeMale: num(settings.guest_fee_male),
+      feeFemale: num(settings.guest_fee_female),
+      shuttleCost,
+      courtCost,
+      memberCount,
     })
   }, [editingDate, editForm, settings, hasEquipment, est, memberCount])
 
@@ -298,9 +363,7 @@ export function SessionLogPage({ club, logs, settings, slots, members, sport, ca
           onClick={() => setActiveTab('log')}
           className={cx(
             'flex flex-1 items-center justify-center gap-2 rounded-xl px-4 py-2.5 text-sm font-semibold transition',
-            activeTab === 'log'
-              ? 'bg-white text-slate-900 shadow-sm'
-              : 'text-slate-500 hover:text-slate-700'
+            activeTab === 'log' ? 'bg-white text-slate-900 shadow-sm' : 'text-slate-500 hover:text-slate-700'
           )}
         >
           <ClipboardList className="h-4 w-4" />
@@ -310,9 +373,7 @@ export function SessionLogPage({ club, logs, settings, slots, members, sport, ca
           onClick={() => setActiveTab('vote')}
           className={cx(
             'flex flex-1 items-center justify-center gap-2 rounded-xl px-4 py-2.5 text-sm font-semibold transition',
-            activeTab === 'vote'
-              ? 'bg-white text-slate-900 shadow-sm'
-              : 'text-slate-500 hover:text-slate-700'
+            activeTab === 'vote' ? 'bg-white text-slate-900 shadow-sm' : 'text-slate-500 hover:text-slate-700'
           )}
         >
           <Vote className="h-4 w-4" />
@@ -332,7 +393,9 @@ export function SessionLogPage({ club, logs, settings, slots, members, sport, ca
           <div className="mt-5 grid grid-cols-3 gap-3">
             <StatCard icon={ClipboardList} label={t('log_happened')} value={fmtNum(sessions.length)} />
             <StatCard icon={Check} label={t('log_recorded')} value={fmtNum(loggedCount)} tone={loggedCount === sessions.length ? 'volt' : 'slate'} />
-            {hasEquipment && <StatCard icon={Gauge} label={t('log_avg')} value={loggedCount ? avgActual.toFixed(1) : '—'} tone={runningHigh ? 'red' : 'slate'} />}
+            {hasEquipment && (
+              <StatCard icon={Gauge} label={t('log_avg')} value={loggedCount ? avgActual.toFixed(1) : '—'} tone={runningHigh ? 'red' : 'slate'} />
+            )}
           </div>
 
           {runningHigh && (
@@ -349,7 +412,9 @@ export function SessionLogPage({ club, logs, settings, slots, members, sport, ca
 
           <ul className="mt-5 space-y-2">
             {sessions.length === 0 && hasSchedule && (
-              <li className="rounded-2xl border border-dashed border-slate-200 py-10 text-center text-sm text-slate-400">{t('log_no_sessions_yet')}</li>
+              <li className="rounded-2xl border border-dashed border-slate-200 py-10 text-center text-sm text-slate-400">
+                {t('log_no_sessions_yet')}
+              </li>
             )}
             {sessions.map(({ date, weekday, cycle_months, log }) => {
               const isEditing = editingDate === date
@@ -363,10 +428,13 @@ export function SessionLogPage({ club, logs, settings, slots, members, sport, ca
               const cycleTag = cycleLabelShort(cycle_months || 1, i18n.language)
 
               return (
-                <li key={date} className={cx(
-                  'rounded-2xl border px-4 py-3 transition',
-                  isActual ? 'border-slate-100 bg-white' : 'border-dashed border-slate-200 bg-slate-50/60'
-                )}>
+                <li
+                  key={date}
+                  className={cx(
+                    'rounded-2xl border px-4 py-3 transition',
+                    isActual ? 'border-slate-100 bg-white' : 'border-dashed border-slate-200 bg-slate-50/60'
+                  )}
+                >
                   {isEditing ? (
                     <div className="space-y-3">
                       <p className="text-sm font-bold text-slate-900">{fmtDate(date)}</p>
@@ -374,7 +442,10 @@ export function SessionLogPage({ club, logs, settings, slots, members, sport, ca
                       <div className="grid gap-2 sm:grid-cols-2">
                         <div className="relative">
                           <input
-                            type="number" min="0" step="0.5" autoFocus
+                            type="number"
+                            min="0"
+                            step="0.5"
+                            autoFocus
                             className={cx(inputCls, 'font-mono')}
                             placeholder={`${t('log_actual')} (${estTotal})`}
                             value={editForm.actual}
@@ -394,23 +465,21 @@ export function SessionLogPage({ club, logs, settings, slots, members, sport, ca
                         <label className="mb-1 flex items-center gap-1.5 text-xs font-semibold text-slate-500">
                           <Link className="h-3.5 w-3.5" /> {t('log_link_vote')}
                         </label>
-                        {votesLoading
-                          ? <p className="text-xs text-slate-400 flex items-center gap-1"><Loader2 className="h-3 w-3 animate-spin" /> Loading…</p>
-                          : (
-                            <select
-                              className={cx(inputCls, 'text-sm')}
-                              value={editForm.voteId}
-                              onChange={(e) => handleVoteSelect(e.target.value)}
-                            >
-                              <option value="">{t('log_link_vote_none')}</option>
-                              {nearbyVotes.map((v) => (
-                                <option key={v.id} value={v.id}>
-                                  {v.title}{v.match_date ? ` · ${fmtDate(v.match_date)}` : ''}
-                                </option>
-                              ))}
-                            </select>
-                          )
-                        }
+                        {votesLoading ? (
+                          <p className="text-xs text-slate-400 flex items-center gap-1">
+                            <Loader2 className="h-3 w-3 animate-spin" /> Loading…
+                          </p>
+                        ) : (
+                          <select className={cx(inputCls, 'text-sm')} value={editForm.voteId} onChange={(e) => handleVoteSelect(e.target.value)}>
+                            <option value="">{t('log_link_vote_none')}</option>
+                            {nearbyVotes.map((v) => (
+                              <option key={v.id} value={v.id}>
+                                {v.title}
+                                {v.match_date ? ` · ${fmtDate(v.match_date)}` : ''}
+                              </option>
+                            ))}
+                          </select>
+                        )}
                       </div>
 
                       <div className="rounded-2xl border border-slate-100 bg-slate-50 p-4 space-y-3">
@@ -448,14 +517,27 @@ export function SessionLogPage({ club, logs, settings, slots, members, sport, ca
 
                       <div className="flex gap-2">
                         <Button variant="volt" size="sm" className="flex-1" onClick={saveEdit} disabled={busy}>
-                          {busy ? <Loader2 className="h-4 w-4 animate-spin" /> : <><Check className="h-4 w-4" /> {t('save')}</>}
+                          {busy ? (
+                            <Loader2 className="h-4 w-4 animate-spin" />
+                          ) : (
+                            <>
+                              <Check className="h-4 w-4" /> {t('save')}
+                            </>
+                          )}
                         </Button>
-                        <Button variant="ghost" size="sm" onClick={() => setEditingDate(null)}>{t('cancel')}</Button>
+                        <Button variant="ghost" size="sm" onClick={() => setEditingDate(null)}>
+                          {t('cancel')}
+                        </Button>
                       </div>
                     </div>
                   ) : (
                     <div className="flex items-center gap-3">
-                      <span className={cx('grid h-9 w-9 shrink-0 place-items-center rounded-xl text-xs font-bold', isActual ? 'bg-slate-900 text-white' : 'bg-slate-100 text-slate-400')}>
+                      <span
+                        className={cx(
+                          'grid h-9 w-9 shrink-0 place-items-center rounded-xl text-xs font-bold',
+                          isActual ? 'bg-slate-900 text-white' : 'bg-slate-100 text-slate-400'
+                        )}
+                      >
                         {weekday !== null && weekday !== undefined ? t(`wd_${weekday}`) : <Calendar className="h-4 w-4" />}
                       </span>
                       <div className="min-w-0 flex-1">
@@ -482,7 +564,8 @@ export function SessionLogPage({ club, logs, settings, slots, members, sport, ca
                         )}
                         {isActual && (
                           <Badge tone={tone === 'volt' ? 'volt' : tone === 'red' ? 'red' : 'slate'}>
-                            {diff > 0 ? '+' : ''}{diff !== 0 ? diff : ''} {diff > 0 ? t('log_over') : diff < 0 ? t('log_under') : t('log_on_track')}
+                            {diff > 0 ? '+' : ''}
+                            {diff !== 0 ? diff : ''} {diff > 0 ? t('log_over') : diff < 0 ? t('log_under') : t('log_on_track')}
                           </Badge>
                         )}
                       </div>
@@ -531,14 +614,7 @@ export function SessionLogPage({ club, logs, settings, slots, members, sport, ca
               </button>
             </div>
           )}
-          <NextSessionVoteTab
-            club={club}
-            settings={settings}
-            members={members}
-            canEdit={canEdit}
-            user={user}
-            toast={toast}
-          />
+          <NextSessionVoteTab club={club} settings={settings} members={members} canEdit={canEdit} user={user} toast={toast} />
         </div>
       )}
     </div>

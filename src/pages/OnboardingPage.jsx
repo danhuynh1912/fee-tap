@@ -74,19 +74,19 @@ export function OnboardingPage({ session, onClubReady, toast }) {
               </div>
 
               <Field label={t('onb_club_name')} icon={Building2}>
-                <input
-                  className={inputCls}
-                  placeholder={t('onb_club_ph')}
-                  value={name}
-                  onChange={(e) => setName(e.target.value)}
-                  autoFocus
-                />
+                <input className={inputCls} placeholder={t('onb_club_ph')} value={name} onChange={(e) => setName(e.target.value)} autoFocus />
               </Field>
 
               <Button type="submit" variant="primary" size="lg" className="w-full" disabled={name.trim().length < 2 || busy}>
-                {busy
-                  ? <><Loader2 className="h-5 w-5 animate-spin" /> {t('onb_creating')}</>
-                  : <>{t('onb_create')} <ArrowRight className="h-5 w-5 text-lime-400" /></>}
+                {busy ? (
+                  <>
+                    <Loader2 className="h-5 w-5 animate-spin" /> {t('onb_creating')}
+                  </>
+                ) : (
+                  <>
+                    {t('onb_create')} <ArrowRight className="h-5 w-5 text-lime-400" />
+                  </>
+                )}
               </Button>
             </form>
           </Card>

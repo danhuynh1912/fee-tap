@@ -12,7 +12,10 @@ export function UpsellModal({ open, onClose, onUpgraded, clubId, toast }) {
   const timer = useRef(null)
 
   useEffect(() => {
-    if (!open) { setStage('offer'); clearTimeout(timer.current) }
+    if (!open) {
+      setStage('offer')
+      clearTimeout(timer.current)
+    }
     return () => clearTimeout(timer.current)
   }, [open])
 
@@ -24,7 +27,9 @@ export function UpsellModal({ open, onClose, onUpgraded, clubId, toast }) {
       } catch {}
       setStage('success')
       onUpgraded()
-      timer.current = setTimeout(() => { onClose() }, 1600)
+      timer.current = setTimeout(() => {
+        onClose()
+      }, 1600)
     }, 3000)
   }
 
@@ -82,9 +87,15 @@ export function UpsellModal({ open, onClose, onUpgraded, clubId, toast }) {
             <MockQR />
           </div>
           <div className="mt-4 flex items-center justify-center gap-2 text-sm font-medium text-slate-500">
-            {stage === 'processing'
-              ? <><Loader2 className="h-4 w-4 animate-spin text-slate-700" /> {t('upsell_processing')}</>
-              : <><Receipt className="h-4 w-4" /> {t('upsell_scan')}</>}
+            {stage === 'processing' ? (
+              <>
+                <Loader2 className="h-4 w-4 animate-spin text-slate-700" /> {t('upsell_processing')}
+              </>
+            ) : (
+              <>
+                <Receipt className="h-4 w-4" /> {t('upsell_scan')}
+              </>
+            )}
           </div>
           {stage === 'qr' && (
             <Button variant="primary" size="lg" className="mt-5 w-full" onClick={pay}>

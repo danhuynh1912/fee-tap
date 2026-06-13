@@ -45,7 +45,9 @@ export function ClubPickerPage({ myClubs, onSelect }) {
       <div className="mx-auto max-w-4xl px-5 py-16">
         <div className="animate-fade-in space-y-10">
           <div className="text-center">
-            <Badge tone="dark" icon={Building2}>{t('picker_workspace')}</Badge>
+            <Badge tone="dark" icon={Building2}>
+              {t('picker_workspace')}
+            </Badge>
             <h2 className="mt-4 text-4xl font-black tracking-tight text-slate-900">{t('picker_title')}</h2>
             <p className="mt-2 text-slate-500">{t('picker_subtitle')}</p>
           </div>
@@ -66,7 +68,9 @@ export function ClubPickerPage({ myClubs, onSelect }) {
 
             {hostedClubs.length > 0 ? (
               <div className="grid gap-4 sm:grid-cols-2 lg:grid-cols-3">
-                {hostedClubs.map((c) => <ClubCard key={c.id} club={c} onSelect={onSelect} />)}
+                {hostedClubs.map((c) => (
+                  <ClubCard key={c.id} club={c} onSelect={onSelect} />
+                ))}
                 <button
                   onClick={() => navigate('/new')}
                   className="group flex flex-col items-start rounded-3xl border-2 border-dashed border-slate-200 bg-white/50 p-6 text-left transition hover:border-slate-300 hover:bg-white active:scale-[0.98]"
@@ -102,7 +106,9 @@ export function ClubPickerPage({ myClubs, onSelect }) {
 
             {memberClubs.length > 0 ? (
               <div className="grid gap-4 sm:grid-cols-2 lg:grid-cols-3">
-                {memberClubs.map((c) => <ClubCard key={c.id} club={c} onSelect={onSelect} />)}
+                {memberClubs.map((c) => (
+                  <ClubCard key={c.id} club={c} onSelect={onSelect} />
+                ))}
               </div>
             ) : (
               <div className="flex items-center gap-4 rounded-3xl border border-dashed border-slate-200 bg-white/60 px-6 py-5">

@@ -23,7 +23,7 @@ export function SlotGrid({ filledSlots, maxSlots, attendees }) {
         filled: true,
         isMain: i === 0,
         initial: r.name.trim().charAt(0).toUpperCase(),
-        avatar_url: i === 0 ? (r.avatar_url || null) : null,
+        avatar_url: i === 0 ? r.avatar_url || null : null,
         tooltip: i === 0 ? r.name : t('vote_guest_of', { name: r.name }),
       })
     }
@@ -38,11 +38,20 @@ export function SlotGrid({ filledSlots, maxSlots, attendees }) {
         slot.filled ? (
           <SlotTip key={i} text={slot.tooltip}>
             <div className="aspect-square rounded-xl bg-slate-900 flex items-center justify-center cursor-default overflow-hidden">
-              {slot.avatar_url
-                ? <img src={slot.avatar_url} alt={slot.initial} className="w-full h-full object-cover" onError={(e) => { e.currentTarget.style.display = 'none' }} />
-                : slot.isMain
-                  ? <span className="text-sm font-black text-lime-400">{slot.initial}</span>
-                  : <User className="h-5 w-5 text-slate-500" strokeWidth={1.5} />}
+              {slot.avatar_url ? (
+                <img
+                  src={slot.avatar_url}
+                  alt={slot.initial}
+                  className="w-full h-full object-cover"
+                  onError={(e) => {
+                    e.currentTarget.style.display = 'none'
+                  }}
+                />
+              ) : slot.isMain ? (
+                <span className="text-sm font-black text-lime-400">{slot.initial}</span>
+              ) : (
+                <User className="h-5 w-5 text-slate-500" strokeWidth={1.5} />
+              )}
             </div>
           </SlotTip>
         ) : (

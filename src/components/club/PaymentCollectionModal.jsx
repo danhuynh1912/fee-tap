@@ -12,10 +12,7 @@ function MemberRow({ member, paymentRecord, onConfirmManual, confirmingId }) {
   const isConfirming = confirmingId === member.id
 
   return (
-    <div className={cx(
-      'flex items-center gap-3 rounded-2xl border px-4 py-3',
-      isPaid ? 'border-lime-200 bg-lime-50' : 'border-slate-100 bg-white'
-    )}>
+    <div className={cx('flex items-center gap-3 rounded-2xl border px-4 py-3', isPaid ? 'border-lime-200 bg-lime-50' : 'border-slate-100 bg-white')}>
       {/* Avatar */}
       <div className="relative shrink-0">
         {member.avatar_url ? (
@@ -40,27 +37,21 @@ function MemberRow({ member, paymentRecord, onConfirmManual, confirmingId }) {
             {paymentRecord.confirmed_by === 'admin_manual' && ' · tiền mặt'}
           </p>
         )}
-        {!isPaid && (
-          <p className="text-[11px] text-slate-400">{t('payment_status_pending')}</p>
-        )}
+        {!isPaid && <p className="text-[11px] text-slate-400">{t('payment_status_pending')}</p>}
       </div>
 
       <div className="shrink-0 text-right">
         {isPaid ? (
-          <span className="font-mono text-sm font-bold text-lime-600">
-            +{fmtVND(paymentRecord.amount)}
-          </span>
+          <span className="font-mono text-sm font-bold text-lime-600">+{fmtVND(paymentRecord.amount)}</span>
         ) : (
-          <Button
-            variant="subtle"
-            size="sm"
-            onClick={() => onConfirmManual(member.id, paymentRecord)}
-            disabled={isConfirming}
-          >
-            {isConfirming
-              ? <Loader2 className="h-3.5 w-3.5 animate-spin" />
-              : <><UserCheck className="h-3.5 w-3.5" /> {t('payment_confirm_manual')}</>
-            }
+          <Button variant="subtle" size="sm" onClick={() => onConfirmManual(member.id, paymentRecord)} disabled={isConfirming}>
+            {isConfirming ? (
+              <Loader2 className="h-3.5 w-3.5 animate-spin" />
+            ) : (
+              <>
+                <UserCheck className="h-3.5 w-3.5" /> {t('payment_confirm_manual')}
+              </>
+            )}
           </Button>
         )}
       </div>
@@ -83,9 +74,12 @@ export function PaymentCollectionModal({ open, onClose, collection, memberPaymen
       member_id: m.id,
       amount: collection.amount_per_member,
     }))
-    supabase.from('member_payment_records').insert(records).then(({ error }) => {
-      if (!error) onSynced?.()  // reload data without closing modal
-    })
+    supabase
+      .from('member_payment_records')
+      .insert(records)
+      .then(({ error }) => {
+        if (!error) onSynced?.() // reload data without closing modal
+      })
   }, [open, collection?.id, members.length, memberPayments.length])
 
   if (!collection) return null
@@ -93,14 +87,14 @@ export function PaymentCollectionModal({ open, onClose, collection, memberPaymen
   const totalCount = members.length
   const paidCount = memberPayments.filter((p) => p.status === 'paid' || p.status === 'manual').length
   const totalAmount = memberPayments.reduce((s, p) => s + (p.amount || 0), 0)
-  const paidAmount = memberPayments
-    .filter((p) => p.status === 'paid' || p.status === 'manual')
-    .reduce((s, p) => s + (p.amount || 0), 0)
+  const paidAmount = memberPayments.filter((p) => p.status === 'paid' || p.status === 'manual').reduce((s, p) => s + (p.amount || 0), 0)
 
   async function confirmManual(memberId, record) {
     setConfirmingId(memberId)
     try {
-      const { data: { user } } = await supabase.auth.getUser()
+      const {
+        data: { user },
+      } = await supabase.auth.getUser()
 
       // If no record yet (e.g. host added after collection opened), create it first
       let resolvedRecord = record
@@ -146,9 +140,13 @@ export function PaymentCollectionModal({ open, onClose, collection, memberPaymen
         {/* Progress summary */}
         <div className="rounded-2xl bg-slate-900 p-4 flex items-center justify-between">
           <div>
-            <p className="text-xs font-semibold uppercase tracking-wide text-slate-400">{t('collection_paid_count', { paid: paidCount, total: totalCount })}</p>
+            <p className="text-xs font-semibold uppercase tracking-wide text-slate-400">
+              {t('collection_paid_count', { paid: paidCount, total: totalCount })}
+            </p>
             <p className="font-mono text-xl font-black text-lime-400 mt-1">{fmtVND(paidAmount)}</p>
-            <p className="text-xs text-slate-500 mt-0.5">/ {fmtVND(totalAmount)} {t('collection_total_label')}</p>
+            <p className="text-xs text-slate-500 mt-0.5">
+              / {fmtVND(totalAmount)} {t('collection_total_label')}
+            </p>
           </div>
           {/* Mini progress bar */}
           <div className="w-24 space-y-1">
@@ -158,9 +156,7 @@ export function PaymentCollectionModal({ open, onClose, collection, memberPaymen
                 style={{ width: totalCount > 0 ? `${(paidCount / totalCount) * 100}%` : '0%' }}
               />
             </div>
-            <p className="text-right text-[10px] text-slate-500">
-              {totalCount > 0 ? Math.round((paidCount / totalCount) * 100) : 0}%
-            </p>
+            <p className="text-right text-[10px] text-slate-500">{totalCount > 0 ? Math.round((paidCount / totalCount) * 100) : 0}%</p>
           </div>
         </div>
 
@@ -168,15 +164,7 @@ export function PaymentCollectionModal({ open, onClose, collection, memberPaymen
         <div className="space-y-2 max-h-80 overflow-y-auto">
           {members.map((m) => {
             const record = memberPayments.find((p) => p.member_id === m.id) || null
-            return (
-              <MemberRow
-                key={m.id}
-                member={m}
-                paymentRecord={record}
-                onConfirmManual={confirmManual}
-                confirmingId={confirmingId}
-              />
-            )
+            return <MemberRow key={m.id} member={m} paymentRecord={record} onConfirmManual={confirmManual} confirmingId={confirmingId} />
           })}
         </div>
 
@@ -185,7 +173,9 @@ export function PaymentCollectionModal({ open, onClose, collection, memberPaymen
           <span>{t('payment_manual_hint')}</span>
         </div>
 
-        <Button variant="ghost" size="sm" className="w-full" onClick={onClose}>{t('close')}</Button>
+        <Button variant="ghost" size="sm" className="w-full" onClick={onClose}>
+          {t('close')}
+        </Button>
       </div>
     </Modal>
   )

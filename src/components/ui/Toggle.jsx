@@ -8,9 +8,7 @@ export function Toggle({ checked, onChange, label }) {
       onClick={() => onChange(!checked)}
       className={cx(
         'flex w-full items-center justify-between gap-3 rounded-2xl border px-4 py-3.5 text-left transition',
-        checked
-          ? 'border-slate-900 bg-slate-900 text-white'
-          : 'border-slate-200 bg-white text-slate-700 hover:border-slate-300'
+        checked ? 'border-slate-900 bg-slate-900 text-white' : 'border-slate-200 bg-white text-slate-700 hover:border-slate-300'
       )}
     >
       <span className="flex items-center gap-2 text-sm font-semibold">

@@ -11,7 +11,10 @@ export function useAuth() {
 
   // ── auth session ────────────────────────────────────────────────
   useEffect(() => {
-    if (!isConfigured) { setAuthReady(true); return }
+    if (!isConfigured) {
+      setAuthReady(true)
+      return
+    }
     supabase.auth.getSession().then(async ({ data }) => {
       const s = data.session
       // If access token is expired (or about to expire in <60s), refresh immediately
@@ -40,7 +43,10 @@ export function useAuth() {
 
   // ── load all clubs (owned + member) ─────────────────────────────
   const loadClubs = useCallback(async (sess, currentPath = window.location.pathname) => {
-    if (!sess) { setMyClubs([]); return }
+    if (!sess) {
+      setMyClubs([])
+      return
+    }
     let cancelled = false
     setResolving(true)
     try {
@@ -58,8 +64,7 @@ export function useAuth() {
       if (memberOnlyIds.length) {
         const { data: mclubs } = await supabase.from('clubs').select('*').in('id', memberOnlyIds)
         const ownerIds = [...new Set((mclubs || []).map((c) => c.owner_id))]
-        const { data: ownerProfiles } = await supabase
-          .from('profiles').select('id, full_name, avatar_url').in('id', ownerIds)
+        const { data: ownerProfiles } = await supabase.from('profiles').select('id, full_name, avatar_url').in('id', ownerIds)
         const profileMap = Object.fromEntries((ownerProfiles || []).map((p) => [p.id, p]))
         memberClubs = (mclubs || []).map((c) => ({
           ...c,
@@ -84,7 +89,9 @@ export function useAuth() {
     } finally {
       if (!cancelled) setResolving(false)
     }
-    return () => { cancelled = true }
+    return () => {
+      cancelled = true
+    }
   }, [])
 
   useEffect(() => {
@@ -96,7 +103,7 @@ export function useAuth() {
   }, [session, loadClubs])
 
   function updateClub(updated) {
-    setMyClubs((prev) => prev.map((c) => c.id === updated.id ? updated : c))
+    setMyClubs((prev) => prev.map((c) => (c.id === updated.id ? updated : c)))
   }
 
   function addClub(club) {
@@ -126,31 +133,21 @@ export function useAuth() {
 
   async function joinClub(clubId, sess = session) {
     if (!sess || !clubId) return
-    const { error } = await supabase.from('club_members').upsert(
-      { club_id: clubId, user_id: sess.user.id, name: sess.user.user_metadata?.full_name || sess.user.email },
-      { onConflict: 'club_id,user_id', ignoreDuplicates: true }
-    )
+    const { error } = await supabase
+      .from('club_members')
+      .upsert(
+        { club_id: clubId, user_id: sess.user.id, name: sess.user.user_metadata?.full_name || sess.user.email },
+        { onConflict: 'club_id,user_id', ignoreDuplicates: true }
+      )
     if (error) throw error
 
     // Auto-enroll into any open payment collections
-    const { data: newMember } = await supabase
-      .from('club_members')
-      .select('id')
-      .eq('club_id', clubId)
-      .eq('user_id', sess.user.id)
-      .single()
+    const { data: newMember } = await supabase.from('club_members').select('id').eq('club_id', clubId).eq('user_id', sess.user.id).single()
     if (newMember) {
-      const { data: openCols } = await supabase
-        .from('payment_collections')
-        .select('id, amount_per_member')
-        .eq('club_id', clubId)
-        .eq('status', 'open')
+      const { data: openCols } = await supabase.from('payment_collections').select('id, amount_per_member').eq('club_id', clubId).eq('status', 'open')
       if (openCols?.length) {
         // Only insert records that don't already exist (idempotent)
-        const { data: existing } = await supabase
-          .from('member_payment_records')
-          .select('collection_id')
-          .eq('member_id', newMember.id)
+        const { data: existing } = await supabase.from('member_payment_records').select('collection_id').eq('member_id', newMember.id)
         const existingIds = new Set((existing || []).map((r) => r.collection_id))
         const toInsert = openCols
           .filter((c) => !existingIds.has(c.id))
@@ -161,10 +158,9 @@ export function useAuth() {
 
     const { data: clubData } = await supabase.from('clubs').select('*').eq('id', clubId).single()
     if (clubData) {
-      const { data: ownerProfile } = await supabase
-        .from('profiles').select('id, full_name, avatar_url').eq('id', clubData.owner_id).maybeSingle()
+      const { data: ownerProfile } = await supabase.from('profiles').select('id, full_name, avatar_url').eq('id', clubData.owner_id).maybeSingle()
       const newClub = { ...clubData, userRole: 'member', owner: ownerProfile || null }
-      setMyClubs((prev) => prev.some((c) => c.id === clubId) ? prev : [...prev, newClub])
+      setMyClubs((prev) => (prev.some((c) => c.id === clubId) ? prev : [...prev, newClub]))
     }
   }
 

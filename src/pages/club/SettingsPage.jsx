@@ -1,9 +1,29 @@
 import { useState, useCallback, useMemo } from 'react'
 import { useTranslation } from 'react-i18next'
+import { useClub } from '../../contexts/ClubContext'
+import { handleError } from '../../lib/handleError'
 import {
-  Settings2, Coins, Wallet, Check, Plus, Loader2, Users,
-  TrendingUp, MapPin, Pencil, Trash2, GripVertical, Package, UserCheck,
-  RefreshCw, Calendar, QrCode, CheckCircle2, Eye, EyeOff, Crown,
+  Settings2,
+  Coins,
+  Wallet,
+  Check,
+  Plus,
+  Loader2,
+  Users,
+  TrendingUp,
+  MapPin,
+  Pencil,
+  Trash2,
+  GripVertical,
+  Package,
+  UserCheck,
+  RefreshCw,
+  Calendar,
+  QrCode,
+  CheckCircle2,
+  Eye,
+  EyeOff,
+  Crown,
 } from 'lucide-react'
 import { Card } from '../../components/ui/Card'
 import { Button } from '../../components/ui/Button'
@@ -38,16 +58,17 @@ function PayOSSettings({ club, plan, payosConfig, canEdit, onChanged, toast, onU
         payos_api_key: form.apiKey.trim(),
         payos_checksum_key: form.checksumKey.trim(),
       }
-      const { error } = await supabase
-        .from('club_payment_config')
-        .upsert(payload, { onConflict: 'club_id' })
+      const { error } = await supabase.from('club_payment_config').upsert(payload, { onConflict: 'club_id' })
       if (error) throw error
       toast(t('payos_saved'))
       setEditing(false)
       setForm({ clientId: '', apiKey: '', checksumKey: '' })
       onChanged?.()
-    } catch (e) { toast(e.message || t('err_generic')) }
-    finally { setSaving(false) }
+    } catch (e) {
+      handleError(e, toast, t)
+    } finally {
+      setSaving(false)
+    }
   }
 
   return (
@@ -94,27 +115,50 @@ function PayOSSettings({ club, plan, payosConfig, canEdit, onChanged, toast, onU
                 </button>
               </div>
               <input
-                className={inputCls} placeholder="Client ID"
-                value={form.clientId} onChange={(e) => setForm((f) => ({ ...f, clientId: e.target.value }))}
+                className={inputCls}
+                placeholder="Client ID"
+                value={form.clientId}
+                onChange={(e) => setForm((f) => ({ ...f, clientId: e.target.value }))}
               />
               <input
                 className={inputCls}
                 placeholder="API Key"
                 type={showKeys ? 'text' : 'password'}
-                value={form.apiKey} onChange={(e) => setForm((f) => ({ ...f, apiKey: e.target.value }))}
+                value={form.apiKey}
+                onChange={(e) => setForm((f) => ({ ...f, apiKey: e.target.value }))}
               />
               <input
                 className={inputCls}
                 placeholder="Checksum Key"
                 type={showKeys ? 'text' : 'password'}
-                value={form.checksumKey} onChange={(e) => setForm((f) => ({ ...f, checksumKey: e.target.value }))}
+                value={form.checksumKey}
+                onChange={(e) => setForm((f) => ({ ...f, checksumKey: e.target.value }))}
               />
               <p className="text-xs text-slate-400">{t('payos_keys_hint')}</p>
               <div className="flex gap-2">
-                <Button variant="volt" size="sm" className="flex-1" onClick={save} disabled={saving || !form.clientId || !form.apiKey || !form.checksumKey}>
-                  {saving ? <Loader2 className="h-4 w-4 animate-spin" /> : <><Check className="h-4 w-4" /> {t('save')}</>}
+                <Button
+                  variant="volt"
+                  size="sm"
+                  className="flex-1"
+                  onClick={save}
+                  disabled={saving || !form.clientId || !form.apiKey || !form.checksumKey}
+                >
+                  {saving ? (
+                    <Loader2 className="h-4 w-4 animate-spin" />
+                  ) : (
+                    <>
+                      <Check className="h-4 w-4" /> {t('save')}
+                    </>
+                  )}
                 </Button>
-                <Button variant="ghost" size="sm" onClick={() => { setEditing(false); setForm({ clientId: '', apiKey: '', checksumKey: '' }) }}>
+                <Button
+                  variant="ghost"
+                  size="sm"
+                  onClick={() => {
+                    setEditing(false)
+                    setForm({ clientId: '', apiKey: '', checksumKey: '' })
+                  }}
+                >
                   {t('cancel')}
                 </Button>
               </div>
@@ -133,8 +177,10 @@ function PayOSSettings({ club, plan, payosConfig, canEdit, onChanged, toast, onU
 function CourtSlotCard({ slot, canEdit, lang, onEdit, onDelete, t }) {
   const result = useMemo(() => computeSlot(slot), [slot])
   const wdLabels = (slot.weekdays || [])
-    .slice().sort((a, b) => (a === 0 ? 7 : a) - (b === 0 ? 7 : b))
-    .map((w) => t(`wd_${w}`)).join(', ')
+    .slice()
+    .sort((a, b) => (a === 0 ? 7 : a) - (b === 0 ? 7 : b))
+    .map((w) => t(`wd_${w}`))
+    .join(', ')
 
   return (
     <div className="flex items-center gap-3 rounded-2xl border border-slate-200 bg-white p-4 animate-fade-in">
@@ -144,15 +190,22 @@ function CourtSlotCard({ slot, canEdit, lang, onEdit, onDelete, t }) {
           <span className="font-semibold text-slate-900 text-sm truncate">{slot.name}</span>
           {slot.venue_name && (
             <span className="flex items-center gap-1 text-xs text-slate-500">
-              <MapPin className="h-3 w-3" />{slot.venue_name}
+              <MapPin className="h-3 w-3" />
+              {slot.venue_name}
             </span>
           )}
         </div>
         <div className="mt-1 flex flex-wrap gap-x-3 gap-y-0.5 text-xs text-slate-500">
           <span>{wdLabels}</span>
-          <span>{fmtVND(num(slot.price_per_hour))}/giờ · {slot.hours_per_session}h</span>
+          <span>
+            {fmtVND(num(slot.price_per_hour))}/giờ · {slot.hours_per_session}h
+          </span>
           <span>{cycleLabelShort(slot.cycle_months || 1, lang)}</span>
-          {slot.renewal_day && <span>{t('timeline_deadline')} {t('timeline_days_left', { n: `${slot.renewal_day}` })}</span>}
+          {slot.renewal_day && (
+            <span>
+              {t('timeline_deadline')} {t('timeline_days_left', { n: `${slot.renewal_day}` })}
+            </span>
+          )}
         </div>
         {result.totalSessions > 0 && (
           <p className="mt-1 text-xs text-slate-400">
@@ -177,8 +230,30 @@ function CourtSlotCard({ slot, canEdit, lang, onEdit, onDelete, t }) {
 // ─────────────────────────────────────────────────────────────────────────────
 // SettingsPage
 // ─────────────────────────────────────────────────────────────────────────────
-export function SettingsPage({ club, settings, slots: initialSlots, sport, members, plan, pollTally, hostName, hostAvatar, currentUserId, canEdit, logs, fundTxns, payosConfig, onSaved, onChanged, onHitLimit, toast }) {
+export function SettingsPage({ toast }) {
   const { t, i18n } = useTranslation()
+  const {
+    club,
+    settings,
+    slots: initialSlots,
+    sport,
+    members,
+    plan,
+    pollTally,
+    hostName,
+    hostAvatar,
+    currentUserId,
+    canEdit,
+    logs,
+    fundTxns,
+    payosConfig,
+    setSettings,
+    reload,
+    openUpsell,
+  } = useClub()
+  const onChanged = reload
+  const onHitLimit = openUpsell
+  const onSaved = (p) => setSettings((s) => ({ ...s, ...p }))
 
   // ── global form (shuttle + fund + guest fees + fee split) ──
   const [form, setForm] = useState({
@@ -221,7 +296,7 @@ export function SettingsPage({ club, settings, slots: initialSlots, sport, membe
   const actualSpent = useMemo(() => {
     if (!isFirstSetup || !initialSlots?.length) return 0
     const now = new Date()
-    const shuttlePerSession = num(form.estimated_shuttlecocks) * num(form.price_per_box) / 12
+    const shuttlePerSession = (num(form.estimated_shuttlecocks) * num(form.price_per_box)) / 12
     return initialSlots.reduce((total, slot) => {
       const { happened, courtCost } = computeSlot(slot, now)
       if (slot.payment_mode === 'cycle') {
@@ -267,14 +342,18 @@ export function SettingsPage({ club, settings, slots: initialSlots, sport, membe
         if (fundSetupMode === 'from_now' && actualSpent > 0) {
           payload.current_fund = num(form.current_fund) + actualSpent
           await supabase.from('fund_transactions').insert({
-            club_id: club.id, amount: actualSpent,
-            note: t('fund_setup_deduct_note'), type: 'manual',
+            club_id: club.id,
+            amount: actualSpent,
+            note: t('fund_setup_deduct_note'),
+            type: 'manual',
           })
         } else {
           // from_start: just insert a zero-amount marker so toggle disappears
           await supabase.from('fund_transactions').insert({
-            club_id: club.id, amount: 0,
-            note: t('fund_setup_from_start'), type: 'manual',
+            club_id: club.id,
+            amount: 0,
+            note: t('fund_setup_from_start'),
+            type: 'manual',
           })
         }
       }
@@ -284,12 +363,17 @@ export function SettingsPage({ club, settings, slots: initialSlots, sport, membe
       const oldFund = num(settings.current_fund)
       const newFund = num(form.current_fund)
       if (!fundSetupMode && newFund !== oldFund) {
-        await supabase.from('fund_transactions').insert({ club_id: club.id, amount: newFund - oldFund, note: t('fund_manual_adjust'), type: 'manual' })
+        await supabase
+          .from('fund_transactions')
+          .insert({ club_id: club.id, amount: newFund - oldFund, note: t('fund_manual_adjust'), type: 'manual' })
       }
       toast(t('set_saved'))
       onSaved({ ...settings, ...payload })
-    } catch (e) { toast(e.message || t('err_generic')) }
-    finally { setBusy(false) }
+    } catch (e) {
+      handleError(e, toast, t)
+    } finally {
+      setBusy(false)
+    }
   }
 
   // ── top-up ──────────────────────────────────────────────
@@ -299,16 +383,23 @@ export function SettingsPage({ club, settings, slots: initialSlots, sport, membe
     setTopUpBusy(true)
     try {
       const newFund = num(settings.current_fund) + amount
-      const { error: e1 } = await supabase.from('fund_transactions').insert({ club_id: club.id, amount, note: topUpNote.trim() || null, type: 'top_up' })
+      const { error: e1 } = await supabase
+        .from('fund_transactions')
+        .insert({ club_id: club.id, amount, note: topUpNote.trim() || null, type: 'top_up' })
       if (e1) throw e1
       const { error: e2 } = await supabase.from('club_settings').update({ current_fund: newFund }).eq('club_id', club.id)
       if (e2) throw e2
       toast(t('fund_added'))
-      setTopUpAmount(''); setTopUpNote(''); setTopUpOpen(false)
+      setTopUpAmount('')
+      setTopUpNote('')
+      setTopUpOpen(false)
       onSaved({ ...settings, current_fund: newFund })
       onChanged()
-    } catch (e) { toast(e.message || t('err_generic')) }
-    finally { setTopUpBusy(false) }
+    } catch (e) {
+      handleError(e, toast, t)
+    } finally {
+      setTopUpBusy(false)
+    }
   }
 
   // ── restock shuttle ─────────────────────────────────────
@@ -327,10 +418,14 @@ export function SettingsPage({ club, settings, slots: initialSlots, sport, membe
       ])
       toast(t('shuttle_restock_submit'))
       setForm((f) => ({ ...f, shuttle_stock: newStock, price_per_box: price }))
-      setRestockBoxes(''); setRestockOpen(false)
+      setRestockBoxes('')
+      setRestockOpen(false)
       onChanged()
-    } catch (e) { toast(e.message || t('err_generic')) }
-    finally { setRestockBusy(false) }
+    } catch (e) {
+      handleError(e, toast, t)
+    } finally {
+      setRestockBusy(false)
+    }
   }
 
   // ── court slot CRUD ─────────────────────────────────────
@@ -341,9 +436,12 @@ export function SettingsPage({ club, settings, slots: initialSlots, sport, membe
     try {
       // Edit existing
       if (!Array.isArray(data) && data.id) {
-        const { error } = await supabase.from('court_slots').update({ ...data, club_id: club.id }).eq('id', data.id)
+        const { error } = await supabase
+          .from('court_slots')
+          .update({ ...data, club_id: club.id })
+          .eq('id', data.id)
         if (error) throw error
-        setSlots((prev) => prev.map((s) => s.id === data.id ? { ...s, ...data } : s))
+        setSlots((prev) => prev.map((s) => (s.id === data.id ? { ...s, ...data } : s)))
         toast(t('slot_saved'))
       } else {
         // Bulk insert (array) or single new slot
@@ -359,8 +457,11 @@ export function SettingsPage({ club, settings, slots: initialSlots, sport, membe
       }
       setEditingSlot(null)
       onChanged()
-    } catch (e) { toast(e.message || t('err_generic')) }
-    finally { setSlotBusy(false) }
+    } catch (e) {
+      handleError(e, toast, t)
+    } finally {
+      setSlotBusy(false)
+    }
   }
 
   async function deleteSlot(slot) {
@@ -371,7 +472,9 @@ export function SettingsPage({ club, settings, slots: initialSlots, sport, membe
       setSlots((prev) => prev.filter((s) => s.id !== slot.id))
       toast(t('slot_deleted'))
       onChanged()
-    } catch (e) { toast(e.message || t('err_generic')) }
+    } catch (e) {
+      handleError(e, toast, t)
+    }
   }
 
   // ── live cost preview (sidebar) ─────────────────────────
@@ -396,9 +499,7 @@ export function SettingsPage({ club, settings, slots: initialSlots, sport, membe
         const boxesLeft = num(form.shuttle_stock)
         const tubesPerSession = num(form.estimated_shuttlecocks) || 6
         const sessionsLeft = tubesPerSession > 0 ? Math.floor((boxesLeft * 12) / tubesPerSession) : 0
-        const refillBoxes = sessionsLeft < shuttleSessions
-          ? Math.ceil(((shuttleSessions - sessionsLeft) * tubesPerSession) / 12)
-          : 0
+        const refillBoxes = sessionsLeft < shuttleSessions ? Math.ceil(((shuttleSessions - sessionsLeft) * tubesPerSession) / 12) : 0
         shuttleCost = refillBoxes > 0 ? refillBoxes * num(form.price_per_box) : 0
         const stockLine = `Tồn kho: ${boxesLeft} hộp · đủ ~${sessionsLeft} buổi`
         const refillLine = refillBoxes > 0 ? ` · cần nhập thêm ${refillBoxes} hộp` : ''
@@ -410,8 +511,7 @@ export function SettingsPage({ club, settings, slots: initialSlots, sport, membe
     }
 
     const totalCost = totalCourtCost + shuttleCost
-    const effective = form.fee_split_mode === 'committed_only' && committedCount
-      ? committedCount : memberCount
+    const effective = form.fee_split_mode === 'committed_only' && committedCount ? committedCount : memberCount
     const perMember = effective > 0 ? Math.ceil(totalCost / effective) : 0
     return { totalCourtCost, shuttleCost, totalCost, perMember, effective, shuttleLabel }
   }, [slots, form, memberCount, committedCount, sport.hasEquipment])
@@ -420,7 +520,6 @@ export function SettingsPage({ club, settings, slots: initialSlots, sport, membe
     <>
       <div className="grid gap-6 lg:grid-cols-3">
         <div className="lg:col-span-2 space-y-5">
-
           {/* ── Card 1: Court slots ── */}
           <Card>
             <div className={cardTitleCls}>
@@ -436,7 +535,9 @@ export function SettingsPage({ club, settings, slots: initialSlots, sport, membe
                 {slots.map((slot) => (
                   <CourtSlotCard
                     key={slot.id || slot.sort_order}
-                    slot={slot} canEdit={canEdit} lang={i18n.language}
+                    slot={slot}
+                    canEdit={canEdit}
+                    lang={i18n.language}
                     t={t}
                     onEdit={() => setEditingSlot(slot)}
                     onDelete={() => deleteSlot(slot)}
@@ -460,7 +561,6 @@ export function SettingsPage({ club, settings, slots: initialSlots, sport, membe
             </div>
 
             <div className={cx('mt-5 space-y-6', !canEdit && 'pointer-events-none opacity-70')}>
-
               {/* Shuttle section */}
               {sport.hasEquipment && (
                 <div className="space-y-4">
@@ -485,34 +585,64 @@ export function SettingsPage({ club, settings, slots: initialSlots, sport, membe
                       <div className="grid gap-4 sm:grid-cols-2">
                         <Field label={t('set_box_price')} icon={Coins} hint={t('set_box_hint')}>
                           <div className="relative">
-                            <input type="text" inputMode="numeric" className={cx(inputCls, 'pr-10 font-mono')}
-                              value={fmtInputNum(form.price_per_box)} disabled={!canEdit}
-                              onChange={(e) => setForm((f) => ({ ...f, price_per_box: parseInputNum(e.target.value) }))} />
-                            <span className="pointer-events-none absolute right-4 top-1/2 -translate-y-1/2 text-sm font-semibold text-slate-400">₫</span>
+                            <input
+                              type="text"
+                              inputMode="numeric"
+                              className={cx(inputCls, 'pr-10 font-mono')}
+                              value={fmtInputNum(form.price_per_box)}
+                              disabled={!canEdit}
+                              onChange={(e) => setForm((f) => ({ ...f, price_per_box: parseInputNum(e.target.value) }))}
+                            />
+                            <span className="pointer-events-none absolute right-4 top-1/2 -translate-y-1/2 text-sm font-semibold text-slate-400">
+                              ₫
+                            </span>
                           </div>
                         </Field>
                         <Field label={t('set_shuttle')} icon={Package} hint={t('set_shuttle_hint')}>
-                          <input type="number" min="0" step="0.5" className={cx(inputCls, 'font-mono')}
-                            value={form.estimated_shuttlecocks ?? ''} disabled={!canEdit}
-                            onChange={(e) => setForm((f) => ({ ...f, estimated_shuttlecocks: e.target.value }))} />
+                          <input
+                            type="number"
+                            min="0"
+                            step="0.5"
+                            className={cx(inputCls, 'font-mono')}
+                            value={form.estimated_shuttlecocks ?? ''}
+                            disabled={!canEdit}
+                            onChange={(e) => setForm((f) => ({ ...f, estimated_shuttlecocks: e.target.value }))}
+                          />
                         </Field>
                       </div>
                       <div className="grid gap-4 sm:grid-cols-2">
-                        <Field label={t('shuttle_cycle')} icon={RefreshCw}
-                          hint={cycleLabelShort(parseInt(form.shuttle_cycle_months, 10) || 1, i18n.language)}>
+                        <Field
+                          label={t('shuttle_cycle')}
+                          icon={RefreshCw}
+                          hint={cycleLabelShort(parseInt(form.shuttle_cycle_months, 10) || 1, i18n.language)}
+                        >
                           <div className="relative">
-                            <input type="number" min="1" max="12" className={cx(inputCls, 'pr-16 font-mono')}
-                              value={form.shuttle_cycle_months} disabled={!canEdit}
-                              onChange={(e) => setForm((f) => ({ ...f, shuttle_cycle_months: e.target.value }))} />
-                            <span className="pointer-events-none absolute right-4 top-1/2 -translate-y-1/2 text-sm font-semibold text-slate-400">tháng</span>
+                            <input
+                              type="number"
+                              min="1"
+                              max="12"
+                              className={cx(inputCls, 'pr-16 font-mono')}
+                              value={form.shuttle_cycle_months}
+                              disabled={!canEdit}
+                              onChange={(e) => setForm((f) => ({ ...f, shuttle_cycle_months: e.target.value }))}
+                            />
+                            <span className="pointer-events-none absolute right-4 top-1/2 -translate-y-1/2 text-sm font-semibold text-slate-400">
+                              tháng
+                            </span>
                           </div>
                         </Field>
                         {parseInt(form.shuttle_cycle_months, 10) > 1 && (
                           <Field label={t('shuttle_cycle_start')} icon={Calendar}>
-                            <select className={inputCls} value={form.shuttle_cycle_start_month} disabled={!canEdit}
-                              onChange={(e) => setForm((f) => ({ ...f, shuttle_cycle_start_month: e.target.value }))}>
+                            <select
+                              className={inputCls}
+                              value={form.shuttle_cycle_start_month}
+                              disabled={!canEdit}
+                              onChange={(e) => setForm((f) => ({ ...f, shuttle_cycle_start_month: e.target.value }))}
+                            >
                               {Array.from({ length: 12 }, (_, i) => i + 1).map((m) => (
-                                <option key={m} value={m}>{monthName(m, i18n.language)}</option>
+                                <option key={m} value={m}>
+                                  {monthName(m, i18n.language)}
+                                </option>
                               ))}
                             </select>
                           </Field>
@@ -523,22 +653,40 @@ export function SettingsPage({ club, settings, slots: initialSlots, sport, membe
                     <div className="animate-fade-in space-y-3">
                       <div className="grid gap-4 sm:grid-cols-2">
                         <Field label={t('shuttle_stock')} icon={Package} hint={t('shuttle_stock_hint')}>
-                          <input type="number" min="0" className={cx(inputCls, 'font-mono')}
-                            value={form.shuttle_stock ?? ''} disabled={!canEdit}
-                            onChange={(e) => setForm((f) => ({ ...f, shuttle_stock: e.target.value }))} />
+                          <input
+                            type="number"
+                            min="0"
+                            className={cx(inputCls, 'font-mono')}
+                            value={form.shuttle_stock ?? ''}
+                            disabled={!canEdit}
+                            onChange={(e) => setForm((f) => ({ ...f, shuttle_stock: e.target.value }))}
+                          />
                         </Field>
                         <Field label={t('set_shuttle_inventory')} icon={Package} hint={t('set_shuttle_inventory_hint')}>
-                          <input type="number" min="0" step="0.5" className={cx(inputCls, 'font-mono')}
-                            value={form.estimated_shuttlecocks ?? ''} disabled={!canEdit}
-                            onChange={(e) => setForm((f) => ({ ...f, estimated_shuttlecocks: e.target.value }))} />
+                          <input
+                            type="number"
+                            min="0"
+                            step="0.5"
+                            className={cx(inputCls, 'font-mono')}
+                            value={form.estimated_shuttlecocks ?? ''}
+                            disabled={!canEdit}
+                            onChange={(e) => setForm((f) => ({ ...f, estimated_shuttlecocks: e.target.value }))}
+                          />
                         </Field>
                       </div>
                       <Field label={t('set_box_price')} icon={Coins} hint="Giá nhập hộp cầu — dùng khi cần tính chi phí nhập thêm">
                         <div className="relative">
-                          <input type="text" inputMode="numeric" className={cx(inputCls, 'pr-10 font-mono')}
-                            value={fmtInputNum(form.price_per_box)} disabled={!canEdit}
-                            onChange={(e) => setForm((f) => ({ ...f, price_per_box: parseInputNum(e.target.value) }))} />
-                          <span className="pointer-events-none absolute right-4 top-1/2 -translate-y-1/2 text-sm font-semibold text-slate-400">₫</span>
+                          <input
+                            type="text"
+                            inputMode="numeric"
+                            className={cx(inputCls, 'pr-10 font-mono')}
+                            value={fmtInputNum(form.price_per_box)}
+                            disabled={!canEdit}
+                            onChange={(e) => setForm((f) => ({ ...f, price_per_box: parseInputNum(e.target.value) }))}
+                          />
+                          <span className="pointer-events-none absolute right-4 top-1/2 -translate-y-1/2 text-sm font-semibold text-slate-400">
+                            ₫
+                          </span>
                         </div>
                       </Field>
                       {canEdit && (
@@ -551,22 +699,42 @@ export function SettingsPage({ club, settings, slots: initialSlots, sport, membe
                           <p className="text-xs font-semibold text-slate-600">{t('shuttle_restock')}</p>
                           <div className="grid gap-3 sm:grid-cols-2">
                             <div className="relative">
-                              <input type="number" min="1" className={cx(inputCls, 'font-mono bg-white')}
-                                placeholder={t('shuttle_restock_boxes')} value={restockBoxes}
-                                onChange={(e) => setRestockBoxes(e.target.value)} />
+                              <input
+                                type="number"
+                                min="1"
+                                className={cx(inputCls, 'font-mono bg-white')}
+                                placeholder={t('shuttle_restock_boxes')}
+                                value={restockBoxes}
+                                onChange={(e) => setRestockBoxes(e.target.value)}
+                              />
                             </div>
                             <div className="relative">
-                              <input type="text" inputMode="numeric" className={cx(inputCls, 'pr-10 font-mono bg-white')}
-                                placeholder={t('shuttle_restock_price')} value={fmtInputNum(restockPrice)}
-                                onChange={(e) => setRestockPrice(parseInputNum(e.target.value))} />
-                              <span className="pointer-events-none absolute right-4 top-1/2 -translate-y-1/2 text-sm font-semibold text-slate-400">₫</span>
+                              <input
+                                type="text"
+                                inputMode="numeric"
+                                className={cx(inputCls, 'pr-10 font-mono bg-white')}
+                                placeholder={t('shuttle_restock_price')}
+                                value={fmtInputNum(restockPrice)}
+                                onChange={(e) => setRestockPrice(parseInputNum(e.target.value))}
+                              />
+                              <span className="pointer-events-none absolute right-4 top-1/2 -translate-y-1/2 text-sm font-semibold text-slate-400">
+                                ₫
+                              </span>
                             </div>
                           </div>
                           <div className="flex gap-2">
                             <Button variant="volt" size="sm" className="flex-1" onClick={submitRestock} disabled={restockBusy || !restockBoxes}>
-                              {restockBusy ? <Loader2 className="h-4 w-4 animate-spin" /> : <><Plus className="h-4 w-4" /> {t('shuttle_restock_submit')}</>}
+                              {restockBusy ? (
+                                <Loader2 className="h-4 w-4 animate-spin" />
+                              ) : (
+                                <>
+                                  <Plus className="h-4 w-4" /> {t('shuttle_restock_submit')}
+                                </>
+                              )}
                             </Button>
-                            <Button variant="ghost" size="sm" onClick={() => setRestockOpen(false)}>{t('cancel')}</Button>
+                            <Button variant="ghost" size="sm" onClick={() => setRestockOpen(false)}>
+                              {t('cancel')}
+                            </Button>
                           </div>
                         </div>
                       )}
@@ -582,16 +750,24 @@ export function SettingsPage({ club, settings, slots: initialSlots, sport, membe
                     <Wallet className="w-4 h-4 text-slate-400" />
                     {t('set_fund')}
                     {canEdit && (
-                      <button type="button" onClick={() => setTopUpOpen((v) => !v)}
-                        className="ml-auto flex items-center gap-1 rounded-full bg-lime-400 px-2.5 py-0.5 text-xs font-bold text-slate-900 hover:bg-lime-300 transition">
+                      <button
+                        type="button"
+                        onClick={() => setTopUpOpen((v) => !v)}
+                        className="ml-auto flex items-center gap-1 rounded-full bg-lime-400 px-2.5 py-0.5 text-xs font-bold text-slate-900 hover:bg-lime-300 transition"
+                      >
                         <Plus className="h-3 w-3" /> {t('fund_topup_btn')}
                       </button>
                     )}
                   </span>
                   <div className="relative">
-                    <input type="text" inputMode="numeric" className={cx(inputCls, 'pr-10 font-mono')}
-                      value={fmtInputNum(form.current_fund)} disabled={!canEdit}
-                      onChange={(e) => setForm((f) => ({ ...f, current_fund: parseInputNum(e.target.value) }))} />
+                    <input
+                      type="text"
+                      inputMode="numeric"
+                      className={cx(inputCls, 'pr-10 font-mono')}
+                      value={fmtInputNum(form.current_fund)}
+                      disabled={!canEdit}
+                      onChange={(e) => setForm((f) => ({ ...f, current_fund: parseInputNum(e.target.value) }))}
+                    />
                     <span className="pointer-events-none absolute right-4 top-1/2 -translate-y-1/2 text-sm font-semibold text-slate-400">₫</span>
                   </div>
                 </label>
@@ -599,18 +775,42 @@ export function SettingsPage({ club, settings, slots: initialSlots, sport, membe
                   <div className="mt-2 rounded-2xl border border-lime-200 bg-lime-50 p-4 space-y-3 animate-fade-in">
                     <p className="text-xs font-semibold text-slate-600">{t('fund_topup_title')}</p>
                     <div className="relative">
-                      <input type="text" inputMode="numeric" className={cx(inputCls, 'pr-10 font-mono bg-white')}
-                        placeholder={t('fund_topup_amount_ph')} value={fmtInputNum(topUpAmount)} autoFocus
-                        onChange={(e) => setTopUpAmount(parseInputNum(e.target.value))} />
+                      <input
+                        type="text"
+                        inputMode="numeric"
+                        className={cx(inputCls, 'pr-10 font-mono bg-white')}
+                        placeholder={t('fund_topup_amount_ph')}
+                        value={fmtInputNum(topUpAmount)}
+                        autoFocus
+                        onChange={(e) => setTopUpAmount(parseInputNum(e.target.value))}
+                      />
                       <span className="pointer-events-none absolute right-4 top-1/2 -translate-y-1/2 text-sm font-semibold text-slate-400">₫</span>
                     </div>
-                    <input className={cx(inputCls, 'bg-white')} placeholder={t('fund_topup_note_ph')}
-                      value={topUpNote} onChange={(e) => setTopUpNote(e.target.value)} />
+                    <input
+                      className={cx(inputCls, 'bg-white')}
+                      placeholder={t('fund_topup_note_ph')}
+                      value={topUpNote}
+                      onChange={(e) => setTopUpNote(e.target.value)}
+                    />
                     <div className="flex gap-2">
                       <Button variant="volt" size="sm" className="flex-1" onClick={submitTopUp} disabled={topUpBusy || !topUpAmount}>
-                        {topUpBusy ? <Loader2 className="h-4 w-4 animate-spin" /> : <><Plus className="h-4 w-4" /> {t('fund_topup_submit')}</>}
+                        {topUpBusy ? (
+                          <Loader2 className="h-4 w-4 animate-spin" />
+                        ) : (
+                          <>
+                            <Plus className="h-4 w-4" /> {t('fund_topup_submit')}
+                          </>
+                        )}
                       </Button>
-                      <Button variant="ghost" size="sm" onClick={() => { setTopUpOpen(false); setTopUpAmount(''); setTopUpNote('') }}>
+                      <Button
+                        variant="ghost"
+                        size="sm"
+                        onClick={() => {
+                          setTopUpOpen(false)
+                          setTopUpAmount('')
+                          setTopUpNote('')
+                        }}
+                      >
                         {t('cancel')}
                       </Button>
                     </div>
@@ -621,9 +821,7 @@ export function SettingsPage({ club, settings, slots: initialSlots, sport, membe
                 {isFirstSetup && slots.length > 0 && num(form.price_per_box) > 0 && num(form.estimated_shuttlecocks) > 0 && (
                   <div className="mt-3 rounded-2xl border border-amber-200 bg-amber-50 p-4 space-y-3 animate-fade-in">
                     <p className="text-xs font-bold text-amber-800">{t('fund_setup_title')}</p>
-                    {actualSpent > 0 && (
-                      <p className="text-xs text-amber-700">{t('fund_setup_hint', { amount: fmtVND(actualSpent) })}</p>
-                    )}
+                    {actualSpent > 0 && <p className="text-xs text-amber-700">{t('fund_setup_hint', { amount: fmtVND(actualSpent) })}</p>}
                     <div className="space-y-2">
                       {[
                         { val: 'from_now', labelKey: 'fund_setup_from_now', hintKey: 'fund_setup_from_now_hint' },
@@ -634,15 +832,15 @@ export function SettingsPage({ club, settings, slots: initialSlots, sport, membe
                           onClick={() => setFundSetupMode(val)}
                           className={cx(
                             'w-full flex items-start gap-3 rounded-xl border px-3 py-2.5 text-left transition active:scale-[0.98]',
-                            fundSetupMode === val
-                              ? 'border-amber-400 bg-white'
-                              : 'border-amber-200 bg-white/60 hover:border-amber-300',
+                            fundSetupMode === val ? 'border-amber-400 bg-white' : 'border-amber-200 bg-white/60 hover:border-amber-300'
                           )}
                         >
-                          <span className={cx(
-                            'mt-0.5 h-4 w-4 shrink-0 rounded-full border-2 flex items-center justify-center transition',
-                            fundSetupMode === val ? 'border-amber-500 bg-amber-500' : 'border-amber-300',
-                          )}>
+                          <span
+                            className={cx(
+                              'mt-0.5 h-4 w-4 shrink-0 rounded-full border-2 flex items-center justify-center transition',
+                              fundSetupMode === val ? 'border-amber-500 bg-amber-500' : 'border-amber-300'
+                            )}
+                          >
                             {fundSetupMode === val && <span className="h-1.5 w-1.5 rounded-full bg-white" />}
                           </span>
                           <div>
@@ -652,7 +850,6 @@ export function SettingsPage({ club, settings, slots: initialSlots, sport, membe
                         </button>
                       ))}
                     </div>
-
                   </div>
                 )}
               </div>
@@ -667,7 +864,7 @@ export function SettingsPage({ club, settings, slots: initialSlots, sport, membe
                     disabled={!canEdit}
                     options={[
                       { value: 'committed_only', label: t('fee_split_committed') },
-                      { value: 'total_members',  label: t('fee_split_total') },
+                      { value: 'total_members', label: t('fee_split_total') },
                     ]}
                   />
                 </Field>
@@ -680,35 +877,51 @@ export function SettingsPage({ club, settings, slots: initialSlots, sport, membe
               <div>
                 <p className="text-xs font-semibold uppercase tracking-wide text-slate-400 mb-3">{t('set_guest_mode')}</p>
                 <Field label={t('set_guest_mode')} icon={Users}>
-                  <Segmented value={form.guest_fee_mode} onChange={(v) => setForm((f) => ({ ...f, guest_fee_mode: v }))} disabled={!canEdit}
+                  <Segmented
+                    value={form.guest_fee_mode}
+                    onChange={(v) => setForm((f) => ({ ...f, guest_fee_mode: v }))}
+                    disabled={!canEdit}
                     options={[
-                      { value: 'split_all',       label: t('set_guest_mode_split') },
+                      { value: 'split_all', label: t('set_guest_mode_split') },
                       { value: 'fixed_by_gender', label: t('set_guest_mode_fixed') },
-                      { value: 'split_shuttle',   label: t('set_guest_mode_shuttle') },
-                    ]} />
+                      { value: 'split_shuttle', label: t('set_guest_mode_shuttle') },
+                    ]}
+                  />
                 </Field>
                 <p className="mt-2 text-xs text-slate-400 italic">
                   {form.guest_fee_mode === 'fixed_by_gender' && t('set_guest_fee_mode_hint_fixed')}
-                  {form.guest_fee_mode === 'split_shuttle'   && t('set_guest_fee_mode_hint_shuttle')}
-                  {form.guest_fee_mode === 'split_all'       && t('set_guest_fee_mode_hint_split')}
+                  {form.guest_fee_mode === 'split_shuttle' && t('set_guest_fee_mode_hint_shuttle')}
+                  {form.guest_fee_mode === 'split_all' && t('set_guest_fee_mode_hint_split')}
                 </p>
                 {(form.guest_fee_mode === 'fixed_by_gender' || form.guest_fee_mode === 'split_shuttle') && (
                   <div className="grid gap-4 sm:grid-cols-2 mt-4 animate-fade-in">
                     {form.guest_fee_mode === 'fixed_by_gender' && (
                       <Field label={t('set_guest_fee_male')} icon={Coins}>
                         <div className="relative">
-                          <input type="text" inputMode="numeric" className={cx(inputCls, 'pr-10 font-mono')}
-                            value={fmtInputNum(form.guest_fee_male)} disabled={!canEdit}
-                            onChange={(e) => setForm((f) => ({ ...f, guest_fee_male: parseInputNum(e.target.value) }))} />
-                          <span className="pointer-events-none absolute right-4 top-1/2 -translate-y-1/2 text-sm font-semibold text-slate-400">₫</span>
+                          <input
+                            type="text"
+                            inputMode="numeric"
+                            className={cx(inputCls, 'pr-10 font-mono')}
+                            value={fmtInputNum(form.guest_fee_male)}
+                            disabled={!canEdit}
+                            onChange={(e) => setForm((f) => ({ ...f, guest_fee_male: parseInputNum(e.target.value) }))}
+                          />
+                          <span className="pointer-events-none absolute right-4 top-1/2 -translate-y-1/2 text-sm font-semibold text-slate-400">
+                            ₫
+                          </span>
                         </div>
                       </Field>
                     )}
                     <Field label={t('set_guest_fee_female')} icon={Coins}>
                       <div className="relative">
-                        <input type="text" inputMode="numeric" className={cx(inputCls, 'pr-10 font-mono')}
-                          value={fmtInputNum(form.guest_fee_female)} disabled={!canEdit}
-                          onChange={(e) => setForm((f) => ({ ...f, guest_fee_female: parseInputNum(e.target.value) }))} />
+                        <input
+                          type="text"
+                          inputMode="numeric"
+                          className={cx(inputCls, 'pr-10 font-mono')}
+                          value={fmtInputNum(form.guest_fee_female)}
+                          disabled={!canEdit}
+                          onChange={(e) => setForm((f) => ({ ...f, guest_fee_female: parseInputNum(e.target.value) }))}
+                        />
                         <span className="pointer-events-none absolute right-4 top-1/2 -translate-y-1/2 text-sm font-semibold text-slate-400">₫</span>
                       </div>
                     </Field>
@@ -720,7 +933,15 @@ export function SettingsPage({ club, settings, slots: initialSlots, sport, membe
 
           {canEdit && (
             <Button variant="primary" size="lg" className="w-full" onClick={save} disabled={busy}>
-              {busy ? <><Loader2 className="h-5 w-5 animate-spin" /> {t('saving')}</> : <>{t('save')} <Check className="h-5 w-5 text-lime-400" /></>}
+              {busy ? (
+                <>
+                  <Loader2 className="h-5 w-5 animate-spin" /> {t('saving')}
+                </>
+              ) : (
+                <>
+                  {t('save')} <Check className="h-5 w-5 text-lime-400" />
+                </>
+              )}
             </Button>
           )}
         </div>
@@ -746,15 +967,11 @@ export function SettingsPage({ club, settings, slots: initialSlots, sport, membe
                   <div className="flex justify-between items-start gap-2 text-sm">
                     <span className="text-slate-500 shrink-0">{t('set_cost_shuttle')}</span>
                     <span className="text-right">
-                      {livePreview.shuttleLabel && (
-                        <span className="block text-xs font-semibold text-cyan-700">{livePreview.shuttleLabel}</span>
-                      )}
+                      {livePreview.shuttleLabel && <span className="block text-xs font-semibold text-cyan-700">{livePreview.shuttleLabel}</span>}
                       {livePreview.shuttleCost > 0 && (
                         <span className="font-mono font-semibold text-slate-900">{fmtVND(livePreview.shuttleCost)}</span>
                       )}
-                      {livePreview.shuttleLabel && livePreview.shuttleCost === 0 && (
-                        <span className="font-mono font-semibold text-slate-400">—</span>
-                      )}
+                      {livePreview.shuttleLabel && livePreview.shuttleCost === 0 && <span className="font-mono font-semibold text-slate-400">—</span>}
                     </span>
                   </div>
                 )}
@@ -775,26 +992,33 @@ export function SettingsPage({ club, settings, slots: initialSlots, sport, membe
           </Card>
 
           <MembersPanel
-            club={club} members={members} plan={plan} pollTally={pollTally}
-            hostName={hostName} hostAvatar={hostAvatar} currentUserId={currentUserId}
-            canEdit={canEdit} onChanged={onChanged} onHitLimit={onHitLimit} toast={toast}
+            club={club}
+            members={members}
+            plan={plan}
+            pollTally={pollTally}
+            hostName={hostName}
+            hostAvatar={hostAvatar}
+            currentUserId={currentUserId}
+            canEdit={canEdit}
+            onChanged={onChanged}
+            onHitLimit={onHitLimit}
+            toast={toast}
           />
 
           <PayOSSettings
-            club={club} plan={plan} payosConfig={payosConfig} canEdit={canEdit}
-            onChanged={onChanged} toast={toast} onUnlock={() => {}}
+            club={club}
+            plan={plan}
+            payosConfig={payosConfig}
+            canEdit={canEdit}
+            onChanged={onChanged}
+            toast={toast}
+            onUnlock={() => {}}
           />
         </div>
       </div>
 
       {/* Court slot modal */}
-      {editingSlot !== null && (
-        <CourtSlotModal
-          slot={editingSlot?.id ? editingSlot : null}
-          onSave={saveSlot}
-          onClose={() => setEditingSlot(null)}
-        />
-      )}
+      {editingSlot !== null && <CourtSlotModal slot={editingSlot?.id ? editingSlot : null} onSave={saveSlot} onClose={() => setEditingSlot(null)} />}
     </>
   )
 }

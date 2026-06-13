@@ -28,7 +28,9 @@ function LangSwitch() {
   const { i18n } = useTranslation()
   const setLang = (lng) => {
     i18n.changeLanguage(lng)
-    try { localStorage.setItem('feetap_lang', lng) } catch {}
+    try {
+      localStorage.setItem('feetap_lang', lng)
+    } catch {}
   }
   return (
     <div className="inline-flex items-center rounded-full border border-slate-200 bg-white/70 p-0.5 text-xs font-bold">
@@ -54,7 +56,9 @@ function ClubSwitcher({ myClubs, activeClub, onSelectClub }) {
   const ref = useRef(null)
 
   useEffect(() => {
-    const handler = (e) => { if (ref.current && !ref.current.contains(e.target)) setOpen(false) }
+    const handler = (e) => {
+      if (ref.current && !ref.current.contains(e.target)) setOpen(false)
+    }
     document.addEventListener('mousedown', handler)
     return () => document.removeEventListener('mousedown', handler)
   }, [])
@@ -78,7 +82,10 @@ function ClubSwitcher({ myClubs, activeClub, onSelectClub }) {
           {myClubs.map((c) => (
             <button
               key={c.id}
-              onClick={() => { onSelectClub(c); setOpen(false) }}
+              onClick={() => {
+                onSelectClub(c)
+                setOpen(false)
+              }}
               className={cx(
                 'w-full flex items-center gap-3 rounded-xl px-3 py-2.5 text-sm transition',
                 c.id === activeClub.id ? 'bg-lime-400/10 text-lime-700 font-semibold' : 'text-slate-700 hover:bg-slate-50 font-medium'
@@ -93,7 +100,10 @@ function ClubSwitcher({ myClubs, activeClub, onSelectClub }) {
           ))}
           <div className="mt-1 pt-1 border-t border-slate-100">
             <button
-              onClick={() => { onSelectClub('new'); setOpen(false) }}
+              onClick={() => {
+                onSelectClub('new')
+                setOpen(false)
+              }}
               className="w-full flex items-center gap-3 rounded-xl px-3 py-2.5 text-sm font-medium text-slate-500 hover:bg-slate-50 transition"
             >
               <span className="grid h-7 w-7 place-items-center rounded-lg border border-dashed border-slate-300 text-slate-400">
@@ -136,7 +146,9 @@ export function Nav({ session, myClubs, activeClub, onSignOut, onSelectClub }) {
               <img
                 src={session.user?.user_metadata?.avatar_url || ''}
                 alt=""
-                onError={(e) => { e.currentTarget.style.display = 'none' }}
+                onError={(e) => {
+                  e.currentTarget.style.display = 'none'
+                }}
                 className="h-7 w-7 rounded-full bg-slate-200 object-cover"
               />
               <LogOut className="h-4 w-4" />
@@ -164,7 +176,10 @@ export function Nav({ session, myClubs, activeClub, onSignOut, onSelectClub }) {
               {t('cancel')}
             </button>
             <button
-              onClick={() => { setConfirmSignOut(false); onSignOut() }}
+              onClick={() => {
+                setConfirmSignOut(false)
+                onSignOut()
+              }}
               className="flex-1 rounded-2xl bg-slate-900 py-2.5 text-sm font-semibold text-white hover:bg-slate-800 transition active:scale-[0.98]"
             >
               {t('signOut')}

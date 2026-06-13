@@ -1,9 +1,6 @@
 import { useState, useMemo } from 'react'
 import { useTranslation } from 'react-i18next'
-import {
-  LayoutDashboard, Settings2, ClipboardList, History,
-  Building2, Crown, Zap, Eye, Menu, Link as LinkIcon, Loader2, LogOut,
-} from 'lucide-react'
+import { LayoutDashboard, Settings2, ClipboardList, History, Building2, Crown, Zap, Eye, Menu, Link as LinkIcon, Loader2, LogOut } from 'lucide-react'
 import { Badge } from '../../components/ui/Badge'
 import { Button } from '../../components/ui/Button'
 import { UpsellModal } from '../../components/monetize/UpsellModal'
@@ -16,6 +13,8 @@ import { cx } from '../../lib/utils'
 import { navigate } from '../../router'
 import { SPORT_CONFIGS } from '../../constants'
 import { supabase } from '../../lib/supabase'
+import { handleError } from '../../lib/handleError'
+import { ClubContext } from '../../contexts/ClubContext'
 
 // Routes: /club/:id → dashboard, /club/:id/settings, /club/:id/log, /club/:id/fund
 function activeTab(path, clubId) {
@@ -33,7 +32,8 @@ export function ClubLayout({ session, club, setClub, path, toast, onSignOut }) {
   const [upsell, setUpsell] = useState(false)
   const [sidebarOpen, setSidebarOpen] = useState(false)
 
-  const { settings, setSettings, slots, setSlots, members, logs, fundTxns, collections, memberPayments, payosConfig, pollTally, loading, reload } = useClubData(club.id)
+  const { settings, setSettings, slots, setSlots, members, logs, fundTxns, collections, memberPayments, payosConfig, pollTally, loading, reload } =
+    useClubData(club.id)
 
   // Derive fund balance from append-only ledger (SSOT) instead of mutable current_fund field
   const fundBalance = fundTxns.reduce((s, tx) => s + (Number(tx.amount) || 0), 0)
@@ -42,12 +42,8 @@ export function ClubLayout({ session, club, setClub, path, toast, onSignOut }) {
   const currentUserId = session?.user?.id || null
   const canEdit = isOwner && !previewMember
   const plan = club.plan || 'free'
-  const hostName = isOwner
-    ? (session?.user?.user_metadata?.full_name || session?.user?.email || null)
-    : (club.owner?.full_name || null)
-  const hostAvatar = isOwner
-    ? (session?.user?.user_metadata?.avatar_url || null)
-    : (club.owner?.avatar_url || null)
+  const hostName = isOwner ? session?.user?.user_metadata?.full_name || session?.user?.email || null : club.owner?.full_name || null
+  const hostAvatar = isOwner ? session?.user?.user_metadata?.avatar_url || null : club.owner?.avatar_url || null
 
   // Single source of truth for club members — deduplicated, host synthetic entry if not in club_members
   const effectiveMembers = useMemo(() => {
@@ -82,7 +78,9 @@ export function ClubLayout({ session, club, setClub, path, toast, onSignOut }) {
       if (error) throw error
       setClub({ ...club, plan: next })
       toast(next === 'pro' ? t('plan_pro') : t('plan_free'))
-    } catch (e) { toast(e.message || t('err_generic')) }
+    } catch (e) {
+      handleError(e, toast, t)
+    }
   }
 
   const tabs = [
@@ -91,6 +89,34 @@ export function ClubLayout({ session, club, setClub, path, toast, onSignOut }) {
     { id: 'log', label: t('nav_log'), icon: ClipboardList, path: `/club/${club.id}/log` },
     { id: 'fund', label: t('nav_fund'), icon: History, path: `/club/${club.id}/fund` },
   ]
+
+  const ctxValue = {
+    club,
+    setClub,
+    settings: effectiveSettings,
+    setSettings,
+    slots,
+    setSlots,
+    members: effectiveMembers,
+    logs,
+    fundTxns,
+    collections,
+    memberPayments,
+    payosConfigured: !!payosConfig,
+    payosConfig,
+    pollTally,
+    plan,
+    sport,
+    session,
+    currentUserId,
+    currentMemberId,
+    canEdit,
+    hostName,
+    hostAvatar,
+    reload,
+    openUpsell: () => setUpsell(true),
+    closeSidebar: () => setSidebarOpen(false),
+  }
 
   if (loading || !effectiveSettings) {
     return (
@@ -105,19 +131,16 @@ export function ClubLayout({ session, club, setClub, path, toast, onSignOut }) {
   return (
     <div className="flex flex-1 bg-grid relative">
       {/* Mobile sidebar overlay */}
-      {sidebarOpen && (
-        <div
-          className="fixed inset-0 z-30 bg-slate-900/20 backdrop-blur-sm md:hidden"
-          onClick={() => setSidebarOpen(false)}
-        />
-      )}
+      {sidebarOpen && <div className="fixed inset-0 z-30 bg-slate-900/20 backdrop-blur-sm md:hidden" onClick={() => setSidebarOpen(false)} />}
 
       {/* Sidebar */}
-      <aside className={cx(
-        'fixed left-0 top-[65px] bottom-0 z-40 w-56 flex flex-col border-r border-slate-100 bg-white/90 backdrop-blur-xl transition-transform duration-200',
-        'md:sticky md:h-[calc(100vh-4rem)] md:translate-x-0',
-        sidebarOpen ? 'translate-x-0' : '-translate-x-full'
-      )}>
+      <aside
+        className={cx(
+          'fixed left-0 top-[65px] bottom-0 z-40 w-56 flex flex-col border-r border-slate-100 bg-white/90 backdrop-blur-xl transition-transform duration-200',
+          'md:sticky md:h-[calc(100vh-4rem)] md:translate-x-0',
+          sidebarOpen ? 'translate-x-0' : '-translate-x-full'
+        )}
+      >
         <div className="px-4 py-4 border-b border-slate-100">
           <div className="flex items-center gap-2.5">
             <span className="grid h-8 w-8 shrink-0 place-items-center rounded-xl bg-slate-900 text-sm font-black text-lime-400">
@@ -131,12 +154,13 @@ export function ClubLayout({ session, club, setClub, path, toast, onSignOut }) {
           {tabs.map((tb) => (
             <button
               key={tb.id}
-              onClick={() => { navigate(tb.path); setSidebarOpen(false) }}
+              onClick={() => {
+                navigate(tb.path)
+                setSidebarOpen(false)
+              }}
               className={cx(
                 'w-full flex items-center gap-3 rounded-2xl px-3 py-2.5 text-sm font-semibold transition',
-                tab === tb.id
-                  ? 'bg-lime-400/10 text-lime-700'
-                  : 'text-slate-500 hover:bg-slate-100 hover:text-slate-900'
+                tab === tb.id ? 'bg-lime-400/10 text-lime-700' : 'text-slate-500 hover:bg-slate-100 hover:text-slate-900'
               )}
             >
               <tb.icon className={cx('h-4 w-4 shrink-0', tab === tb.id ? 'text-lime-600' : 'text-slate-400')} />
@@ -148,7 +172,9 @@ export function ClubLayout({ session, club, setClub, path, toast, onSignOut }) {
         {isOwner && (
           <div className="px-3 pb-2">
             <Button
-              variant="ghost" size="sm" className="w-full text-xs"
+              variant="ghost"
+              size="sm"
+              className="w-full text-xs"
               onClick={() => {
                 navigator.clipboard.writeText(`${window.location.origin}/join/${club.id}`)
                 toast(t('join_copied'))
@@ -217,50 +243,24 @@ export function ClubLayout({ session, club, setClub, path, toast, onSignOut }) {
         <div className="flex-1 px-5 py-8 pb-24 mx-auto w-full max-w-[1460px]">
           <div className="hidden md:flex flex-wrap items-center justify-between gap-4 mb-8">
             <h1 className="flex items-center gap-2 text-2xl font-black tracking-tight text-slate-900">
-              {tab === 'settings'
-                ? <><Settings2 className="h-6 w-6 text-slate-300" /> {t('set_title')}</>
-                : <><Building2 className="h-6 w-6 text-slate-300" /> {t(`nav_${tab}`)}</>
-              }
+              {tab === 'settings' ? (
+                <>
+                  <Settings2 className="h-6 w-6 text-slate-300" /> {t('set_title')}
+                </>
+              ) : (
+                <>
+                  <Building2 className="h-6 w-6 text-slate-300" /> {t(`nav_${tab}`)}
+                </>
+              )}
             </h1>
           </div>
 
-
-          {tab === 'dashboard' && (
-            <DashboardPage
-              club={club} settings={effectiveSettings} slots={slots} members={effectiveMembers} logs={logs}
-              fundTxns={fundTxns} collections={collections} memberPayments={memberPayments}
-              currentMemberId={currentMemberId} payosConfigured={!!payosConfig}
-              pollTally={pollTally} plan={plan} sport={sport}
-              hostName={hostName} hostAvatar={hostAvatar} currentUserId={currentUserId}
-              canEdit={canEdit} onUnlock={() => setUpsell(true)} onChanged={reload} toast={toast}
-            />
-          )}
-
-          {tab === 'settings' && (
-            <SettingsPage
-              club={club} settings={effectiveSettings} slots={slots} sport={sport} members={effectiveMembers}
-              payosConfig={payosConfig}
-              plan={plan} pollTally={pollTally} canEdit={canEdit}
-              hostName={hostName} hostAvatar={hostAvatar} currentUserId={currentUserId}
-              logs={logs} fundTxns={fundTxns}
-              onSaved={(p) => setSettings((s) => ({ ...s, ...p }))}
-              onChanged={reload} onHitLimit={() => setUpsell(true)} toast={toast}
-            />
-          )}
-
-          {tab === 'log' && (
-            <SessionLogPage
-              club={club} logs={logs} settings={settings} slots={slots} members={effectiveMembers} sport={sport}
-              canEdit={canEdit} onChanged={reload} toast={toast} user={session?.user}
-            />
-          )}
-
-          {tab === 'fund' && (
-            <FundPage
-              club={club} fundTxns={fundTxns} settings={effectiveSettings} members={effectiveMembers}
-              canEdit={canEdit} onTopUp={reload} toast={toast}
-            />
-          )}
+          <ClubContext.Provider value={ctxValue}>
+            {tab === 'dashboard' && <DashboardPage toast={toast} />}
+            {tab === 'settings' && <SettingsPage toast={toast} />}
+            {tab === 'log' && <SessionLogPage toast={toast} />}
+            {tab === 'fund' && <FundPage toast={toast} />}
+          </ClubContext.Provider>
         </div>
       </main>
 

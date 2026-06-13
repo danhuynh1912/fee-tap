@@ -1,12 +1,16 @@
 import { useState } from 'react'
 import { useTranslation } from 'react-i18next'
+import { useClub } from '../../contexts/ClubContext'
+import { handleError } from '../../lib/handleError'
 import { Plus, Wallet, TrendingUp, TrendingDown, Loader2 } from 'lucide-react'
 import { Button } from '../../components/ui/Button'
 import { inputCls } from '../../components/ui/Field'
 import { cx, num, fmtVND, fmtDate } from '../../lib/utils'
 import { supabase } from '../../lib/supabase'
 
-export function FundPage({ club, fundTxns, members, canEdit, onTopUp, toast }) {
+export function FundPage({ toast }) {
+  const { club, fundTxns, members, canEdit, reload } = useClub()
+  const onTopUp = reload
   const { t } = useTranslation()
   const [topUpOpen, setTopUpOpen] = useState(false)
   const [amount, setAmount] = useState('')
@@ -28,10 +32,15 @@ export function FundPage({ club, fundTxns, members, canEdit, onTopUp, toast }) {
       })
       if (error) throw error
       toast(t('fund_added'))
-      setAmount(''); setNote(''); setTopUpOpen(false)
+      setAmount('')
+      setNote('')
+      setTopUpOpen(false)
       onTopUp()
-    } catch (e) { toast(e.message || t('err_generic')) }
-    finally { setBusy(false) }
+    } catch (e) {
+      handleError(e, toast, t)
+    } finally {
+      setBusy(false)
+    }
   }
 
   // Balance always derived from ledger — single source of truth
@@ -60,7 +69,9 @@ export function FundPage({ club, fundTxns, members, canEdit, onTopUp, toast }) {
           <div className="grid gap-3 sm:grid-cols-2">
             <div className="relative">
               <input
-                type="number" min="0" autoFocus
+                type="number"
+                min="0"
+                autoFocus
                 className={cx(inputCls, 'pr-10 font-mono')}
                 placeholder={t('fund_topup_amount_ph')}
                 value={amount}
@@ -68,18 +79,27 @@ export function FundPage({ club, fundTxns, members, canEdit, onTopUp, toast }) {
               />
               <span className="pointer-events-none absolute right-4 top-1/2 -translate-y-1/2 text-sm font-semibold text-slate-400">₫</span>
             </div>
-            <input
-              className={inputCls}
-              placeholder={t('fund_topup_note_ph')}
-              value={note}
-              onChange={(e) => setNote(e.target.value)}
-            />
+            <input className={inputCls} placeholder={t('fund_topup_note_ph')} value={note} onChange={(e) => setNote(e.target.value)} />
           </div>
           <div className="flex gap-2">
             <Button variant="volt" size="sm" className="flex-1" onClick={submit} disabled={busy || !amount}>
-              {busy ? <Loader2 className="h-4 w-4 animate-spin" /> : <><Plus className="h-4 w-4" /> {t('fund_topup_submit')}</>}
+              {busy ? (
+                <Loader2 className="h-4 w-4 animate-spin" />
+              ) : (
+                <>
+                  <Plus className="h-4 w-4" /> {t('fund_topup_submit')}
+                </>
+              )}
             </Button>
-            <Button variant="ghost" size="sm" onClick={() => { setTopUpOpen(false); setAmount(''); setNote('') }}>
+            <Button
+              variant="ghost"
+              size="sm"
+              onClick={() => {
+                setTopUpOpen(false)
+                setAmount('')
+                setNote('')
+              }}
+            >
               {t('cancel')}
             </Button>
           </div>
@@ -102,9 +122,7 @@ export function FundPage({ club, fundTxns, members, canEdit, onTopUp, toast }) {
 
       <ul className="space-y-2">
         {fundTxns.length === 0 && (
-          <li className="rounded-2xl border border-dashed border-slate-200 py-12 text-center text-sm text-slate-400">
-            {t('fund_history_empty')}
-          </li>
+          <li className="rounded-2xl border border-dashed border-slate-200 py-12 text-center text-sm text-slate-400">{t('fund_history_empty')}</li>
         )}
         {fundTxns.map((tx) => {
           const isPositive = num(tx.amount) >= 0
@@ -113,30 +131,32 @@ export function FundPage({ club, fundTxns, members, canEdit, onTopUp, toast }) {
           const isPayos = tx.source === 'payos'
 
           return (
-            <li key={tx.id} className={cx(
-              'flex items-center gap-3 rounded-2xl border px-4 py-3',
-              isPositive ? 'border-slate-100 bg-white' : 'border-red-100 bg-red-50'
-            )}>
-              <span className={cx(
-                'grid h-9 w-9 shrink-0 place-items-center rounded-xl',
-                isPositive ? 'bg-lime-50 text-lime-600' : 'bg-red-100 text-red-500'
-              )}>
+            <li
+              key={tx.id}
+              className={cx(
+                'flex items-center gap-3 rounded-2xl border px-4 py-3',
+                isPositive ? 'border-slate-100 bg-white' : 'border-red-100 bg-red-50'
+              )}
+            >
+              <span
+                className={cx(
+                  'grid h-9 w-9 shrink-0 place-items-center rounded-xl',
+                  isPositive ? 'bg-lime-50 text-lime-600' : 'bg-red-100 text-red-500'
+                )}
+              >
                 {isPositive ? <TrendingUp className="h-4 w-4" /> : <TrendingDown className="h-4 w-4" />}
               </span>
               <div className="min-w-0 flex-1">
                 <p className="text-sm font-semibold text-slate-900">{displayNote}</p>
                 <div className="flex items-center gap-2 mt-0.5">
                   <p className="text-xs text-slate-400">{fmtDate(tx.created_at?.slice(0, 10))}</p>
-                  {isPayos && (
-                    <span className="rounded-full bg-cyan-50 px-2 py-0.5 text-[10px] font-semibold text-cyan-700">PayOS</span>
-                  )}
-                  {memberName && (
-                    <span className="text-xs text-slate-400">{memberName}</span>
-                  )}
+                  {isPayos && <span className="rounded-full bg-cyan-50 px-2 py-0.5 text-[10px] font-semibold text-cyan-700">PayOS</span>}
+                  {memberName && <span className="text-xs text-slate-400">{memberName}</span>}
                 </div>
               </div>
               <p className={cx('font-mono text-base font-black', isPositive ? 'text-lime-600' : 'text-red-500')}>
-                {isPositive ? '+' : ''}{fmtVND(num(tx.amount))}
+                {isPositive ? '+' : ''}
+                {fmtVND(num(tx.amount))}
               </p>
             </li>
           )

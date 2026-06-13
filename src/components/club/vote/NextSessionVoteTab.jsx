@@ -16,9 +16,7 @@ export function NextSessionVoteTab({ club, settings, members, canEdit, user, toa
   const closed = !!vote && (vote.is_closed || countdown.closed)
 
   const memberAvatarMap = useMemo(() => {
-    const map = Object.fromEntries(
-      (members || []).filter((m) => m.user_id).map((m) => [m.user_id, m.avatar_url])
-    )
+    const map = Object.fromEntries((members || []).filter((m) => m.user_id).map((m) => [m.user_id, m.avatar_url]))
     // host may not be in club_members — add from club.owner
     if (club?.owner_id && club?.owner?.avatar_url) {
       map[club.owner_id] = club.owner.avatar_url
@@ -26,16 +24,17 @@ export function NextSessionVoteTab({ club, settings, members, canEdit, user, toa
     return map
   }, [members, club])
 
-  const attendees = useMemo(() => responses.filter((r) => r.attending).map((r) => ({
-    ...r,
-    avatar_url: r.anonymous_user_id === user?.id
-      ? (user?.user_metadata?.avatar_url || null)
-      : (memberAvatarMap[r.anonymous_user_id] || null),
-  })), [responses, memberAvatarMap, user])
-  const filledSlots = useMemo(
-    () => attendees.reduce((sum, r) => sum + 1 + (r.guests || 0), 0),
-    [attendees]
+  const attendees = useMemo(
+    () =>
+      responses
+        .filter((r) => r.attending)
+        .map((r) => ({
+          ...r,
+          avatar_url: r.anonymous_user_id === user?.id ? user?.user_metadata?.avatar_url || null : memberAvatarMap[r.anonymous_user_id] || null,
+        })),
+    [responses, memberAvatarMap, user]
   )
+  const filledSlots = useMemo(() => attendees.reduce((sum, r) => sum + 1 + (r.guests || 0), 0), [attendees])
 
   const myResponse = responses.find((r) => r.anonymous_user_id === user?.id)
   const userName = user?.user_metadata?.full_name || user?.email || ''
@@ -54,9 +53,15 @@ export function NextSessionVoteTab({ club, settings, members, canEdit, user, toa
       {vote && (
         <div>
           <div className="flex flex-wrap items-center gap-2">
-            {closed
-              ? <Badge tone="red" icon={Lock}>{t('vote_closed_label')}</Badge>
-              : <Badge tone="cyan" icon={Clock}>{t('vote_closes_in')} {countdown.label}</Badge>}
+            {closed ? (
+              <Badge tone="red" icon={Lock}>
+                {t('vote_closed_label')}
+              </Badge>
+            ) : (
+              <Badge tone="cyan" icon={Clock}>
+                {t('vote_closes_in')} {countdown.label}
+              </Badge>
+            )}
           </div>
           <h2 className="mt-3 text-2xl font-black tracking-tight text-slate-900">{vote.title}</h2>
           <div className="mt-1.5 flex flex-wrap items-center gap-x-5 gap-y-1 text-sm text-slate-500">
@@ -116,13 +121,7 @@ export function NextSessionVoteTab({ club, settings, members, canEdit, user, toa
         {/* Results panel — only when vote exists */}
         {vote && (
           <div className="lg:col-span-3">
-            <ResultsPanel
-              vote={vote}
-              attendees={attendees}
-              responses={responses}
-              filledSlots={filledSlots}
-              meId={user?.id}
-            />
+            <ResultsPanel vote={vote} attendees={attendees} responses={responses} filledSlots={filledSlots} meId={user?.id} />
           </div>
         )}
       </div>

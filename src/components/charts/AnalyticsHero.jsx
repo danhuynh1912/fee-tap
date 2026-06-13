@@ -35,8 +35,12 @@ export function AnalyticsHero({ className = '' }) {
           <path d={area} fill="url(#fillGrad)" />
           <path
             d={line}
-            stroke="#ccff00" strokeWidth="3" strokeLinecap="round" strokeLinejoin="round"
-            strokeDasharray="1000" className="animate-draw-line"
+            stroke="#ccff00"
+            strokeWidth="3"
+            strokeLinecap="round"
+            strokeLinejoin="round"
+            strokeDasharray="1000"
+            className="animate-draw-line"
           />
           <circle cx="460" cy="30" r="5" fill="#ccff00" />
           <circle cx="460" cy="30" r="10" fill="#ccff00" fillOpacity="0.2" />

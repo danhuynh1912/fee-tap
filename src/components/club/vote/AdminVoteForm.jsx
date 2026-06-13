@@ -6,13 +6,12 @@ import { cx, fmtDate } from '../../../lib/utils'
 import { Button } from '../../ui/Button'
 import { getSessionConfigs } from '../../../engine/forecast'
 
-const darkInputCls = 'w-full rounded-2xl border border-slate-700 bg-slate-800 px-4 py-3 text-white placeholder:text-slate-500 outline-none transition focus:border-lime-400 focus:ring-4 focus:ring-lime-400/10'
+const darkInputCls =
+  'w-full rounded-2xl border border-slate-700 bg-slate-800 px-4 py-3 text-white placeholder:text-slate-500 outline-none transition focus:border-lime-400 focus:ring-4 focus:ring-lime-400/10'
 
 function nextPlayDate(settings) {
   const configs = getSessionConfigs(settings)
-  const playWeekdays = new Set(
-    configs.flatMap((c) => c.weekday !== null && c.weekday !== undefined ? [c.weekday] : [])
-  )
+  const playWeekdays = new Set(configs.flatMap((c) => (c.weekday !== null && c.weekday !== undefined ? [c.weekday] : [])))
   const today = new Date()
   for (let i = 1; i <= 14; i++) {
     const d = new Date(today)
@@ -111,7 +110,9 @@ export function AdminVoteForm({ vote, closed, filledSlots, club, settings, membe
           <div>
             <label className="mb-1 block text-xs font-semibold text-slate-400">{t('vote_max_slots')}</label>
             <input
-              type="number" min="1" max="50"
+              type="number"
+              min="1"
+              max="50"
               className={darkInputCls}
               value={form.maxSlots}
               onChange={(e) => setForm((f) => ({ ...f, maxSlots: e.target.value }))}
@@ -138,7 +139,13 @@ export function AdminVoteForm({ vote, closed, filledSlots, club, settings, membe
         </div>
 
         <Button variant="volt" className="mt-5 w-full" onClick={createVote} disabled={busy}>
-          {busy ? <Loader2 className="h-4 w-4 animate-spin" /> : <><Plus className="h-4 w-4" /> {t('vote_create_btn')}</>}
+          {busy ? (
+            <Loader2 className="h-4 w-4 animate-spin" />
+          ) : (
+            <>
+              <Plus className="h-4 w-4" /> {t('vote_create_btn')}
+            </>
+          )}
         </Button>
       </div>
     )
@@ -156,7 +163,10 @@ export function AdminVoteForm({ vote, closed, filledSlots, club, settings, membe
       <div className="mt-5 grid grid-cols-2 gap-3">
         <div className="rounded-2xl bg-slate-800 p-3 text-center">
           <p className="text-xs text-slate-400">{t('vote_filled')}</p>
-          <p className="text-2xl font-black text-lime-400">{filledSlots}<span className="text-base text-slate-500">/{vote.max_slots}</span></p>
+          <p className="text-2xl font-black text-lime-400">
+            {filledSlots}
+            <span className="text-base text-slate-500">/{vote.max_slots}</span>
+          </p>
         </div>
         <div className="rounded-2xl bg-slate-800 p-3 text-center">
           <p className="text-xs text-slate-400">{t('vote_status')}</p>
@@ -168,7 +178,9 @@ export function AdminVoteForm({ vote, closed, filledSlots, club, settings, membe
         <div>
           <label className="mb-1 block text-xs font-semibold text-slate-400">{t('vote_max_slots')}</label>
           <input
-            type="number" min="1" max="50"
+            type="number"
+            min="1"
+            max="50"
             className={darkInputCls}
             defaultValue={vote.max_slots}
             onBlur={(e) => {
@@ -191,21 +203,20 @@ export function AdminVoteForm({ vote, closed, filledSlots, club, settings, membe
         </div>
       </div>
 
-      <Button
-        variant={vote.is_closed ? 'volt' : 'danger'}
-        className="mt-4 w-full"
-        onClick={toggleClosed}
-        disabled={busy}
-      >
-        {busy
-          ? <Loader2 className="h-4 w-4 animate-spin" />
-          : vote.is_closed
-            ? <><Check className="h-4 w-4" /> {t('vote_reopen')}</>
-            : <><Lock className="h-4 w-4" /> {t('vote_close_now')}</>}
+      <Button variant={vote.is_closed ? 'volt' : 'danger'} className="mt-4 w-full" onClick={toggleClosed} disabled={busy}>
+        {busy ? (
+          <Loader2 className="h-4 w-4 animate-spin" />
+        ) : vote.is_closed ? (
+          <>
+            <Check className="h-4 w-4" /> {t('vote_reopen')}
+          </>
+        ) : (
+          <>
+            <Lock className="h-4 w-4" /> {t('vote_close_now')}
+          </>
+        )}
       </Button>
-      {!vote.is_closed && closed && (
-        <p className="mt-2 text-center text-xs text-slate-500">{t('vote_auto_closed_hint')}</p>
-      )}
+      {!vote.is_closed && closed && <p className="mt-2 text-center text-xs text-slate-500">{t('vote_auto_closed_hint')}</p>}
     </div>
   )
 }

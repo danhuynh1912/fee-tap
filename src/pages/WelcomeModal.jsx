@@ -19,13 +19,13 @@ export function WelcomeModal({ clubId, myClubs, onClose }) {
   return (
     <Modal onClose={onClose}>
       <div className="text-center py-4">
-        <div className="mx-auto mb-4 grid h-16 w-16 place-items-center rounded-3xl bg-slate-900 text-3xl">
-          {sport.emoji}
-        </div>
+        <div className="mx-auto mb-4 grid h-16 w-16 place-items-center rounded-3xl bg-slate-900 text-3xl">{sport.emoji}</div>
         <h2 className="text-2xl font-black tracking-tight text-slate-900 mb-2">{t('join_welcome')}</h2>
         <p className="text-slate-500 text-sm mb-1">{t('join_pre_sub')}</p>
         <p className="font-bold text-slate-900 mb-6">{club.name}</p>
-        <Button variant="volt" onClick={onClose}>{t('close')}</Button>
+        <Button variant="volt" onClick={onClose}>
+          {t('close')}
+        </Button>
       </div>
     </Modal>
   )

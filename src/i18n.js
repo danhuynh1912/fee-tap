@@ -28,14 +28,21 @@ const en = {
   quarter: 'Quarter',
   members: 'members',
   member: 'member',
-  wd_0: 'Sun', wd_1: 'Mon', wd_2: 'Tue', wd_3: 'Wed', wd_4: 'Thu', wd_5: 'Fri', wd_6: 'Sat',
+  wd_0: 'Sun',
+  wd_1: 'Mon',
+  wd_2: 'Tue',
+  wd_3: 'Wed',
+  wd_4: 'Thu',
+  wd_5: 'Fri',
+  wd_6: 'Sat',
 
   // ── auth / landing ───────────────────────────────────────
   hero_badge: 'FinTech for clubs',
   hero_title_1: 'Manage your',
   hero_title_hl: 'club costs',
   hero_title_2: ', smart and transparent.',
-  hero_sub: 'FeeTap forecasts your court & shuttlecock spend, watches the club fund, and splits any shortfall fairly across the exact roster — pulled live from your PollTap registrations.',
+  hero_sub:
+    'FeeTap forecasts your court & shuttlecock spend, watches the club fund, and splits any shortfall fairly across the exact roster — pulled live from your PollTap registrations.',
   signin_google: 'Continue with Google',
   signin_note: 'Secure OAuth 2.0 · We only read your name & email',
   feat_forecast_t: 'Forecasting engine',
@@ -57,12 +64,12 @@ const en = {
   onb_no_club: "You're not linked to any club yet.",
 
   // ── sports ───────────────────────────────────────────────
-  sport_badminton:   'Badminton',
-  sport_football:    'Football',
-  sport_basketball:  'Basketball',
-  sport_volleyball:  'Volleyball',
+  sport_badminton: 'Badminton',
+  sport_football: 'Football',
+  sport_basketball: 'Basketball',
+  sport_volleyball: 'Volleyball',
   sport_tabletennis: 'Table tennis',
-  sport_pickleball:  'Pickleball',
+  sport_pickleball: 'Pickleball',
 
   // ── nav ──────────────────────────────────────────────────
   nav_dashboard: 'Dashboard',
@@ -95,7 +102,7 @@ const en = {
   badge_you: 'You',
   view_as_member: 'View as member',
   view_as_host: 'Back to host view',
-  readonly_banner: "Read-only view — financial transparency for members. Only the host can edit.",
+  readonly_banner: 'Read-only view — financial transparency for members. Only the host can edit.',
 
   // ── plan / billing ───────────────────────────────────────
   plan_free: 'Free plan',
@@ -300,7 +307,7 @@ const en = {
 
   // ── join / invite ─────────────────────────────────────────
   join_pre_title: "You've been invited!",
-  join_pre_sub: "Sign in to join the club",
+  join_pre_sub: 'Sign in to join the club',
   join_signin: 'Continue with Google',
   join_welcome: 'Welcome aboard!',
   join_copy: 'Copy invite link',
@@ -551,13 +558,20 @@ const vi = {
   quarter: 'Quý',
   members: 'thành viên',
   member: 'thành viên',
-  wd_0: 'CN', wd_1: 'T2', wd_2: 'T3', wd_3: 'T4', wd_4: 'T5', wd_5: 'T6', wd_6: 'T7',
+  wd_0: 'CN',
+  wd_1: 'T2',
+  wd_2: 'T3',
+  wd_3: 'T4',
+  wd_4: 'T5',
+  wd_5: 'T6',
+  wd_6: 'T7',
 
   hero_badge: 'FinTech cho câu lạc bộ',
   hero_title_1: 'Quản lý',
   hero_title_hl: 'chi phí câu lạc bộ',
   hero_title_2: ' thông minh, minh bạch.',
-  hero_sub: 'SPOFUND dự báo chi phí sân & cầu, theo dõi quỹ câu lạc bộ, và chia phần thiếu hụt công bằng cho đúng danh sách thành viên — lấy trực tiếp từ đăng ký PollTap của bạn.',
+  hero_sub:
+    'SPOFUND dự báo chi phí sân & cầu, theo dõi quỹ câu lạc bộ, và chia phần thiếu hụt công bằng cho đúng danh sách thành viên — lấy trực tiếp từ đăng ký PollTap của bạn.',
   signin_google: 'Tiếp tục với Google',
   signin_note: 'OAuth 2.0 bảo mật · Chỉ đọc tên & email của bạn',
   feat_forecast_t: 'Bộ máy dự báo',
@@ -578,12 +592,12 @@ const vi = {
   onb_no_club: 'Bạn chưa thuộc câu lạc bộ nào.',
 
   // ── sports ───────────────────────────────────────────────
-  sport_badminton:   'Cầu lông',
-  sport_football:    'Bóng đá',
-  sport_basketball:  'Bóng rổ',
-  sport_volleyball:  'Bóng chuyền',
+  sport_badminton: 'Cầu lông',
+  sport_football: 'Bóng đá',
+  sport_basketball: 'Bóng rổ',
+  sport_volleyball: 'Bóng chuyền',
   sport_tabletennis: 'Bóng bàn',
-  sport_pickleball:  'Pickleball',
+  sport_pickleball: 'Pickleball',
 
   nav_dashboard: 'Tổng quan',
   nav_settings: 'Cài đặt',

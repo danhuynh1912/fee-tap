@@ -15,7 +15,10 @@ function countWeekdaysInMonth(year, month0, weekdays) {
   let total = 0
   for (let d = 1; d <= last; d++) {
     const wd = new Date(year, month0, d).getDay()
-    if (set.has(wd)) { total++; breakdown[wd] = (breakdown[wd] || 0) + 1 }
+    if (set.has(wd)) {
+      total++
+      breakdown[wd] = (breakdown[wd] || 0) + 1
+    }
   }
   return { total, breakdown }
 }
@@ -58,6 +61,15 @@ function sessionsHappenedByNow(weekdays, period, today = new Date()) {
 // ---------------------------------------------------------------------------
 // Period resolution
 // ---------------------------------------------------------------------------
+
+export function periodDateRange(period) {
+  const { year: sy, month0: sm0 } = period.months[0]
+  const lastM = period.months[period.months.length - 1]
+  const daysInLast = new Date(lastM.year, lastM.month0 + 1, 0).getDate()
+  const start = `${sy}-${String(sm0 + 1).padStart(2, '0')}-01`
+  const end = `${lastM.year}-${String(lastM.month0 + 1).padStart(2, '0')}-${String(daysInLast).padStart(2, '0')}`
+  return { start, end }
+}
 
 export function resolvePeriodForSlot(slot, now = new Date()) {
   const here = mIdx(now.getFullYear(), now.getMonth())
@@ -186,15 +198,15 @@ export function computePaymentTimeline(slots, settings, memberCount, now = new D
 
   const slotResults = slots.map((slot) => computeSlot(slot, now))
   const running = [...slotResults]
-  const upcoming = slotResults.filter((r) => r.nextDeadline)
-    .sort((a, b) => a.nextDeadline - b.nextDeadline)
+  const upcoming = slotResults.filter((r) => r.nextDeadline).sort((a, b) => a.nextDeadline - b.nextDeadline)
 
   const hasEquipment = settings._hasEquipment !== false
   let shuttleThisMonth = null
   if (hasEquipment) {
-    shuttleThisMonth = settings.shuttle_mode === 'inventory'
-      ? { mode: 'inventory', ...inventoryStatus(settings.shuttle_stock, slots, settings, now) }
-      : { mode: 'estimate', ...estimateShuttle(slots, settings, now) }
+    shuttleThisMonth =
+      settings.shuttle_mode === 'inventory'
+        ? { mode: 'inventory', ...inventoryStatus(settings.shuttle_stock, slots, settings, now) }
+        : { mode: 'estimate', ...estimateShuttle(slots, settings, now) }
   }
 
   const effectiveMemberCount = resolveFeeMemberCount(settings, memberCount)
@@ -224,8 +236,7 @@ export function computePaymentTimeline(slots, settings, memberCount, now = new D
       nextShuttleItem = { period: nextShuttlePeriod, sessions, boxes, cost, deadline: shuttleDeadline, daysUntil }
     }
   }
-  const totalUpcomingPerMember = effectiveMemberCount > 0
-    ? Math.ceil((soonCourtCost + soonShuttleCost) / effectiveMemberCount) : 0
+  const totalUpcomingPerMember = effectiveMemberCount > 0 ? Math.ceil((soonCourtCost + soonShuttleCost) / effectiveMemberCount) : 0
 
   return { running, upcoming, shuttleThisMonth, nextShuttleItem, totalUpcomingPerMember, soonCourtCost, soonShuttleCost, effectiveMemberCount }
 }
@@ -251,7 +262,8 @@ export function formatPeriodLabel(period, lang) {
     const { year, month0 } = period.months[0]
     return new Date(year, month0, 1).toLocaleDateString(locale, { month: 'long', year: 'numeric' })
   }
-  const a = period.months[0], b = period.months[period.len - 1]
+  const a = period.months[0],
+    b = period.months[period.len - 1]
   const fmt = (m) => new Date(m.year, m.month0, 1).toLocaleDateString(locale, { month: 'short' })
   const yearSuffix = a.year === b.year ? ` ${b.year}` : ` ${a.year}–${b.year}`
   return `${fmt(a)}–${fmt(b)}${yearSuffix}`
@@ -285,8 +297,7 @@ export function calcGuestRevenue({ mode, guestMale, guestFemale, feeMale, feeFem
   const gm = Math.round(guestMale) || 0
   const gf = Math.round(guestFemale) || 0
   if (!gm && !gf) return 0
-  if (mode === 'fixed_by_gender')
-    return gm * (feeMale || 0) + gf * (feeFemale || 0)
+  if (mode === 'fixed_by_gender') return gm * (feeMale || 0) + gf * (feeFemale || 0)
   if (mode === 'split_shuttle') {
     const femalePart = gf * (feeFemale || 0)
     const totalMales = Math.max(1, (memberCount || 1) + gm)
@@ -342,10 +353,13 @@ export function synthesizeSlotsFromLegacy(settings) {
 // ---------------------------------------------------------------------------
 
 export function resolvePeriods(s, now = new Date()) {
-  return resolvePeriodForSlot({
-    cycle_months: s.cycle_months || 1,
-    cycle_start_month: s.cycle_start_month || 1,
-  }, now)
+  return resolvePeriodForSlot(
+    {
+      cycle_months: s.cycle_months || 1,
+      cycle_start_month: s.cycle_start_month || 1,
+    },
+    now
+  )
 }
 
 export function getSessionConfigs(settings) {
@@ -362,13 +376,14 @@ export function getSessionConfigs(settings) {
   }
   if (!weekdays.length) return [{ ...base, weekday: null }]
   return weekdays.map((wd) => ({
-    ...base, weekday: wd,
+    ...base,
+    weekday: wd,
     court_price_per_hour: priceMap[wd] !== undefined ? num(priceMap[wd]) : base.court_price_per_hour,
   }))
 }
 
 export function computeAll(settings, memberCount, hasEquipment = true, now = new Date(), actualSlots = null) {
-  const slots = (actualSlots && actualSlots.length) ? actualSlots : synthesizeSlotsFromLegacy(settings)
+  const slots = actualSlots && actualSlots.length ? actualSlots : synthesizeSlotsFromLegacy(settings)
   const settingsWithEquip = { ...settings, _hasEquipment: hasEquipment }
   const timeline = computePaymentTimeline(slots, settingsWithEquip, memberCount, now)
 
@@ -393,9 +408,10 @@ export function computeAll(settings, memberCount, hasEquipment = true, now = new
   for (const r of timeline.running) {
     const key = JSON.stringify(r.period)
     if (!periodWeekdayMap.has(key)) periodWeekdayMap.set(key, { period: r.period, weekdays: new Set() })
-    for (const wd of (r.slot.weekdays || [])) periodWeekdayMap.get(key).weekdays.add(wd)
+    for (const wd of r.slot.weekdays || []) periodWeekdayMap.get(key).weekdays.add(wd)
   }
-  let uniqueScheduled = 0, uniqueHappened = 0
+  let uniqueScheduled = 0,
+    uniqueHappened = 0
   for (const { period, weekdays } of periodWeekdayMap.values()) {
     uniqueScheduled += sessionsForPeriod([...weekdays], period).total
     uniqueHappened += sessionsHappenedByNow([...weekdays], period, now)

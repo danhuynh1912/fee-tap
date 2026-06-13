@@ -16,7 +16,9 @@ export function WeekdayPicker({ value, onChange, disabled }) {
         const on = set.has(d)
         return (
           <button
-            key={d} type="button" onClick={() => toggle(d)}
+            key={d}
+            type="button"
+            onClick={() => toggle(d)}
             className={cx(
               'h-11 min-w-[3.25rem] rounded-2xl border-2 px-3 text-sm font-bold transition active:scale-[0.97]',
               on ? 'border-slate-900 bg-slate-900 text-lime-400' : 'border-slate-200 bg-white text-slate-500 hover:border-slate-300'

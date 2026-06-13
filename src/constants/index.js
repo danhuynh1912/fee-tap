@@ -2,12 +2,12 @@ export const FREE_MEMBER_LIMIT = 15
 export const BALLS_PER_BOX = 12
 export const PRO_PRICE_VND = 99000
 export const SPORT_CONFIGS = {
-  badminton:   { id: 'badminton',   labelKey: 'sport_badminton',   emoji: '🏸', hasEquipment: true },
-  football:    { id: 'football',    labelKey: 'sport_football',    emoji: '⚽', hasEquipment: false },
-  basketball:  { id: 'basketball',  labelKey: 'sport_basketball',  emoji: '🏀', hasEquipment: false },
-  volleyball:  { id: 'volleyball',  labelKey: 'sport_volleyball',  emoji: '🏐', hasEquipment: false },
+  badminton: { id: 'badminton', labelKey: 'sport_badminton', emoji: '🏸', hasEquipment: true },
+  football: { id: 'football', labelKey: 'sport_football', emoji: '⚽', hasEquipment: false },
+  basketball: { id: 'basketball', labelKey: 'sport_basketball', emoji: '🏀', hasEquipment: false },
+  volleyball: { id: 'volleyball', labelKey: 'sport_volleyball', emoji: '🏐', hasEquipment: false },
   tabletennis: { id: 'tabletennis', labelKey: 'sport_tabletennis', emoji: '🏓', hasEquipment: false },
-  pickleball:  { id: 'pickleball',  labelKey: 'sport_pickleball',  emoji: '🎾', hasEquipment: false },
+  pickleball: { id: 'pickleball', labelKey: 'sport_pickleball', emoji: '🎾', hasEquipment: false },
 }
 
 export const SPORT_LIST = Object.values(SPORT_CONFIGS)

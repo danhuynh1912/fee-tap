@@ -39,18 +39,19 @@ export function ResultsPanel({ vote, attendees, responses, filledSlots, meId }) 
 
       <ul className="mt-6 space-y-2">
         {attendees.length === 0 && (
-          <li className="rounded-2xl border border-dashed border-slate-200 py-10 text-center text-sm text-slate-400">
-            {t('vote_no_attendees_yet')}
-          </li>
+          <li className="rounded-2xl border border-dashed border-slate-200 py-10 text-center text-sm text-slate-400">{t('vote_no_attendees_yet')}</li>
         )}
         {attendees.map((r, i) => {
           const total = 1 + (r.guests || 0)
           const mine = r.anonymous_user_id === meId
           return (
-            <li key={r.id} className={cx(
-              'flex items-center gap-3 rounded-2xl border px-4 py-3 transition',
-              mine ? 'border-lime-300 bg-lime-50' : 'border-slate-100 bg-white hover:border-slate-200'
-            )}>
+            <li
+              key={r.id}
+              className={cx(
+                'flex items-center gap-3 rounded-2xl border px-4 py-3 transition',
+                mine ? 'border-lime-300 bg-lime-50' : 'border-slate-100 bg-white hover:border-slate-200'
+              )}
+            >
               <span className="grid h-9 w-9 shrink-0 place-items-center rounded-xl bg-slate-900 text-xs font-bold text-lime-400">
                 {String(i + 1).padStart(2, '0')}
               </span>
@@ -65,7 +66,11 @@ export function ResultsPanel({ vote, attendees, responses, filledSlots, meId }) 
                     : t('vote_result_one_slot')}
                 </p>
               </div>
-              {r.guests > 0 && <Badge tone="volt" icon={Users}>{total}</Badge>}
+              {r.guests > 0 && (
+                <Badge tone="volt" icon={Users}>
+                  {total}
+                </Badge>
+              )}
             </li>
           )
         })}
@@ -78,7 +83,10 @@ export function ResultsPanel({ vote, attendees, responses, filledSlots, meId }) 
           </p>
           <div className="flex flex-wrap gap-2">
             {declined.map((r) => (
-              <span key={r.id} className="inline-flex items-center gap-1.5 rounded-full bg-slate-50 px-3 py-1 text-xs font-medium text-slate-400 line-through">
+              <span
+                key={r.id}
+                className="inline-flex items-center gap-1.5 rounded-full bg-slate-50 px-3 py-1 text-xs font-medium text-slate-400 line-through"
+              >
                 <Circle className="h-2 w-2 fill-slate-300 text-slate-300" /> {r.name}
               </span>
             ))}

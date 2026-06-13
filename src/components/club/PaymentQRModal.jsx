@@ -5,6 +5,8 @@ import { Modal } from '../ui/Modal'
 import { Button } from '../ui/Button'
 import { cx, fmtVND } from '../../lib/utils'
 import { supabase } from '../../lib/supabase'
+import { createPaymentQR } from '../../lib/paymentService'
+import { handleError } from '../../lib/handleError'
 
 export function PaymentQRModal({ open, onClose, record, memberName, liveAmount, toast }) {
   const { t } = useTranslation()
@@ -20,7 +22,10 @@ export function PaymentQRModal({ open, onClose, record, memberName, liveAmount, 
     if (wasPending && nowPaid) {
       setJustPaid(true)
       toast?.(t('payment_qr_success'))
-      setTimeout(() => { setJustPaid(false); onClose() }, 7000)
+      setTimeout(() => {
+        setJustPaid(false)
+        onClose()
+      }, 7000)
     }
     setLocalRecord(record)
   }, [record?.status]) // eslint-disable-line
@@ -47,19 +52,10 @@ export function PaymentQRModal({ open, onClose, record, memberName, liveAmount, 
         setLocalRecord((r) => ({ ...r, amount: liveAmount, payos_order_code: null, payos_checkout_url: null, payos_qr_code: null }))
       }
 
-      const { data: { session } } = await supabase.auth.getSession()
-      const supabaseUrl = import.meta.env.VITE_SUPABASE_URL
-
-      const res = await fetch(`${supabaseUrl}/functions/v1/create-payment`, {
-        method: 'POST',
-        headers: {
-          'Content-Type': 'application/json',
-          'Authorization': `Bearer ${session?.access_token}`,
-        },
-        body: JSON.stringify({ record_id: localRecord.id, amount: liveAmount ?? localRecord.amount }),
-      })
-      const json = await res.json()
-      if (!res.ok || json.error) throw new Error(json.error || 'Lỗi tạo QR')
+      const {
+        data: { session },
+      } = await supabase.auth.getSession()
+      const json = await createPaymentQR(localRecord.id, liveAmount ?? localRecord.amount, session?.access_token)
 
       setLocalRecord((r) => ({
         ...r,
@@ -68,7 +64,7 @@ export function PaymentQRModal({ open, onClose, record, memberName, liveAmount, 
         payos_qr_code: json.qrCode,
       }))
     } catch (e) {
-      toast(e.message || t('err_generic'))
+      handleError(e, toast, t)
     } finally {
       setLoading(false)
     }
@@ -84,10 +80,12 @@ export function PaymentQRModal({ open, onClose, record, memberName, liveAmount, 
       <div className="space-y-5">
         {/* Header */}
         <div className="flex items-center gap-3">
-          <span className={cx(
-            'grid h-10 w-10 shrink-0 place-items-center rounded-2xl',
-            isPaid ? 'bg-lime-400 text-slate-900' : 'bg-slate-900 text-lime-400'
-          )}>
+          <span
+            className={cx(
+              'grid h-10 w-10 shrink-0 place-items-center rounded-2xl',
+              isPaid ? 'bg-lime-400 text-slate-900' : 'bg-slate-900 text-lime-400'
+            )}
+          >
             {isPaid ? <CheckCircle2 className="h-5 w-5" /> : <QrCode className="h-5 w-5" />}
           </span>
           <div>
@@ -98,23 +96,22 @@ export function PaymentQRModal({ open, onClose, record, memberName, liveAmount, 
 
         {/* Paid state */}
         {isPaid && (
-          <div className={cx(
-            'rounded-3xl border p-8 text-center space-y-3 transition-all duration-500',
-            justPaid ? 'bg-lime-400 border-lime-400 scale-[1.02]' : 'bg-lime-50 border-lime-200'
-          )}>
-            <CheckCircle2 className={cx(
-              'mx-auto transition-all duration-500',
-              justPaid ? 'h-16 w-16 text-slate-900 animate-bounce' : 'h-12 w-12 text-lime-500'
-            )} />
+          <div
+            className={cx(
+              'rounded-3xl border p-8 text-center space-y-3 transition-all duration-500',
+              justPaid ? 'bg-lime-400 border-lime-400 scale-[1.02]' : 'bg-lime-50 border-lime-200'
+            )}
+          >
+            <CheckCircle2
+              className={cx('mx-auto transition-all duration-500', justPaid ? 'h-16 w-16 text-slate-900 animate-bounce' : 'h-12 w-12 text-lime-500')}
+            />
             <p className={cx('font-black text-xl', justPaid ? 'text-slate-900' : 'text-slate-900')}>
               {justPaid ? t('payment_qr_just_paid') : t('payment_qr_success')}
             </p>
             <p className={cx('font-mono text-3xl font-black', justPaid ? 'text-slate-900' : 'text-lime-600')}>
               {fmtVND(liveAmount ?? localRecord?.amount ?? 0)}
             </p>
-            {justPaid && (
-              <p className="text-sm text-slate-700">{t('payment_qr_closing')}</p>
-            )}
+            {justPaid && <p className="text-sm text-slate-700">{t('payment_qr_closing')}</p>}
           </div>
         )}
 
@@ -135,13 +132,7 @@ export function PaymentQRModal({ open, onClose, record, memberName, liveAmount, 
               )}
               {!loading && qrImageUrl && (
                 <div className="rounded-2xl border-2 border-slate-200 p-3 bg-white">
-                  <img
-                    src={qrImageUrl}
-                    alt="VietQR"
-                    width={240}
-                    height={240}
-                    className="rounded-xl"
-                  />
+                  <img src={qrImageUrl} alt="VietQR" width={240} height={240} className="rounded-xl" />
                 </div>
               )}
               {!loading && !qrImageUrl && (
@@ -154,9 +145,7 @@ export function PaymentQRModal({ open, onClose, record, memberName, liveAmount, 
               )}
             </div>
 
-            {qrImageUrl && (
-              <p className="text-center text-xs text-slate-400">{t('payment_qr_scan')}</p>
-            )}
+            {qrImageUrl && <p className="text-center text-xs text-slate-400">{t('payment_qr_scan')}</p>}
 
             {/* Open bank app button */}
             {localRecord?.payos_checkout_url && (
