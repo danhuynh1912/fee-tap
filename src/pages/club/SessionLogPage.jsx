@@ -16,12 +16,12 @@ import { NextSessionVoteTab } from '../../components/club/vote/NextSessionVoteTa
 function StatCard({ icon: Icon, label, value, tone = 'slate' }) {
   const tones = { slate: 'text-slate-900', volt: 'text-lime-600', red: 'text-red-600' }
   return (
-    <div className="rounded-2xl border border-slate-100 bg-white p-5">
-      <div className="flex items-center gap-2 text-slate-400">
-        <Icon className="h-4 w-4" />
+    <div className="flex items-center justify-between rounded-2xl border border-slate-100 bg-white px-4 py-3 sm:flex-col sm:items-start sm:p-5">
+      <div className="flex items-center gap-1.5 text-slate-400">
+        <Icon className="h-3.5 w-3.5 shrink-0" />
         <span className="text-xs font-semibold uppercase tracking-wide">{label}</span>
       </div>
-      <p className={cx('mt-2 font-mono text-lg sm:text-2xl font-black tabular-nums', tones[tone])}>{value}</p>
+      <p className={cx('font-mono text-lg font-black tabular-nums sm:mt-2 sm:text-2xl', tones[tone])}>{value}</p>
     </div>
   )
 }
@@ -366,7 +366,7 @@ export function SessionLogPage({ toast }) {
             activeTab === 'log' ? 'bg-white text-slate-900 shadow-sm' : 'text-slate-500 hover:text-slate-700'
           )}
         >
-          <ClipboardList className="h-4 w-4" />
+          <ClipboardList className="hidden sm:block h-4 w-4" />
           {t('tab_sessions')}
         </button>
         <button
@@ -376,7 +376,7 @@ export function SessionLogPage({ toast }) {
             activeTab === 'vote' ? 'bg-white text-slate-900 shadow-sm' : 'text-slate-500 hover:text-slate-700'
           )}
         >
-          <Vote className="h-4 w-4" />
+          <Vote className="hidden sm:block h-4 w-4" />
           {t('tab_next_vote')}
         </button>
       </div>
@@ -390,7 +390,7 @@ export function SessionLogPage({ toast }) {
           </div>
           <p className="mt-1 text-sm text-slate-500">{t('log_sub_auto')}</p>
 
-          <div className="mt-5 grid grid-cols-3 gap-3">
+          <div className="mt-5 grid grid-cols-1 gap-2 sm:grid-cols-3 sm:gap-3">
             <StatCard icon={ClipboardList} label={t('log_happened')} value={fmtNum(sessions.length)} />
             <StatCard icon={Check} label={t('log_recorded')} value={fmtNum(loggedCount)} tone={loggedCount === sessions.length ? 'volt' : 'slate'} />
             {hasEquipment && (
@@ -531,59 +531,74 @@ export function SessionLogPage({ toast }) {
                       </div>
                     </div>
                   ) : (
-                    <div className="flex items-center gap-3">
-                      <span
-                        className={cx(
-                          'grid h-9 w-9 shrink-0 place-items-center rounded-xl text-xs font-bold',
-                          isActual ? 'bg-slate-900 text-white' : 'bg-slate-100 text-slate-400'
-                        )}
-                      >
-                        {weekday !== null && weekday !== undefined ? t(`wd_${weekday}`) : <Calendar className="h-4 w-4" />}
-                      </span>
-                      <div className="min-w-0 flex-1">
-                        <div className="flex items-center gap-2">
-                          <p className={cx('text-sm font-semibold', isActual ? 'text-slate-900' : 'text-slate-400')}>{fmtDate(date)}</p>
-                          <span className="text-[10px] text-slate-400">{cycleTag}</span>
-                          {log?.vote_id && <Link className="h-3 w-3 text-cyan-500" />}
+                    <div className="space-y-2">
+                      {/* Row 1: weekday badge + date + actions */}
+                      <div className="flex items-center gap-2.5">
+                        <span
+                          className={cx(
+                            'grid h-8 w-8 shrink-0 place-items-center rounded-lg text-xs font-bold',
+                            isActual ? 'bg-slate-900 text-white' : 'bg-slate-100 text-slate-400'
+                          )}
+                        >
+                          {weekday !== null && weekday !== undefined ? t(`wd_${weekday}`) : <Calendar className="h-4 w-4" />}
+                        </span>
+                        <div className="flex-1 min-w-0">
+                          <div className="flex items-center gap-1.5 flex-wrap">
+                            <p className={cx('text-sm font-semibold', isActual ? 'text-slate-900' : 'text-slate-400')}>{fmtDate(date)}</p>
+                            <span className="text-[10px] text-slate-400">{cycleTag}</span>
+                            {log?.vote_id && <Link className="h-3 w-3 text-cyan-500" />}
+                          </div>
                         </div>
-                        {log?.note && <p className="truncate text-xs text-slate-400">{log.note}</p>}
-                        {!isActual && <p className="text-xs text-slate-400">{t('log_estimated_default')}</p>}
-                        {isActual && num(log.guest_revenue) > 0 && (
-                          <p className="text-xs text-lime-600 font-semibold">
-                            +{fmtVND(log.guest_revenue)} {t('log_guest_section')}
-                          </p>
+                        {canEdit && (
+                          <div className="flex shrink-0 gap-0.5">
+                            <button
+                              onClick={() => startEdit(date, log)}
+                              className="grid h-7 w-7 place-items-center rounded-lg text-slate-300 transition hover:bg-slate-100 hover:text-slate-600"
+                            >
+                              <Settings2 className="h-3.5 w-3.5" />
+                            </button>
+                            {isActual && (
+                              <button
+                                onClick={() => clearLog(log)}
+                                className="grid h-7 w-7 place-items-center rounded-lg text-slate-300 transition hover:bg-red-50 hover:text-red-400"
+                              >
+                                <Trash2 className="h-3.5 w-3.5" />
+                              </button>
+                            )}
+                          </div>
                         )}
                       </div>
-                      <div className="text-right shrink-0">
-                        {cost > 0 && <p className="font-mono text-sm font-black text-slate-900">{fmtVND(cost)}</p>}
-                        {hasEquipment && (
-                          <p className={cx('font-mono text-xs', isActual ? 'text-slate-500' : 'text-slate-300')}>
-                            {shuttleCount} {t('log_shuttles')}
-                            {!isActual && <span className="ml-1 text-slate-300">({t('log_est_tag')})</span>}
-                          </p>
-                        )}
-                        {isActual && (
-                          <Badge tone={tone === 'volt' ? 'volt' : tone === 'red' ? 'red' : 'slate'}>
-                            {diff > 0 ? '+' : ''}
-                            {diff !== 0 ? diff : ''} {diff > 0 ? t('log_over') : diff < 0 ? t('log_under') : t('log_on_track')}
+
+                      {/* Row 2: cost + badge OR estimated hint */}
+                      <div className="flex items-center justify-between gap-2 pl-10">
+                        <div className="flex items-center gap-2 flex-wrap">
+                          {cost > 0 ? (
+                            <p className="font-mono text-base font-black text-slate-900">{fmtVND(cost)}</p>
+                          ) : (
+                            <p className="text-xs text-slate-400">{t('log_estimated_default')}</p>
+                          )}
+                          {hasEquipment && (
+                            <p className={cx('font-mono text-xs', isActual ? 'text-slate-400' : 'text-slate-300')}>
+                              · {shuttleCount} {t('log_shuttles')}
+                              {!isActual && <span className="ml-1 text-slate-300">({t('log_est_tag')})</span>}
+                            </p>
+                          )}
+                        </div>
+                        {isActual && diff !== 0 && (
+                          <Badge tone={tone === 'volt' ? 'volt' : 'red'}>
+                            {diff > 0 ? '+' : ''}{diff} {diff > 0 ? t('log_over') : t('log_under')}
                           </Badge>
                         )}
                       </div>
-                      {canEdit && (
-                        <div className="flex shrink-0 gap-1">
-                          <button
-                            onClick={() => startEdit(date, log)}
-                            className="grid h-8 w-8 place-items-center rounded-lg text-slate-300 transition hover:bg-slate-100 hover:text-slate-600"
-                          >
-                            <Settings2 className="h-4 w-4" />
-                          </button>
-                          {isActual && (
-                            <button
-                              onClick={() => clearLog(log)}
-                              className="grid h-8 w-8 place-items-center rounded-lg text-slate-300 transition hover:bg-red-50 hover:text-red-400"
-                            >
-                              <Trash2 className="h-4 w-4" />
-                            </button>
+
+                      {/* Row 3: note + guest revenue */}
+                      {(log?.note || (isActual && num(log?.guest_revenue) > 0)) && (
+                        <div className="pl-10 space-y-0.5">
+                          {log?.note && <p className="text-xs text-slate-400">{log.note}</p>}
+                          {isActual && num(log.guest_revenue) > 0 && (
+                            <p className="text-xs text-lime-600 font-semibold">
+                              +{fmtVND(log.guest_revenue)} {t('log_guest_section')}
+                            </p>
                           )}
                         </div>
                       )}

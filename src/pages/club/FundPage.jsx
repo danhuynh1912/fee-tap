@@ -106,17 +106,22 @@ export function FundPage({ toast }) {
         </div>
       )}
 
-      <div className="flex items-center gap-4 rounded-3xl bg-slate-900 p-5 text-white">
-        <span className="grid h-12 w-12 shrink-0 place-items-center rounded-2xl bg-lime-400 text-slate-900">
-          <Wallet className="h-6 w-6" />
-        </span>
-        <div className="flex-1 min-w-0">
+      <div className="rounded-3xl bg-slate-900 p-5 text-white">
+        <div className="flex items-center gap-3 mb-4">
+          <span className="grid h-10 w-10 shrink-0 place-items-center rounded-2xl bg-lime-400 text-slate-900">
+            <Wallet className="h-5 w-5" />
+          </span>
           <p className="text-xs font-semibold uppercase tracking-wide text-slate-400">{t('fund_history_total')}</p>
-          <p className="font-mono text-2xl font-black text-lime-400">{fmtVND(total)}</p>
         </div>
-        <div className="text-right">
-          <p className="text-xs text-slate-400">{t('dash_fund_live')}</p>
-          <p className="font-mono text-lg font-black text-white">{fmtVND(liveFundBalance)}</p>
+        <div className="grid grid-cols-2 gap-4">
+          <div>
+            <p className="text-[10px] font-semibold uppercase tracking-wide text-slate-500 mb-1">{t('fund_history_total')}</p>
+            <p className="font-mono text-xl font-black text-lime-400">{fmtVND(total)}</p>
+          </div>
+          <div>
+            <p className="text-[10px] font-semibold uppercase tracking-wide text-slate-500 mb-1">{t('dash_fund_live')}</p>
+            <p className="font-mono text-xl font-black text-white">{fmtVND(liveFundBalance)}</p>
+          </div>
         </div>
       </div>
 

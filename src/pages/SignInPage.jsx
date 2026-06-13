@@ -45,7 +45,7 @@ export function SignInPage({ onGoogle, busy }) {
             </Badge>
             <h1 className="mt-6 text-5xl font-black leading-[1.04] tracking-tight text-slate-900 sm:text-6xl">
               {t('hero_title_1')}{' '}
-              <span className="relative whitespace-nowrap">
+              <span className="relative inline-block">
                 <span className="relative z-10">{t('hero_title_hl')}</span>
                 <span className="absolute -bottom-1 left-0 z-0 h-4 w-full -rotate-1 bg-lime-300/70" />
               </span>
