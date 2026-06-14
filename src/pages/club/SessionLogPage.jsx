@@ -672,7 +672,7 @@ export function SessionLogPage({ toast }) {
                 onClick={() => {
                   const url = `${window.location.origin}/club/${club.id}/log?tab=vote`
                   navigator.clipboard.writeText(url)
-                  toast?.({ message: t('vote_link_copied'), tone: 'volt' })
+                  toast?.(t('vote_link_copied'))
                 }}
                 className="flex items-center gap-2 rounded-xl border border-slate-200 bg-white px-3 py-2 text-xs font-semibold text-slate-600 hover:border-slate-300 hover:text-slate-900 transition active:scale-[0.98]"
               >
@@ -694,7 +694,7 @@ export function SessionLogPage({ toast }) {
                 onClick={() => {
                   const url = `${window.location.origin}/club/${club.id}/log?tab=cycle`
                   navigator.clipboard.writeText(url)
-                  toast?.({ message: t('vote_link_copied'), tone: 'volt' })
+                  toast?.(t('vote_link_copied'))
                 }}
                 className="flex items-center gap-2 rounded-xl border border-slate-200 bg-white px-3 py-2 text-xs font-semibold text-slate-600 hover:border-slate-300 hover:text-slate-900 transition active:scale-[0.98]"
               >
