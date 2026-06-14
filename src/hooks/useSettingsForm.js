@@ -21,6 +21,7 @@ export function useSettingsForm({ club, settings, initialSlots, fundTxns, member
     guest_fee_mode: settings.guest_fee_mode ?? 'split_all',
     guest_fee_male: settings.guest_fee_male ?? 0,
     guest_fee_female: settings.guest_fee_female ?? 0,
+    fixed_cycle_months: settings.fixed_cycle_months ?? '',
   })
   const [busy, setBusy] = useState(false)
 
@@ -116,6 +117,7 @@ export function useSettingsForm({ club, settings, initialSlots, fundTxns, member
         guest_fee_mode: form.guest_fee_mode,
         guest_fee_male: num(form.guest_fee_male),
         guest_fee_female: num(form.guest_fee_female),
+        fixed_cycle_months: form.fixed_cycle_months !== '' ? Math.max(1, parseInt(form.fixed_cycle_months, 10) || 1) : null,
         // backward-compat legacy columns — keep DB happy
         court_price_per_hour: firstSlot ? num(firstSlot.price_per_hour) : num(settings.court_price_per_hour) || 0,
         hours_per_session: firstSlot ? num(firstSlot.hours_per_session) : num(settings.hours_per_session) || 2,

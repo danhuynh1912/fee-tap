@@ -9,9 +9,10 @@ import { Button } from '../../components/ui/Button'
 import { inputCls } from '../../components/ui/Field'
 import { cx, num, fmtDate, fmtVND, fmtNum } from '../../lib/utils'
 import { supabase } from '../../lib/supabase'
-import { resolvePeriods, getSessionConfigs, calcGuestRevenue, cycleLabelShort } from '../../engine/forecast'
+import { resolvePeriods, getSessionConfigs, calcGuestRevenue, cycleLabelShort, computePaymentTimeline, formatPeriodLabel } from '../../engine/forecast'
 import { BALLS_PER_BOX } from '../../constants'
 import { NextSessionVoteTab } from '../../components/club/vote/NextSessionVoteTab'
+import { CycleVoteTab } from '../../components/club/vote/CycleVoteTab'
 
 function StatCard({ icon: Icon, label, value, tone = 'slate' }) {
   const tones = { slate: 'text-slate-900', volt: 'text-lime-600', red: 'text-red-600' }
@@ -58,7 +59,10 @@ export function SessionLogPage({ toast }) {
   const { t, i18n } = useTranslation()
   const [activeTab, setActiveTab] = useState(() => {
     const params = new URLSearchParams(window.location.search)
-    return params.get('tab') === 'vote' ? 'vote' : 'log'
+    const t = params.get('tab')
+    if (t === 'vote') return 'vote'
+    if (t === 'cycle') return 'cycle'
+    return 'log'
   })
   const [editingDate, setEditingDate] = useState(null)
   const [editForm, setEditForm] = useState({
@@ -355,6 +359,44 @@ export function SessionLogPage({ toast }) {
     })
   }, [editingDate, editForm, settings, hasEquipment, est, memberCount])
 
+  // Upcoming fee info for cycle vote tab — nearest upcoming group (same grouping as PaymentTimeline)
+  const upcomingFeeInfo = useMemo(() => {
+    if (!slots?.length || !settings) return null
+    const sportHasEquipment = sport?.hasEquipment ?? true
+    const timeline = computePaymentTimeline(slots, { ...settings, _hasEquipment: sportHasEquipment }, memberCount)
+    if (!timeline.upcoming?.length && !timeline.nextShuttleItem) return null
+
+    // Group by month-of-deadline (same key logic as PaymentTimeline)
+    const monthKey = (d) => (d ? `${d.getFullYear()}-${d.getMonth()}` : 'no-deadline')
+    const groups = new Map()
+    const getOrCreate = (deadline, daysUntil) => {
+      const key = monthKey(deadline)
+      if (!groups.has(key)) groups.set(key, { deadline, daysUntil, courtItems: [], shuttleItem: null })
+      return groups.get(key)
+    }
+    if (timeline.nextShuttleItem) {
+      const g = getOrCreate(timeline.nextShuttleItem.deadline, timeline.nextShuttleItem.daysUntil)
+      g.shuttleItem = timeline.nextShuttleItem
+    }
+    for (const r of timeline.upcoming) {
+      getOrCreate(r.nextDeadline, r.daysUntilNext).courtItems.push(r)
+    }
+    const sorted = [...groups.values()].sort((a, b) => {
+      if (!a.deadline) return 1
+      if (!b.deadline) return -1
+      return a.deadline - b.deadline
+    })
+    const first = sorted[0]
+    if (!first) return null
+
+    const courtCost = first.courtItems.reduce((s, r) => s + r.nextCourtCost, 0)
+    const shuttleCost = first.shuttleItem?.cost ?? 0
+    const total = courtCost + shuttleCost
+    const perMember = timeline.effectiveMemberCount > 0 ? Math.ceil(total / timeline.effectiveMemberCount) : 0
+    const periodLabel = first.courtItems[0] ? formatPeriodLabel(first.courtItems[0].nextPeriod, i18n.language) : ''
+    return { perMember, periodLabel, deadline: first.deadline }
+  }, [slots, settings, memberCount, sport, i18n.language])
+
   return (
     <div className="mx-auto max-w-[1150px] space-y-4">
       {/* ── Tab switcher ── */}
@@ -378,6 +420,16 @@ export function SessionLogPage({ toast }) {
         >
           <Vote className="hidden sm:block h-4 w-4" />
           {t('tab_next_vote')}
+        </button>
+        <button
+          onClick={() => setActiveTab('cycle')}
+          className={cx(
+            'flex flex-1 items-center justify-center gap-2 rounded-xl px-4 py-2.5 text-sm font-semibold transition',
+            activeTab === 'cycle' ? 'bg-white text-slate-900 shadow-sm' : 'text-slate-500 hover:text-slate-700'
+          )}
+        >
+          <Users className="hidden sm:block h-4 w-4" />
+          {t('tab_cycle_vote')}
         </button>
       </div>
 
@@ -630,6 +682,37 @@ export function SessionLogPage({ toast }) {
             </div>
           )}
           <NextSessionVoteTab club={club} settings={settings} members={members} canEdit={canEdit} user={user} toast={toast} />
+        </div>
+      )}
+
+      {/* ── Tab: Vote đăng ký cố định ── */}
+      {activeTab === 'cycle' && (
+        <div className="space-y-3">
+          {canEdit && (
+            <div className="flex justify-end">
+              <button
+                onClick={() => {
+                  const url = `${window.location.origin}/club/${club.id}/log?tab=cycle`
+                  navigator.clipboard.writeText(url)
+                  toast?.({ message: t('vote_link_copied'), tone: 'volt' })
+                }}
+                className="flex items-center gap-2 rounded-xl border border-slate-200 bg-white px-3 py-2 text-xs font-semibold text-slate-600 hover:border-slate-300 hover:text-slate-900 transition active:scale-[0.98]"
+              >
+                <Link className="h-3.5 w-3.5" />
+                {t('cycle_vote_copy_link')}
+              </button>
+            </div>
+          )}
+          <CycleVoteTab
+            club={club}
+            members={members}
+            settings={settings}
+            slots={slots}
+            canEdit={canEdit}
+            user={user}
+            toast={toast}
+            upcomingFeeInfo={upcomingFeeInfo}
+          />
         </div>
       )}
     </div>

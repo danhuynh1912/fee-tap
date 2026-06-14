@@ -9,7 +9,8 @@ import { Toggle } from '../../ui/Toggle'
 import { inputCls } from '../../ui/Field'
 
 // Identity is the authenticated FeeTap user — no localStorage needed.
-export function VotePanel({ vote, closed, filledSlots, myResponse, userId, userName, toast, onChanged }) {
+// hideSlots: true for cycle votes (no slot counting, no guest section)
+export function VotePanel({ vote, closed, filledSlots, myResponse, userId, userName, toast, onChanged, hideSlots = false }) {
   const { t } = useTranslation()
   const [attending, setAttending] = useState(myResponse ? myResponse.attending : null)
   const [withGuests, setWithGuests] = useState((myResponse?.guests || 0) > 0)
@@ -33,8 +34,8 @@ export function VotePanel({ vote, closed, filledSlots, myResponse, userId, userN
     }
   }, [myResponse?.id, myResponse?.attending, myResponse?.guest_male_count, myResponse?.guest_female_count])
 
-  const otherSlots = filledSlots - (myResponse?.attending ? 1 + (myResponse.guests || 0) : 0)
-  const remainingForMe = vote.max_slots - otherSlots
+  const otherSlots = hideSlots ? 0 : filledSlots - (myResponse?.attending ? 1 + (myResponse.guests || 0) : 0)
+  const remainingForMe = hideSlots ? 99 : (vote.max_slots || 0) - otherSlots
   const maxGuestsForMe = Math.max(0, remainingForMe - 1)
   const canAddGuest = guests < maxGuestsForMe
 
@@ -93,7 +94,7 @@ export function VotePanel({ vote, closed, filledSlots, myResponse, userId, userN
     persist(true, guestMale, next)
   }
 
-  const yesFull = otherSlots >= vote.max_slots && !myResponse?.attending
+  const yesFull = !hideSlots && otherSlots >= (vote.max_slots || 0) && !myResponse?.attending
 
   if (closed) {
     return (
@@ -117,7 +118,7 @@ export function VotePanel({ vote, closed, filledSlots, myResponse, userId, userN
 
   return (
     <div className="rounded-3xl border border-slate-100 bg-white/80 p-7 backdrop-blur-xl">
-      <h3 className="text-lg font-bold text-slate-900">{t('vote_will_you_play')}</h3>
+      <h3 className="text-lg font-bold text-slate-900">{hideSlots ? t('cycle_vote_register_q') : t('vote_will_you_play')}</h3>
       <p className="mt-1 text-sm text-slate-500">
         {userName ? (
           <>
@@ -170,7 +171,7 @@ export function VotePanel({ vote, closed, filledSlots, myResponse, userId, userN
         </button>
       </div>
 
-      {attending === true && (
+      {attending === true && !hideSlots && (
         <div className="mt-5 animate-fade-in space-y-4">
           <Toggle
             checked={withGuests}

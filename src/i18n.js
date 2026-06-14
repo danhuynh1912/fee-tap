@@ -242,7 +242,7 @@ const en = {
   export_done: 'Export simulated — file ready',
 
   // ── members ──────────────────────────────────────────────
-  mem_title: 'Member registration',
+  mem_title: 'Member list',
   mem_sub_free: '{{count}} / 15 on the Free plan',
   mem_sub_pro: '{{count}} members · unlimited',
   mem_add_ph: 'Member name',
@@ -536,6 +536,33 @@ const en = {
   payos_enter_keys: 'Enter your PayOS API keys',
   payos_keys_hint: 'Keys are encrypted and only visible to you.',
   payos_saved: 'PayOS connected successfully!',
+
+  // ── cycle vote (fixed roster) ─────────────────────────────
+  tab_cycle_vote: 'Fixed roster',
+  cycle_vote_title_prefix: 'Fixed roster vote —',
+  cycle_vote_created: 'Vote created!',
+  cycle_vote_period_label: 'Voting for period',
+  cycle_vote_no_vote_host: 'No active roster vote. Create one to collect commitments for the next cycle.',
+  cycle_vote_no_vote_member: 'No roster vote yet. Ask the admin to create one.',
+  cycle_vote_committed_title: 'Who\'s in',
+  cycle_vote_no_responses: 'No votes yet.',
+  cycle_vote_register_q: 'Joining next cycle?',
+  committed_members_count: '{{count}} / {{total}} committed',
+  upcoming_fee_label: 'Upcoming collection',
+  create_cycle_vote: 'Create roster vote',
+  not_committed_this_cycle: 'Not in this cycle',
+  cycle_vote_btn: 'Roster vote',
+  open_cycle_vote: 'Open roster vote',
+  no_cycle_committed: 'No fixed registrations yet',
+  cycle_vote_copy_link: 'Copy roster vote link',
+
+  // ── cycle vote settings ───────────────────────────────────
+  set_cycle_vote_title: 'Fixed roster vote settings',
+  set_shuttle_cycle_months: 'Shuttle purchase cycle',
+  set_shuttle_cycle_start: 'Shuttle cycle starts in',
+  set_fixed_cycle_months: 'Vote cycle (months)',
+  set_fixed_cycle_months_hint: 'Minimum {{min}} months (shortest of court / shuttle cycles)',
+  set_cycle_months_unit: 'months',
 }
 
 const vi = {
@@ -763,7 +790,7 @@ const vi = {
   export_pdf: 'Xuất PDF',
   export_done: 'Đã mô phỏng xuất — tệp sẵn sàng',
 
-  mem_title: 'Đăng ký thành viên',
+  mem_title: 'Danh sách thành viên',
   mem_sub_free: '{{count}} / 15 ở gói Free',
   mem_sub_pro: '{{count}} thành viên · không giới hạn',
   mem_add_ph: 'Tên thành viên',
@@ -1056,6 +1083,33 @@ const vi = {
   timeline_open_spots: '{{n}} chỗ trống',
   timeline_open_spots_hint: 'Cần tìm người giao lưu bù hoặc quỹ sẽ bị trừ',
   timeline_gap_cost: 'Quỹ bị trừ nếu không có người bù',
+
+  // ── cycle vote (fixed roster) ─────────────────────────────
+  tab_cycle_vote: 'Đăng ký cố định',
+  cycle_vote_title_prefix: 'Vote cố định —',
+  cycle_vote_created: 'Đã tạo vote!',
+  cycle_vote_period_label: 'Đăng ký cho kỳ',
+  cycle_vote_no_vote_host: 'Chưa có vote đăng ký cố định. Tạo mới để thu thập danh sách kỳ tiếp theo.',
+  cycle_vote_no_vote_member: 'Chưa có vote đăng ký cố định. Liên hệ host để tạo vote.',
+  cycle_vote_committed_title: 'Danh sách đăng ký cố định',
+  cycle_vote_no_responses: 'Chưa có ai vote.',
+  cycle_vote_register_q: 'Bạn có đánh kỳ tới không?',
+  committed_members_count: '{{count}} / {{total}} đã đăng ký',
+  upcoming_fee_label: 'Đợt thu sắp tới',
+  create_cycle_vote: 'Tạo vote đăng ký',
+  not_committed_this_cycle: 'Không cố định kỳ này',
+  cycle_vote_btn: 'Vote đăng ký cố định',
+  open_cycle_vote: 'Mở vote cố định',
+  no_cycle_committed: 'Chưa có ai đăng ký cố định',
+  cycle_vote_copy_link: 'Sao chép link vote cố định',
+
+  // ── cycle vote settings ───────────────────────────────────
+  set_cycle_vote_title: 'Cài đặt vote đăng ký cố định',
+  set_shuttle_cycle_months: 'Chu kỳ mua cầu',
+  set_shuttle_cycle_start: 'Chu kỳ cầu bắt đầu từ tháng',
+  set_fixed_cycle_months: 'Chu kỳ vote cố định (tháng)',
+  set_fixed_cycle_months_hint: 'Tối thiểu {{min}} tháng (chu kỳ ngắn nhất: sân / cầu)',
+  set_cycle_months_unit: 'tháng',
 }
 
 const saved = (typeof localStorage !== 'undefined' && localStorage.getItem('feetap_lang')) || 'en'

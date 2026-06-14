@@ -106,22 +106,6 @@ export function MembersPanel({ club, members, plan, pollTally, hostName, hostAva
         </p>
       )}
 
-      {canEdit && (
-        <form onSubmit={add} className="mt-4 flex gap-2">
-          <input className={cx(inputCls, 'flex-1')} placeholder={t('mem_add_ph')} value={name} onChange={(e) => setName(e.target.value)} />
-          <Button type="submit" variant={atLimit ? 'volt' : 'primary'} disabled={busy || !name.trim()}>
-            {atLimit ? (
-              <>
-                <Lock className="h-4 w-4" /> {t('mem_limit_reached')}
-              </>
-            ) : (
-              <>
-                <Plus className="h-4 w-4" /> {t('add')}
-              </>
-            )}
-          </Button>
-        </form>
-      )}
 
       <ul className="mt-4 space-y-2">
         {hostName && (

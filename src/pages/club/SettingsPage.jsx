@@ -11,7 +11,7 @@ import { CourtSlotCard } from '../../components/club/CourtSlotCard'
 import { PayOSSettings } from '../../components/club/PayOSSettings'
 import { MembersPanel } from './MembersPanel'
 import { cx, fmtVND, fmtInputNum, parseInputNum } from '../../lib/utils'
-import { cycleLabelShort, monthName } from '../../engine/forecast'
+import { cycleLabelShort, monthName, computeMembershipVoteCycle } from '../../engine/forecast'
 
 export function SettingsPage({ toast }) {
   const { t, i18n } = useTranslation()
@@ -432,6 +432,30 @@ export function SettingsPage({ toast }) {
                   {form.fee_split_mode === 'committed_only' ? t('fee_split_committed_hint') : t('fee_split_total_hint')}
                 </p>
               </div>
+
+              {/* Cycle vote settings */}
+              {(() => {
+                const { minMonths } = computeMembershipVoteCycle(slots, form)
+                return (
+                  <div>
+                    <p className="text-xs font-semibold uppercase tracking-wide text-slate-400 mb-3">{t('set_cycle_vote_title')}</p>
+                    <div className="space-y-4">
+                      <Field label={t('set_fixed_cycle_months')} icon={Calendar} hint={t('set_fixed_cycle_months_hint', { min: minMonths })}>
+                        <input
+                          type="number"
+                          min={minMonths}
+                          step="1"
+                          className={inputCls}
+                          value={form.fixed_cycle_months}
+                          disabled={!canEdit}
+                          placeholder={String(minMonths)}
+                          onChange={(e) => setForm((f) => ({ ...f, fixed_cycle_months: e.target.value }))}
+                        />
+                      </Field>
+                    </div>
+                  </div>
+                )
+              })()}
 
               {/* Guest fee */}
               <div>

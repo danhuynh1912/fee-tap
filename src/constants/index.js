@@ -34,4 +34,7 @@ export const DEFAULT_SETTINGS = {
   current_fund: 0,
   court_payment_mode: 'session',
   session_configs: [],
+  shuttle_cycle_months: 1,
+  shuttle_cycle_start_month: 1,
+  fixed_cycle_months: null,
 }

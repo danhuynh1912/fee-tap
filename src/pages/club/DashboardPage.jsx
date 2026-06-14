@@ -37,6 +37,9 @@ function ForecastDashboard({
   toast,
   onChanged,
   liveFundBalance,
+  pollTally,
+  club,
+  user,
 }) {
   const hasEquipment = sport?.hasEquipment ?? true
   const [spentTipOpen, setSpentTipOpen] = useState(false)
@@ -224,6 +227,8 @@ function ForecastDashboard({
           clubId={clubId}
           toast={toast}
           onReload={onChanged}
+          pollTally={pollTally}
+          cycleVoteProps={club ? { club, members: members || [], settings, slots: slots || [], canEdit, user } : null}
         />
       )}
 
@@ -262,13 +267,14 @@ export function DashboardPage({ toast }) {
     hostAvatar,
     currentUserId,
     canEdit,
+    session,
     reload,
     openUpsell,
     closeSidebar,
     liveFundBalance,
   } = useClub()
 
-  const memberCount = (pollTally?.count ?? members.filter((m) => m.user_id !== club.owner_id).length) + 1
+  const memberCount = members.filter((m) => m.user_id !== club.owner_id).length + 1
   const committedCount = pollTally?.count ?? null
   const [configOpen, setConfigOpen] = useState(false)
   const [sectionsOverride, setSectionsOverride] = useState(null)
@@ -312,6 +318,9 @@ export function DashboardPage({ toast }) {
           toast={toast}
           onChanged={reload}
           liveFundBalance={liveFundBalance}
+          pollTally={pollTally}
+          club={club}
+          user={session?.user}
         />
       </div>
 

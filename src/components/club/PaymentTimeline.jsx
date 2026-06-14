@@ -8,6 +8,7 @@ import { Button } from '../ui/Button'
 import { supabase } from '../../lib/supabase'
 import { PaymentQRModal } from './PaymentQRModal'
 import { PaymentCollectionModal } from './PaymentCollectionModal'
+import { CycleVoteInline } from './vote/CycleVoteInline'
 
 function DeadlineBadge({ daysUntilNext, t }) {
   if (daysUntilNext === null) return null
@@ -166,6 +167,7 @@ function GroupSummary({
   courtCost,
   shuttleCost,
   effectiveCount,
+  hasCommitted,
   t,
   isLast,
   canEdit,
@@ -202,8 +204,11 @@ function GroupSummary({
           </span>
         </div>
         <div className="text-right">
-          <p className="font-mono text-2xl font-black text-lime-400">{fmtVND(perMember)}</p>
+          <p className={cx('font-mono text-2xl font-black', hasCommitted ? 'text-lime-400' : 'text-yellow-400')}>{fmtVND(perMember)}</p>
           <p className="text-xs text-slate-400 mt-0.5">{t('timeline_per_member')}</p>
+          {!hasCommitted && (
+            <p className="text-[10px] text-slate-500 mt-0.5">{t('no_cycle_committed')}</p>
+          )}
         </div>
       </div>
 
@@ -328,14 +333,15 @@ export function PaymentTimeline({
   clubId,
   toast,
   onReload,
+  pollTally = null,
+  cycleVoteProps = null,
 }) {
   const { t, i18n } = useTranslation()
   const lang = i18n.language
 
   const [openingGroup, setOpeningGroup] = useState(null) // period_start of the group being opened
   const [qrModal, setQrModal] = useState(null) // { record, memberName }
-  const [collectionModal, setCollectionModal] = useState(null) // { collection, groupPayments }
-
+  const [collectionModal, setCollectionModal] = useState(null) // { collection, groupPayments, committedUserIds }
   const settingsWithEquip = useMemo(
     () => ({
       ...settings,
@@ -346,7 +352,8 @@ export function PaymentTimeline({
 
   const timeline = useMemo(() => computePaymentTimeline(slots, settingsWithEquip, memberCount), [slots, settingsWithEquip, memberCount])
 
-  const effectiveCount = timeline.effectiveMemberCount
+  const hasCommitted = committedCount != null && committedCount > 0
+  const effectiveCount = hasCommitted ? committedCount : timeline.effectiveMemberCount
   const openSpots = settings.fee_split_mode === 'total_members' && committedCount !== null ? Math.max(0, memberCount - committedCount) : 0
 
   const paymentGroups = useMemo(() => {
@@ -456,7 +463,7 @@ export function PaymentTimeline({
     <div className="space-y-6">
       {showRunning && (
         <div>
-          <p className="text-xs font-semibold uppercase tracking-wide text-slate-400 mb-3">{t('timeline_running_title')}</p>
+          <p className="text-sm font-bold uppercase tracking-widest text-slate-700 mb-3">{t('timeline_running_title')}</p>
           <div className="space-y-3">
             {timeline.running.map((r, i) => (
               <RunningSlotCard key={r.slot.id || i} result={r} lang={lang} t={t} />
@@ -467,7 +474,7 @@ export function PaymentTimeline({
 
       {paymentGroups.length > 0 && (
         <div className="space-y-4">
-          <p className="text-xs font-semibold uppercase tracking-wide text-slate-400">{t('timeline_upcoming_title')}</p>
+          <p className="text-sm font-bold uppercase tracking-widest text-slate-700">{t('timeline_upcoming_title')}</p>
           {paymentGroups.map((group, gi) => {
             const courtCost = group.courtItems.reduce((s, r) => s + r.nextCourtCost, 0)
             const shuttleCost = group.shuttleItem?.cost ?? 0
@@ -484,7 +491,8 @@ export function PaymentTimeline({
             const myRecord = currentMemberId ? groupPayments.find((p) => p.member_id === currentMemberId) : null
 
             return (
-              <div key={gi} className="rounded-3xl border border-slate-200 overflow-hidden">
+              <div key={gi}>
+              <div className="rounded-3xl border border-slate-200 overflow-hidden">
                 {group.deadline && (
                   <div className="flex items-center justify-between px-4 py-2.5 bg-slate-50 border-b border-slate-100">
                     <span className="text-xs font-semibold text-slate-500">
@@ -533,6 +541,7 @@ export function PaymentTimeline({
                   courtCost={courtCost}
                   shuttleCost={shuttleCost}
                   effectiveCount={effectiveCount}
+                  hasCommitted={hasCommitted}
                   t={t}
                   isLast={isLastGroup}
                   canEdit={canEdit}
@@ -546,7 +555,7 @@ export function PaymentTimeline({
                   members={members}
                   openingCollection={openingGroup === ps}
                   onOpenCollection={() => openCollection(group, courtCost, shuttleCost)}
-                  onViewCollection={() => setCollectionModal({ collection, groupPayments })}
+                  onViewCollection={() => setCollectionModal({ collection, groupPayments, committedUserIds: pollTally?.committedUserIds })}
                   onPayQR={(liveAmount) => {
                     const m = members.find((m) => m.id === currentMemberId)
                     setQrModal({ record: myRecord, memberName: m?.name || '', liveAmount })
@@ -554,6 +563,12 @@ export function PaymentTimeline({
                   isPro={plan === 'pro'}
                   payosConfigured={payosConfigured}
                 />
+
+                {/* Inline cycle vote — first group only, always rendered */}
+                {gi === 0 && cycleVoteProps && (
+                  <CycleVoteInline {...cycleVoteProps} />
+                )}
+              </div>
               </div>
             )
           })}
@@ -577,6 +592,7 @@ export function PaymentTimeline({
         collection={collectionModal?.collection}
         memberPayments={collectionModal ? memberPayments.filter((p) => p.collection_id === collectionModal.collection?.id) : []}
         members={members}
+        committedUserIds={collectionModal?.committedUserIds}
         toast={toast}
         onSynced={onReload}
         onChanged={() => {

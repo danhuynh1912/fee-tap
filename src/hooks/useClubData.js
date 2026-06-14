@@ -57,6 +57,28 @@ export function useClubData(clubId) {
     setCollections(cols || [])
   }, [clubId])
 
+  const fetchPollTally = useCallback(async () => {
+    const { data: v } = await supabase
+      .from('votes')
+      .select('id')
+      .eq('club_id', clubId)
+      .eq('vote_type', 'membership_cycle')
+      .order('created_at', { ascending: false })
+      .limit(1)
+    if (v && v.length) {
+      const { data: rs } = await supabase
+        .from('responses')
+        .select('attending, guests, anonymous_user_id')
+        .eq('vote_id', v[0].id)
+      const attendingRs = (rs || []).filter((r) => r.attending)
+      const count = attendingRs.length
+      const committedUserIds = new Set(attendingRs.map((r) => r.anonymous_user_id))
+      setPollTally({ count, source: 'poll', committedUserIds, voteId: v[0].id })
+    } else {
+      setPollTally(null)
+    }
+  }, [clubId])
+
   const fetchMemberPayments = useCallback(async () => {
     const { data: mpr } = await supabase.from('member_payment_records').select('*').eq('club_id', clubId)
     setMemberPayments(mpr || [])
@@ -110,7 +132,7 @@ export function useClubData(clubId) {
     setMemberPayments(mpr || [])
     setPayosConfig(pc === true ? true : null)
 
-    // Cross-query PollTap membership_cycle tally
+    // Cross-query membership_cycle tally — SSOT for committedCount + committedUserIds
     const { data: v } = await supabase
       .from('votes')
       .select('id')
@@ -119,9 +141,14 @@ export function useClubData(clubId) {
       .order('created_at', { ascending: false })
       .limit(1)
     if (v && v.length) {
-      const { data: rs } = await supabase.from('responses').select('attending,guests').eq('vote_id', v[0].id).eq('attending', true)
-      const count = (rs || []).reduce((sum, r) => sum + 1 + (r.guests || 0), 0)
-      setPollTally({ count, source: 'poll' })
+      const { data: rs } = await supabase
+        .from('responses')
+        .select('attending, guests, anonymous_user_id')
+        .eq('vote_id', v[0].id)
+      const attendingRs = (rs || []).filter((r) => r.attending)
+      const count = attendingRs.length
+      const committedUserIds = new Set(attendingRs.map((r) => r.anonymous_user_id))
+      setPollTally({ count, source: 'poll', committedUserIds, voteId: v[0].id })
     } else {
       setPollTally(null)
     }
@@ -143,11 +170,13 @@ export function useClubData(clubId) {
       .on('postgres_changes', { event: '*', schema: 'public', table: 'fund_transactions', filter: `club_id=eq.${clubId}` }, fetchFundTxns)
       .on('postgres_changes', { event: '*', schema: 'public', table: 'payment_collections', filter: `club_id=eq.${clubId}` }, fetchCollections)
       .on('postgres_changes', { event: '*', schema: 'public', table: 'member_payment_records', filter: `club_id=eq.${clubId}` }, fetchMemberPayments)
+      .on('postgres_changes', { event: '*', schema: 'public', table: 'votes', filter: `club_id=eq.${clubId}` }, fetchPollTally)
+      .on('postgres_changes', { event: '*', schema: 'public', table: 'responses' }, fetchPollTally)
       .subscribe()
     return () => {
       supabase.removeChannel(ch)
     }
-  }, [clubId, loadAll, fetchSettings, fetchSlots, fetchMembers, fetchLogs, fetchFundTxns, fetchCollections, fetchMemberPayments])
+  }, [clubId, loadAll, fetchSettings, fetchSlots, fetchMembers, fetchLogs, fetchFundTxns, fetchCollections, fetchMemberPayments, fetchPollTally])
 
   return {
     settings,

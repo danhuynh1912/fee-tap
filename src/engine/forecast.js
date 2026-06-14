@@ -283,6 +283,53 @@ export function resolveShuttlePeriodLabel(settings, lang, now = new Date()) {
   return formatPeriodLabel(period, lang)
 }
 
+// ---------------------------------------------------------------------------
+// Membership vote cycle helpers
+// ---------------------------------------------------------------------------
+
+/**
+ * Compute the minimum allowed cycle for the fixed-roster vote.
+ * SSOT: derived entirely from slots + settings — never hardcoded in UI.
+ *
+ * courtMinMonths = min(slot.cycle_months) across all slots (falls back to
+ *   billing_cycle 'quarter'→3 / 'month'→1 when cycle_months is absent)
+ * shuttleMonths  = settings.shuttle_cycle_months (default 1)
+ * minMonths      = min(courtMinMonths, shuttleMonths)
+ */
+export function computeMembershipVoteCycle(slots, settings) {
+  let courtMinMonths = 1
+  if (slots && slots.length) {
+    courtMinMonths = slots.reduce((mn, s) => {
+      const n = num(s.cycle_months, 0)
+      const m = n >= 1 ? n : s.billing_cycle === 'quarter' ? 3 : 1
+      return Math.min(mn, m)
+    }, Infinity)
+    if (!isFinite(courtMinMonths)) courtMinMonths = 1
+  } else {
+    courtMinMonths = settings?.billing_cycle === 'quarter' ? 3 : 1
+  }
+  const shuttleMonths = Math.max(1, num(settings?.shuttle_cycle_months, 1))
+  const minMonths = Math.min(courtMinMonths, shuttleMonths)
+  return { courtMinMonths, shuttleMonths, minMonths }
+}
+
+/**
+ * Compute the start/end ISO dates for the NEXT cycle period.
+ * Starts on the first day of next month, spans fixedMonths months.
+ */
+export function nextCyclePeriod(fixedMonths, now = new Date()) {
+  const n = Math.max(1, Math.round(fixedMonths) || 1)
+  const nextIdx = mIdx(now.getFullYear(), now.getMonth()) + 1
+  const endIdx = nextIdx + n - 1
+  const { year: sy, month0: sm0 } = fromIdx(nextIdx)
+  const { year: ey, month0: em0 } = fromIdx(endIdx)
+  const daysInLast = new Date(ey, em0 + 1, 0).getDate()
+  const start = `${sy}-${String(sm0 + 1).padStart(2, '0')}-01`
+  const end = `${ey}-${String(em0 + 1).padStart(2, '0')}-${String(daysInLast).padStart(2, '0')}`
+  const period = makePeriod(n === 1 ? 'month' : 'cycle', nextIdx, n)
+  return { start, end, period }
+}
+
 export function cycleLabelShort(n, lang) {
   const months = Math.max(1, n || 1)
   if (months === 1) return lang === 'vi' ? 'tháng' : 'month'
