@@ -354,7 +354,7 @@ export function PaymentTimeline({
 
   const hasCommitted = committedCount != null && committedCount > 0
   const effectiveCount = hasCommitted ? committedCount : timeline.effectiveMemberCount
-  const openSpots = settings.fee_split_mode === 'total_members' && committedCount !== null ? Math.max(0, memberCount - committedCount) : 0
+  const openSpots = !hasCommitted && settings.fee_split_mode === 'total_members' && committedCount !== null ? Math.max(0, memberCount - committedCount) : 0
 
   const paymentGroups = useMemo(() => {
     const monthKey = (d) => (d ? `${d.getFullYear()}-${d.getMonth()}` : 'no-deadline')
