@@ -9,6 +9,7 @@ import { Segmented } from '../../components/ui/Segmented'
 import { CourtSlotModal } from '../../components/club/CourtSlotModal'
 import { CourtSlotCard } from '../../components/club/CourtSlotCard'
 import { PayOSSettings } from '../../components/club/PayOSSettings'
+import { UpcomingCollectionsList } from '../../components/club/UpcomingCollectionsList'
 import { MembersPanel } from './MembersPanel'
 import { cx, fmtVND, fmtInputNum, parseInputNum } from '../../lib/utils'
 import { cycleLabelShort, monthName, computeMembershipVoteCycle } from '../../engine/forecast'
@@ -64,7 +65,8 @@ export function SettingsPage({ toast }) {
     setFundSetupMode,
     isFirstSetup,
     actualSpent,
-    livePreview,
+    upcomingCollections,
+    effective,
   } = useSettingsForm({
     club,
     settings,
@@ -538,40 +540,7 @@ export function SettingsPage({ toast }) {
               <span>{t('set_cost_preview_title')}</span>
             </div>
             <p className="mt-1 mb-4 text-xs text-slate-500">{t('set_cost_preview_sub')}</p>
-            {!livePreview ? (
-              <p className="text-sm text-slate-400 text-center py-4">{t('slot_empty')}</p>
-            ) : (
-              <div className="rounded-2xl border border-slate-100 bg-slate-50 p-4 space-y-2">
-                <div className="flex justify-between text-sm">
-                  <span className="text-slate-500">{t('timeline_court_cost')}</span>
-                  <span className="font-mono font-semibold text-slate-900">{fmtVND(livePreview.totalCourtCost)}</span>
-                </div>
-                {sport.hasEquipment && (
-                  <div className="flex justify-between items-start gap-2 text-sm">
-                    <span className="text-slate-500 shrink-0">{t('set_cost_shuttle')}</span>
-                    <span className="text-right">
-                      {livePreview.shuttleLabel && <span className="block text-xs font-semibold text-cyan-700">{livePreview.shuttleLabel}</span>}
-                      {livePreview.shuttleCost > 0 && (
-                        <span className="font-mono font-semibold text-slate-900">{fmtVND(livePreview.shuttleCost)}</span>
-                      )}
-                      {livePreview.shuttleLabel && livePreview.shuttleCost === 0 && <span className="font-mono font-semibold text-slate-400">—</span>}
-                    </span>
-                  </div>
-                )}
-                <div className="border-t border-slate-200 pt-2 flex justify-between">
-                  <span className="text-sm font-bold text-slate-800">{t('set_cost_total')}</span>
-                  <span className="font-mono text-base font-black text-slate-900">{fmtVND(livePreview.totalCost)}</span>
-                </div>
-                {livePreview.effective > 0 && (
-                  <div className="flex justify-between rounded-xl bg-lime-400/20 px-3 py-2">
-                    <span className="text-xs font-semibold text-slate-700">
-                      {t('set_cost_per_member')} ({livePreview.effective} {t('members')})
-                    </span>
-                    <span className="font-mono text-sm font-black text-slate-900">{fmtVND(livePreview.perMember)}</span>
-                  </div>
-                )}
-              </div>
-            )}
+            <UpcomingCollectionsList items={upcomingCollections} effective={effective} />
           </Card>
 
           <MembersPanel

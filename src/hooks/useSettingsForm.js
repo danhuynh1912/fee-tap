@@ -3,7 +3,7 @@ import { useTranslation } from 'react-i18next'
 import { supabase } from '../lib/supabase'
 import { handleError } from '../lib/handleError'
 import { num } from '../lib/utils'
-import { computeSlot, estimateShuttle } from '../engine/forecast'
+import { computeSlot, estimateShuttle, projectUpcomingCollections } from '../engine/forecast'
 
 export function useSettingsForm({ club, settings, initialSlots, fundTxns, members, pollTally, hostName, sport, canEdit, toast, reload, setSettings, openUpsell }) {
   const { t } = useTranslation()
@@ -64,39 +64,21 @@ export function useSettingsForm({ club, settings, initialSlots, fundTxns, member
     }, 0)
   }, [isFirstSetup, initialSlots, form.price_per_box, form.estimated_shuttlecocks])
 
-  const livePreview = useMemo(() => {
-    if (!slots.length) return null
-    const totalCourtCost = slots.reduce((sum, slot) => {
-      const r = computeSlot(slot)
-      return sum + r.courtCost
-    }, 0)
-    let shuttleCost = 0
-    let shuttleLabel = null
-    if (sport.hasEquipment) {
-      const { totalSessions: shuttleSessions } = estimateShuttle(slots, {
-        ...form,
-        shuttle_cycle_months: parseInt(form.shuttle_cycle_months, 10) || 1,
-        shuttle_cycle_start_month: parseInt(form.shuttle_cycle_start_month, 10) || 1,
-      })
-      if (form.shuttle_mode === 'inventory') {
-        const boxesLeft = num(form.shuttle_stock)
-        const tubesPerSession = num(form.estimated_shuttlecocks) || 6
-        const sessionsLeft = tubesPerSession > 0 ? Math.floor((boxesLeft * 12) / tubesPerSession) : 0
-        const refillBoxes = sessionsLeft < shuttleSessions ? Math.ceil(((shuttleSessions - sessionsLeft) * tubesPerSession) / 12) : 0
-        shuttleCost = refillBoxes > 0 ? refillBoxes * num(form.price_per_box) : 0
-        const stockLine = `Tồn kho: ${boxesLeft} hộp · đủ ~${sessionsLeft} buổi`
-        const refillLine = refillBoxes > 0 ? ` · cần nhập thêm ${refillBoxes} hộp` : ''
-        shuttleLabel = stockLine + refillLine
-      } else {
-        const boxes = Math.ceil((shuttleSessions * num(form.estimated_shuttlecocks)) / 12)
-        shuttleCost = boxes * num(form.price_per_box)
-      }
-    }
-    const totalCost = totalCourtCost + shuttleCost
-    const effective = form.fee_split_mode === 'committed_only' && committedCount ? committedCount : memberCount
-    const perMember = effective > 0 ? Math.ceil(totalCost / effective) : 0
-    return { totalCourtCost, shuttleCost, totalCost, perMember, effective, shuttleLabel }
-  }, [slots, form, memberCount, committedCount, sport.hasEquipment])
+  const effective = form.fee_split_mode === 'committed_only' && committedCount ? committedCount : memberCount
+
+  // Inventory mode has its own one-off restock flow, not a recurring cycle — keep it
+  // out of the projected list (it's surfaced separately via the restock card).
+  const upcomingCollections = useMemo(() => {
+    if (!slots.length || form.shuttle_mode === 'inventory') return []
+    return projectUpcomingCollections(slots, {
+      _hasEquipment: sport.hasEquipment,
+      shuttle_mode: form.shuttle_mode,
+      estimated_shuttlecocks: form.estimated_shuttlecocks,
+      price_per_box: form.price_per_box,
+      shuttle_cycle_months: parseInt(form.shuttle_cycle_months, 10) || 1,
+      shuttle_cycle_start_month: parseInt(form.shuttle_cycle_start_month, 10) || 1,
+    })
+  }, [slots, form, sport.hasEquipment])
 
   // ── actions ──────────────────────────────────────────────
   async function save() {
@@ -274,6 +256,6 @@ export function useSettingsForm({ club, settings, initialSlots, fundTxns, member
     fundSetupMode, setFundSetupMode,
     isFirstSetup, actualSpent,
     // derived
-    livePreview, memberCount, committedCount,
+    upcomingCollections, effective, memberCount, committedCount,
   }
 }

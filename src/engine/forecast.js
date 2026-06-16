@@ -242,6 +242,94 @@ export function computePaymentTimeline(slots, settings, memberCount, now = new D
 }
 
 // ---------------------------------------------------------------------------
+// projectUpcomingCollections — minimal forward-looking list of upcoming
+// "đợt thu" items, one per court slot stream + one shuttle stream, WITHOUT
+// merging their costs into a single blended number. Walks forward only far
+// enough to guarantee every stream (each court slot + shuttle) appears at
+// least once — e.g. if court collects every 3 months and shuttle every
+// month, the list has 3 entries: shuttle, shuttle, shuttle+court.
+// ---------------------------------------------------------------------------
+
+function advancePeriod(period, n) {
+  return makePeriod(period.kind, period.startIdx + n, period.len)
+}
+
+export function projectUpcomingCollections(slots, settings, now = new Date()) {
+  if (!slots || !slots.length) return []
+  const hasEquipment = settings._hasEquipment !== false && settings.shuttle_mode !== 'inventory'
+
+  const slotStreams = slots.map((slot) => {
+    const n = Math.max(1, Math.round(num(slot.cycle_months)) || 1)
+    const weekdays = Array.isArray(slot.weekdays) ? slot.weekdays : []
+    const { next } = resolvePeriodForSlot(slot, now)
+    return { kind: 'court', slot, period: next, n, weekdays }
+  })
+
+  let shuttleStream = null
+  if (hasEquipment) {
+    const n = Math.max(1, Math.round(num(settings.shuttle_cycle_months)) || 1)
+    const here = mIdx(now.getFullYear(), now.getMonth())
+    const anchor = Math.max(1, Math.min(12, Math.round(num(settings.shuttle_cycle_start_month, 1)))) - 1
+    const off = n === 1 ? 0 : (((now.getMonth() - anchor) % n) + n) % n
+    const nextPeriod = makePeriod(n === 1 ? 'month' : 'cycle', here - off + n, n)
+    shuttleStream = { kind: 'shuttle', period: nextPeriod, n }
+  }
+
+  const streams = [...slotStreams, ...(shuttleStream ? [shuttleStream] : [])]
+  if (!streams.length) return []
+
+  const shuttleDeadlineFor = (period) => {
+    const { year, month0 } = fromIdx(period.startIdx - 1)
+    return new Date(year, month0 + 1, 0)
+  }
+
+  // Each stream must appear at least once — the list must cover up to the furthest first occurrence
+  const firstDeadlines = streams.map((s) => (s.kind === 'court' ? slotCollectionDeadline(s.slot, s.period) : shuttleDeadlineFor(s.period)))
+  const validFirstDeadlines = firstDeadlines.filter(Boolean)
+  if (!validFirstDeadlines.length) return []
+  const monthKey = (d) => d.getFullYear() * 12 + d.getMonth()
+  const thresholdKey = Math.max(...validFirstDeadlines.map(monthKey))
+
+  const groups = []
+  const MAX_ITER = 36
+  for (const s of streams) {
+    let period = s.period
+    let guard = 0
+    while (guard++ < MAX_ITER) {
+      let deadline, cost, sessions
+      if (s.kind === 'court') {
+        deadline = slotCollectionDeadline(s.slot, period)
+        sessions = sessionsForPeriod(s.weekdays, period).total
+        cost = num(s.slot.price_per_hour) * num(s.slot.hours_per_session) * sessions
+      } else {
+        deadline = shuttleDeadlineFor(period)
+        sessions = slots.reduce((sum, slot) => sum + sessionsForPeriod(Array.isArray(slot.weekdays) ? slot.weekdays : [], period).total, 0)
+        const boxes = Math.ceil((sessions * num(settings.estimated_shuttlecocks)) / BALLS_PER_BOX)
+        cost = boxes * num(settings.price_per_box)
+      }
+      if (!deadline || monthKey(deadline) > thresholdKey) break
+
+      const key = `${deadline.getFullYear()}-${deadline.getMonth()}`
+      let group = groups.find((g) => g.key === key)
+      if (!group) {
+        group = { key, deadline, court: [], shuttle: null }
+        groups.push(group)
+      }
+      if (deadline < group.deadline) group.deadline = deadline
+      if (s.kind === 'court') {
+        group.court.push({ slot: s.slot, cost, sessions, period })
+      } else {
+        group.shuttle = { cost, sessions, period }
+      }
+      period = advancePeriod(period, s.n)
+    }
+  }
+
+  groups.sort((a, b) => a.deadline - b.deadline)
+  return groups.map(({ key, ...rest }) => rest)
+}
+
+// ---------------------------------------------------------------------------
 // Fee member count — respects fee_split_mode + committed vote
 // ---------------------------------------------------------------------------
 
