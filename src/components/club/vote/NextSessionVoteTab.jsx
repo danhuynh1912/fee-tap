@@ -1,5 +1,5 @@
 import { useMemo } from 'react'
-import { Calendar, CalendarClock, Clock, Lock, Loader2 } from 'lucide-react'
+import { Calendar, CalendarClock, Clock, Lock, Loader2, History } from 'lucide-react'
 import { useTranslation } from 'react-i18next'
 import { useNextVote } from '../../../hooks/useNextVote'
 import { useCountdown } from '../../../hooks/useCountdown'
@@ -11,7 +11,7 @@ import { ResultsPanel } from './ResultsPanel'
 
 export function NextSessionVoteTab({ club, settings, members, canEdit, user, toast }) {
   const { t } = useTranslation()
-  const { vote, responses, loading, reload } = useNextVote(club.id)
+  const { vote, previousVote, previousCount, responses, loading, reload } = useNextVote(club.id)
   const countdown = useCountdown(vote?.deadline)
   const closed = !!vote && (vote.is_closed || countdown.closed)
 
@@ -49,6 +49,16 @@ export function NextSessionVoteTab({ club, settings, members, canEdit, user, toa
 
   return (
     <div className="space-y-6">
+      {/* Previous vote recap — minimal pill, replaced once the current vote's deadline passes and a new one is created */}
+      {previousVote && (
+        <div className="flex justify-end">
+          <span className="inline-flex items-center gap-1.5 rounded-full border border-slate-200 bg-slate-50 px-3 py-1.5 text-xs font-medium text-slate-500">
+            <History className="h-3.5 w-3.5 text-slate-400" />
+            {t('vote_previous_label')}: {fmtDate(previousVote.match_date)} · {previousCount} {t('vote_previous_attendees')}
+          </span>
+        </div>
+      )}
+
       {/* Vote header — only when a vote exists */}
       {vote && (
         <div>

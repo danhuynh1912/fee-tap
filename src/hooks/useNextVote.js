@@ -1,36 +1,56 @@
 import { useState, useEffect, useCallback, useRef } from 'react'
 import { supabase } from '../lib/supabase'
 
+// "Current" vote = most recently created next-session vote, regardless of match_date —
+// it only stops being votable once its own deadline passes, not when the session date arrives.
+// The previous one (now superseded) is kept around so the UI can show it as a minimal recap card.
 export function useNextVote(clubId) {
   const [vote, setVote] = useState(undefined) // undefined = loading, null = no vote
+  const [previousVote, setPreviousVote] = useState(null)
   const [responses, setResponses] = useState([])
+  const [previousCount, setPreviousCount] = useState(0)
   const [loading, setLoading] = useState(true)
   const channelRef = useRef(null)
 
   const fetchData = useCallback(async () => {
     if (!clubId) {
       setVote(null)
+      setPreviousVote(null)
       setLoading(false)
       return
     }
 
-    const now = new Date().toISOString()
+    // vote_type is null for legacy next-session votes (never set on insert) — match
+    // both null and the explicit 'next_session' value, but exclude membership_cycle votes.
     const { data: votes } = await supabase
       .from('votes')
       .select('*')
       .eq('club_id', clubId)
-      .gte('match_date', now)
-      .order('match_date', { ascending: true })
-      .limit(1)
+      .or('vote_type.is.null,vote_type.eq.next_session')
+      .order('created_at', { ascending: false })
+      .limit(2)
 
-    const nextVote = votes?.[0] ?? null
-    setVote(nextVote)
+    const currentVote = votes?.[0] ?? null
+    const prevVote = votes?.[1] ?? null
+    setVote(currentVote)
+    setPreviousVote(prevVote)
 
-    if (nextVote) {
-      const { data: r } = await supabase.from('responses').select('*').eq('vote_id', nextVote.id).order('created_at', { ascending: true })
+    if (currentVote) {
+      const { data: r } = await supabase.from('responses').select('*').eq('vote_id', currentVote.id).order('created_at', { ascending: true })
       setResponses(r || [])
     } else {
       setResponses([])
+    }
+
+    if (prevVote) {
+      const { count } = await supabase
+        .from('responses')
+        .select('*', { count: 'exact', head: true })
+        .eq('vote_id', prevVote.id)
+        .eq('attending', true)
+      setPreviousCount(count || 0)
+    } else {
+      setPreviousCount(0)
     }
 
     setLoading(false)
@@ -42,36 +62,18 @@ export function useNextVote(clubId) {
     fetchData()
   }, [clubId, fetchData])
 
-  // Subscribe realtime once we have a vote id
+  // Subscribe club-wide — a new vote (promotion) or any response change should refresh
   useEffect(() => {
     if (channelRef.current) {
       supabase.removeChannel(channelRef.current)
       channelRef.current = null
     }
-    if (!vote?.id) return
+    if (!clubId) return
 
     const ch = supabase
-      .channel(`next-vote-${vote.id}`)
-      .on(
-        'postgres_changes',
-        {
-          event: '*',
-          schema: 'public',
-          table: 'responses',
-          filter: `vote_id=eq.${vote.id}`,
-        },
-        fetchData
-      )
-      .on(
-        'postgres_changes',
-        {
-          event: '*',
-          schema: 'public',
-          table: 'votes',
-          filter: `id=eq.${vote.id}`,
-        },
-        fetchData
-      )
+      .channel(`next-vote-${clubId}`)
+      .on('postgres_changes', { event: '*', schema: 'public', table: 'votes', filter: `club_id=eq.${clubId}` }, fetchData)
+      .on('postgres_changes', { event: '*', schema: 'public', table: 'responses' }, fetchData)
       .subscribe()
 
     channelRef.current = ch
@@ -79,7 +81,7 @@ export function useNextVote(clubId) {
       supabase.removeChannel(ch)
       channelRef.current = null
     }
-  }, [vote?.id, fetchData])
+  }, [clubId, fetchData])
 
-  return { vote, responses, loading, reload: fetchData }
+  return { vote, previousVote, previousCount, responses, loading, reload: fetchData }
 }

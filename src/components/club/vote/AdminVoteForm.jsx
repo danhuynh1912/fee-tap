@@ -52,6 +52,7 @@ export function AdminVoteForm({ vote, closed, filledSlots, club, settings, membe
       const { error } = await supabase.from('votes').insert({
         club_id: club.id,
         title,
+        vote_type: 'next_session',
         match_date: new Date(form.matchDatetime).toISOString(),
         deadline: new Date(form.deadline).toISOString(),
         max_slots: parseInt(form.maxSlots, 10) || 7,
