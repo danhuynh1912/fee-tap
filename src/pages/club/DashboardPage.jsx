@@ -5,7 +5,6 @@ import { DashboardConfigDrawer } from '../../components/club/DashboardConfigDraw
 import { MembersPanel } from './MembersPanel'
 import { PaymentTimeline } from '../../components/club/PaymentTimeline'
 import { HeroCard } from '../../components/club/HeroCard'
-import { BaseFeeCard } from '../../components/club/BaseFeeCard'
 import { DeficitCallout } from '../../components/club/DeficitCallout'
 import { CostByCycleBreakdown } from '../../components/club/CostByCycleBreakdown'
 import { SpentBreakdownModal } from '../../components/club/SpentBreakdownModal'
@@ -174,7 +173,6 @@ function ForecastDashboard({
   }, [fundTxns, all.venues])
 
   const sessionProgress = all.uniqueScheduled > 0 ? Math.min(1, all.uniqueHappened / all.uniqueScheduled) : 0
-  const baseFee = all.suggestedFee
   const nextAdjustedFee = memberCount > 0 ? Math.ceil(Math.max(0, all.nextTotalCost - projectedBalance) / memberCount) : 0
 
   return (
@@ -193,8 +191,6 @@ function ForecastDashboard({
         canEdit={canEdit}
         onSpentTipOpen={() => setSpentTipOpen(true)}
       />
-
-      {memberCount > 0 && <BaseFeeCard all={all} baseFee={baseFee} sport={sport} settings={settings} />}
 
       {show('deficit_callout') && canEdit && (
         <DeficitCallout
@@ -329,7 +325,6 @@ export function DashboardPage({ toast }) {
           club={club}
           members={members}
           plan={plan}
-          pollTally={pollTally}
           hostName={hostName}
           hostAvatar={hostAvatar}
           currentUserId={currentUserId}

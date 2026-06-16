@@ -60,7 +60,7 @@ export function useClubData(clubId) {
   const fetchPollTally = useCallback(async () => {
     const { data: v } = await supabase
       .from('votes')
-      .select('id')
+      .select('id, cycle_period_start, cycle_period_end')
       .eq('club_id', clubId)
       .eq('vote_type', 'membership_cycle')
       .order('created_at', { ascending: false })
@@ -73,7 +73,14 @@ export function useClubData(clubId) {
       const attendingRs = (rs || []).filter((r) => r.attending)
       const count = attendingRs.length
       const committedUserIds = new Set(attendingRs.map((r) => r.anonymous_user_id))
-      setPollTally({ count, source: 'poll', committedUserIds, voteId: v[0].id })
+      setPollTally({
+        count,
+        source: 'poll',
+        committedUserIds,
+        voteId: v[0].id,
+        cyclePeriodStart: v[0].cycle_period_start,
+        cyclePeriodEnd: v[0].cycle_period_end,
+      })
     } else {
       setPollTally(null)
     }
@@ -135,7 +142,7 @@ export function useClubData(clubId) {
     // Cross-query membership_cycle tally — SSOT for committedCount + committedUserIds
     const { data: v } = await supabase
       .from('votes')
-      .select('id')
+      .select('id, cycle_period_start, cycle_period_end')
       .eq('club_id', clubId)
       .eq('vote_type', 'membership_cycle')
       .order('created_at', { ascending: false })
@@ -148,7 +155,14 @@ export function useClubData(clubId) {
       const attendingRs = (rs || []).filter((r) => r.attending)
       const count = attendingRs.length
       const committedUserIds = new Set(attendingRs.map((r) => r.anonymous_user_id))
-      setPollTally({ count, source: 'poll', committedUserIds, voteId: v[0].id })
+      setPollTally({
+        count,
+        source: 'poll',
+        committedUserIds,
+        voteId: v[0].id,
+        cyclePeriodStart: v[0].cycle_period_start,
+        cyclePeriodEnd: v[0].cycle_period_end,
+      })
     } else {
       setPollTally(null)
     }

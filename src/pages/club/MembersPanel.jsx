@@ -1,6 +1,6 @@
 import { useState } from 'react'
 import { useTranslation } from 'react-i18next'
-import { Users, RefreshCw, Lock, Plus, Trash2, Crown } from 'lucide-react'
+import { Users, Lock, Plus, Trash2, Crown } from 'lucide-react'
 import { Card } from '../../components/ui/Card'
 import { Badge } from '../../components/ui/Badge'
 import { Button } from '../../components/ui/Button'
@@ -21,7 +21,7 @@ function MemberAvatar({ name, avatarUrl, isHost }) {
   )
 }
 
-export function MembersPanel({ club, members, plan, pollTally, hostName, hostAvatar, currentUserId, canEdit, onChanged, onHitLimit, toast }) {
+export function MembersPanel({ club, members, plan, hostName, hostAvatar, currentUserId, canEdit, onChanged, onHitLimit, toast }) {
   const { t } = useTranslation()
   const [name, setName] = useState('')
   const [busy, setBusy] = useState(false)
@@ -98,12 +98,6 @@ export function MembersPanel({ club, members, plan, pollTally, hostName, hostAva
             style={{ width: `${Math.min(100, (count / FREE_MEMBER_LIMIT) * 100)}%` }}
           />
         </div>
-      )}
-
-      {pollTally?.source === 'poll' && (
-        <p className="mt-3 inline-flex items-center gap-1.5 text-xs font-medium text-cyan-700">
-          <RefreshCw className="h-3.5 w-3.5" /> {t('mem_poll_synced')}: {pollTally.count}
-        </p>
       )}
 
 

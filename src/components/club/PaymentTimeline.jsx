@@ -352,9 +352,21 @@ export function PaymentTimeline({
 
   const timeline = useMemo(() => computePaymentTimeline(slots, settingsWithEquip, memberCount), [slots, settingsWithEquip, memberCount])
 
-  const hasCommitted = committedCount != null && committedCount > 0
-  const effectiveCount = hasCommitted ? committedCount : timeline.effectiveMemberCount
-  const openSpots = !hasCommitted && settings.fee_split_mode === 'total_members' && committedCount !== null ? Math.max(0, memberCount - committedCount) : 0
+  const hasCommittedBase = committedCount != null && committedCount > 0
+
+  // The membership-cycle vote applies only to the cycle period it was opened for —
+  // not to every upcoming payment group, which may span different periods/slots.
+  const matchesVotePeriod = (ps) => {
+    if (!ps || !pollTally?.cyclePeriodStart) return false
+    const d = new Date(ps)
+    const start = new Date(pollTally.cyclePeriodStart)
+    const end = pollTally.cyclePeriodEnd ? new Date(pollTally.cyclePeriodEnd) : start
+    return d >= start && d <= end
+  }
+  const effectiveCountFor = (ps) => {
+    const groupHasCommitted = hasCommittedBase && matchesVotePeriod(ps)
+    return { hasCommitted: groupHasCommitted, effectiveCount: groupHasCommitted ? committedCount : timeline.effectiveMemberCount }
+  }
 
   const paymentGroups = useMemo(() => {
     const monthKey = (d) => (d ? `${d.getFullYear()}-${d.getMonth()}` : 'no-deadline')
@@ -395,7 +407,8 @@ export function PaymentTimeline({
         : null
     if (!ps || !clubId) return
 
-    const perMember = effectiveCount > 0 ? Math.ceil((courtCost + shuttleCost) / effectiveCount) : 0
+    const { effectiveCount: groupEffectiveCount } = effectiveCountFor(ps)
+    const perMember = groupEffectiveCount > 0 ? Math.ceil((courtCost + shuttleCost) / groupEffectiveCount) : 0
     const title = group.courtItems[0]?.slot?.name || (group.shuttleItem ? t('timeline_shuttle_estimate') : t('collection_open_btn'))
 
     setOpeningGroup(ps)
@@ -489,6 +502,8 @@ export function PaymentTimeline({
             const collection = ps ? collections.find((c) => c.period_start === ps) : null
             const groupPayments = collection ? memberPayments.filter((p) => p.collection_id === collection.id) : []
             const myRecord = currentMemberId ? groupPayments.find((p) => p.member_id === currentMemberId) : null
+            const { hasCommitted, effectiveCount } = effectiveCountFor(ps)
+            const openSpots = !hasCommitted && matchesVotePeriod(ps) && settings.fee_split_mode === 'total_members' && committedCount !== null ? Math.max(0, memberCount - committedCount) : 0
 
             return (
               <div key={gi}>

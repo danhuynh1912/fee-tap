@@ -408,13 +408,7 @@ const en = {
   log_poll_suggestion: 'from poll',
 
   // ── dashboard section config ─────────────────────────────
-  dash_base_fee: 'Fee / member',
-  dash_base_fee_sub: 'Based on total cycle cost ÷ members',
-  dash_cycle_total_est: 'Total estimated cost',
-  dash_label_court_cycle: 'Court',
-  dash_label_shuttle_cycle: 'Shuttle',
   dash_topup_fee: 'Top-up / member (to cover shortfall)',
-  dash_next_base_fee: 'Fee / member',
   dash_next_topup_fee: 'Top-up / member (incl. carryover)',
   dash_config_btn: 'Customise',
   dash_config_title: 'Customise dashboard',
@@ -955,13 +949,7 @@ const vi = {
   log_poll_suggestion: 'từ poll',
 
   // ── dashboard section config ─────────────────────────────
-  dash_base_fee: 'Phí cần đóng / người',
-  dash_base_fee_sub: 'Dựa trên tổng chi phí kỳ ÷ số thành viên',
-  dash_cycle_total_est: 'Tổng chi phí kỳ ước tính',
-  dash_label_court_cycle: 'Chu kỳ sân',
-  dash_label_shuttle_cycle: 'Chu kỳ cầu',
   dash_topup_fee: 'Cần đóng / người (để bù lỗ kỳ này)',
-  dash_next_base_fee: 'Phí cần đóng / người',
   dash_next_topup_fee: 'Cần đóng / người (có tính carryover)',
   dash_config_btn: 'Tuỳ chỉnh',
   dash_config_title: 'Tuỳ chỉnh dashboard',

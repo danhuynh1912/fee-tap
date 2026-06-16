@@ -578,7 +578,6 @@ export function SettingsPage({ toast }) {
             club={club}
             members={members}
             plan={plan}
-            pollTally={pollTally}
             hostName={hostName}
             hostAvatar={hostAvatar}
             currentUserId={currentUserId}

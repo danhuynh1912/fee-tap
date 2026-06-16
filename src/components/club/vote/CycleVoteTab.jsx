@@ -3,7 +3,7 @@ import { Calendar, CalendarClock, Clock, Lock, Loader2, Coins } from 'lucide-rea
 import { useTranslation } from 'react-i18next'
 import { useCycleVote } from '../../../hooks/useCycleVote'
 import { useCountdown } from '../../../hooks/useCountdown'
-import { fmtDate, fmtVND } from '../../../lib/utils'
+import { cx, fmtDate, fmtVND } from '../../../lib/utils'
 import { computeMembershipVoteCycle } from '../../../engine/forecast'
 import { Badge } from '../../ui/Badge'
 import { AdminCycleVoteForm } from './AdminCycleVoteForm'
@@ -45,8 +45,13 @@ export function CycleVoteTab({ club, members, settings, slots, canEdit, user, to
             </div>
           </div>
           <div className="text-right">
-            <p className="font-mono text-2xl font-black text-slate-900">{fmtVND(upcomingFeeInfo.perMember)}</p>
+            <p className={cx('font-mono text-2xl font-black', upcomingFeeInfo.hasCommitted ? 'text-slate-900' : 'text-yellow-500')}>
+              {fmtVND(upcomingFeeInfo.perMember)}
+            </p>
             <p className="text-xs text-slate-400">{t('timeline_per_member')}</p>
+            {!upcomingFeeInfo.hasCommitted && (
+              <p className="text-[10px] text-yellow-500 mt-0.5">{t('no_cycle_committed')}</p>
+            )}
           </div>
         </div>
       )}

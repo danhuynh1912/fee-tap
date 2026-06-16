@@ -9,7 +9,7 @@ import { Button } from '../../components/ui/Button'
 import { inputCls } from '../../components/ui/Field'
 import { cx, num, fmtDate, fmtVND, fmtNum } from '../../lib/utils'
 import { supabase } from '../../lib/supabase'
-import { resolvePeriods, getSessionConfigs, calcGuestRevenue, cycleLabelShort, computePaymentTimeline, formatPeriodLabel } from '../../engine/forecast'
+import { resolvePeriods, getSessionConfigs, calcGuestRevenue, cycleLabelShort, computePaymentTimeline, formatPeriodLabel, periodDateRange } from '../../engine/forecast'
 import { BALLS_PER_BOX } from '../../constants'
 import { NextSessionVoteTab } from '../../components/club/vote/NextSessionVoteTab'
 import { CycleVoteTab } from '../../components/club/vote/CycleVoteTab'
@@ -53,7 +53,7 @@ function GuestStepper({ label, value, onDecrement, onIncrement, disabled }) {
 }
 
 export function SessionLogPage({ toast }) {
-  const { club, logs, settings, slots, members, sport, canEdit, reload, session } = useClub()
+  const { club, logs, settings, slots, members, sport, canEdit, reload, session, pollTally } = useClub()
   const onChanged = reload
   const user = session?.user
   const { t, i18n } = useTranslation()
@@ -392,10 +392,25 @@ export function SessionLogPage({ toast }) {
     const courtCost = first.courtItems.reduce((s, r) => s + r.nextCourtCost, 0)
     const shuttleCost = first.shuttleItem?.cost ?? 0
     const total = courtCost + shuttleCost
-    const perMember = timeline.effectiveMemberCount > 0 ? Math.ceil(total / timeline.effectiveMemberCount) : 0
+
+    // Same matching rule as PaymentTimeline: the cycle vote only applies to the
+    // payment group whose period falls within the vote's cycle period.
+    const period = first.courtItems[0]?.nextPeriod || first.shuttleItem?.period
+    const ps = period ? periodDateRange(period).start : null
+    const matchesVotePeriod = (() => {
+      if (!ps || !pollTally?.cyclePeriodStart) return false
+      const d = new Date(ps)
+      const start = new Date(pollTally.cyclePeriodStart)
+      const end = pollTally.cyclePeriodEnd ? new Date(pollTally.cyclePeriodEnd) : start
+      return d >= start && d <= end
+    })()
+    const hasCommitted = matchesVotePeriod && pollTally?.count != null && pollTally.count > 0
+    const effectiveCount = hasCommitted ? pollTally.count : timeline.effectiveMemberCount
+
+    const perMember = effectiveCount > 0 ? Math.ceil(total / effectiveCount) : 0
     const periodLabel = first.courtItems[0] ? formatPeriodLabel(first.courtItems[0].nextPeriod, i18n.language) : ''
-    return { perMember, periodLabel, deadline: first.deadline }
-  }, [slots, settings, memberCount, sport, i18n.language])
+    return { perMember, periodLabel, deadline: first.deadline, hasCommitted }
+  }, [slots, settings, memberCount, sport, i18n.language, pollTally])
 
   return (
     <div className="mx-auto max-w-[1150px] space-y-4">
