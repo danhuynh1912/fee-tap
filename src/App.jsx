@@ -43,7 +43,11 @@ export default function App() {
 
   // Route parsing
   const clubMatch =
-    matchPath('/club/:id', path) || matchPath('/club/:id/settings', path) || matchPath('/club/:id/log', path) || matchPath('/club/:id/fund', path)
+    matchPath('/club/:id', path) ||
+    matchPath('/club/:id/settings', path) ||
+    matchPath('/club/:id/vote', path) ||
+    matchPath('/club/:id/log', path) ||
+    matchPath('/club/:id/fund', path)
   const joinMatch = matchPath('/join/:id', path)
   const clubId = clubMatch?.params?.id
   const joinClubId = joinMatch?.params?.id

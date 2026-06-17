@@ -1,6 +1,6 @@
 import { useState, useMemo } from 'react'
 import { useTranslation } from 'react-i18next'
-import { LayoutDashboard, Settings2, ClipboardList, History, Building2, Crown, Zap, Eye, Menu, Link as LinkIcon, Loader2, LogOut } from 'lucide-react'
+import { LayoutDashboard, Settings2, ClipboardList, History, Vote, Building2, Crown, Zap, Eye, Menu, Link as LinkIcon, Loader2, LogOut } from 'lucide-react'
 import { Badge } from '../../components/ui/Badge'
 import { Button } from '../../components/ui/Button'
 import { UpsellModal } from '../../components/monetize/UpsellModal'
@@ -8,6 +8,7 @@ import { DashboardPage } from './DashboardPage'
 import { SettingsPage } from './SettingsPage'
 import { SessionLogPage } from './SessionLogPage'
 import { FundPage } from './FundPage'
+import { VotePage } from './VotePage'
 import { useClubData } from '../../hooks/useClubData'
 import { cx } from '../../lib/utils'
 import { navigate } from '../../router'
@@ -18,9 +19,10 @@ import { ClubContext } from '../../contexts/ClubContext'
 import { computeAll, getSessionConfigs, periodDateRange } from '../../engine/forecast'
 import { num } from '../../lib/utils'
 
-// Routes: /club/:id → dashboard, /club/:id/settings, /club/:id/log, /club/:id/fund
+// Routes: /club/:id → dashboard, /club/:id/settings, /club/:id/vote, /club/:id/log, /club/:id/fund
 function activeTab(path, clubId) {
   if (path === `/club/${clubId}/settings`) return 'settings'
+  if (path === `/club/${clubId}/vote`) return 'vote'
   if (path === `/club/${clubId}/log`) return 'log'
   if (path === `/club/${clubId}/fund`) return 'fund'
   return 'dashboard'
@@ -120,6 +122,7 @@ export function ClubLayout({ session, club, setClub, path, toast, onSignOut }) {
   const tabs = [
     { id: 'dashboard', label: t('nav_dashboard'), icon: LayoutDashboard, path: `/club/${club.id}` },
     { id: 'settings', label: t('nav_settings'), icon: Settings2, path: `/club/${club.id}/settings` },
+    { id: 'vote', label: t('nav_vote'), icon: Vote, path: `/club/${club.id}/vote` },
     { id: 'log', label: t('nav_log'), icon: ClipboardList, path: `/club/${club.id}/log` },
     { id: 'fund', label: t('nav_fund'), icon: History, path: `/club/${club.id}/fund` },
   ]
@@ -293,6 +296,7 @@ export function ClubLayout({ session, club, setClub, path, toast, onSignOut }) {
           <ClubContext.Provider value={ctxValue}>
             {tab === 'dashboard' && <DashboardPage toast={toast} />}
             {tab === 'settings' && <SettingsPage toast={toast} />}
+            {tab === 'vote' && <VotePage toast={toast} />}
             {tab === 'log' && <SessionLogPage toast={toast} />}
             {tab === 'fund' && <FundPage toast={toast} />}
           </ClubContext.Provider>

@@ -134,40 +134,42 @@ export function VotePanel({ vote, closed, filledSlots, myResponse, userId, userN
           onClick={() => choose(true)}
           disabled={saving || yesFull}
           className={cx(
-            'group relative overflow-hidden rounded-2xl border-2 p-5 text-left transition disabled:opacity-50',
+            'group flex items-center justify-center gap-2.5 rounded-2xl border-2 px-4 py-3 transition disabled:opacity-50',
+            'sm:flex-col sm:items-start sm:p-5',
             attending === true ? 'border-lime-400 bg-lime-50' : 'border-slate-200 bg-white hover:border-slate-300'
           )}
         >
           <span
             className={cx(
-              'grid h-10 w-10 place-items-center rounded-xl',
+              'grid h-8 w-8 shrink-0 place-items-center rounded-xl sm:h-10 sm:w-10',
               attending === true ? 'bg-lime-400 text-slate-900' : 'bg-slate-100 text-slate-500 group-hover:bg-slate-200'
             )}
           >
-            <Check className="h-5 w-5" strokeWidth={3} />
+            <Check className="h-4 w-4 sm:h-5 sm:w-5" strokeWidth={3} />
           </span>
-          <p className="mt-3 font-bold text-slate-900">{t('vote_yes')}</p>
-          <p className="text-xs text-slate-500">{yesFull ? t('vote_court_full') : t('vote_count_me_in')}</p>
+          <p className="font-bold text-slate-900 sm:mt-3">{t('vote_yes')}</p>
+          <p className="hidden sm:block text-xs text-slate-500">{yesFull ? t('vote_court_full') : t('vote_count_me_in')}</p>
         </button>
 
         <button
           onClick={() => choose(false)}
           disabled={saving}
           className={cx(
-            'group relative overflow-hidden rounded-2xl border-2 p-5 text-left transition disabled:opacity-50',
+            'group flex items-center justify-center gap-2.5 rounded-2xl border-2 px-4 py-3 transition disabled:opacity-50',
+            'sm:flex-col sm:items-start sm:p-5',
             attending === false ? 'border-slate-900 bg-slate-900' : 'border-slate-200 bg-white hover:border-slate-300'
           )}
         >
           <span
             className={cx(
-              'grid h-10 w-10 place-items-center rounded-xl',
+              'grid h-8 w-8 shrink-0 place-items-center rounded-xl sm:h-10 sm:w-10',
               attending === false ? 'bg-white text-slate-900' : 'bg-slate-100 text-slate-500 group-hover:bg-slate-200'
             )}
           >
-            <X className="h-5 w-5" strokeWidth={3} />
+            <X className="h-4 w-4 sm:h-5 sm:w-5" strokeWidth={3} />
           </span>
-          <p className={cx('mt-3 font-bold', attending === false ? 'text-white' : 'text-slate-900')}>{t('vote_no')}</p>
-          <p className={cx('text-xs', attending === false ? 'text-slate-300' : 'text-slate-500')}>{t('vote_cant_make_it')}</p>
+          <p className={cx('font-bold sm:mt-3', attending === false ? 'text-white' : 'text-slate-900')}>{t('vote_no')}</p>
+          <p className={cx('hidden sm:block text-xs', attending === false ? 'text-slate-300' : 'text-slate-500')}>{t('vote_cant_make_it')}</p>
         </button>
       </div>
 

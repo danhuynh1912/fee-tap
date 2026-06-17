@@ -74,6 +74,7 @@ const en = {
   // ── nav ──────────────────────────────────────────────────
   nav_dashboard: 'Dashboard',
   nav_settings: 'Settings',
+  nav_vote: 'Vote',
   nav_log: 'Session log',
   nav_fund: 'Fund history',
   fund_topup_btn: 'Add funds',
@@ -624,6 +625,7 @@ const vi = {
 
   nav_dashboard: 'Tổng quan',
   nav_settings: 'Cài đặt',
+  nav_vote: 'Vote',
   nav_log: 'Nhật ký buổi chơi',
   nav_fund: 'Lịch sử quỹ',
   fund_topup_btn: 'Nộp tiền',
@@ -1085,7 +1087,7 @@ const vi = {
   cycle_vote_no_vote_member: 'Chưa có vote đăng ký cố định. Liên hệ host để tạo vote.',
   cycle_vote_committed_title: 'Danh sách đăng ký cố định',
   cycle_vote_no_responses: 'Chưa có ai vote.',
-  cycle_vote_register_q: 'Bạn có đánh kỳ tới không?',
+  cycle_vote_register_q: 'Bạn có muốn đăng ký cố định kỳ tới không?',
   committed_members_count: '{{count}} / {{total}} đã đăng ký',
   upcoming_fee_label: 'Đợt thu sắp tới',
   create_cycle_vote: 'Tạo vote đăng ký',
