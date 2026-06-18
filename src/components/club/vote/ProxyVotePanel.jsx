@@ -43,7 +43,6 @@ export function ProxyVotePanel({ vote, members, responses, userId, toast, onChan
           guest_male_count: 0,
           guest_female_count: 0,
           member_id: member.user_id,
-          proxy_by: userId,
         },
         { onConflict: 'vote_id,anonymous_user_id' }
       )
@@ -109,7 +108,6 @@ export function ProxyVotePanel({ vote, members, responses, userId, toast, onChan
                     >
                       {res.attending ? <Check className="h-3 w-3" strokeWidth={3} /> : <X className="h-3 w-3" strokeWidth={3} />}
                       {res.attending ? t('vote_yes') : t('vote_no')}
-                      {res.proxy_by && <span className="ml-0.5 opacity-60">·{t('proxy_vote_tag')}</span>}
                     </span>
                     {/* Allow flipping */}
                     <button
