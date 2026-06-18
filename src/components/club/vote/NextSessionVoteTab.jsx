@@ -8,6 +8,7 @@ import { Badge } from '../../ui/Badge'
 import { AdminVoteForm } from './AdminVoteForm'
 import { VotePanel } from './VotePanel'
 import { ResultsPanel } from './ResultsPanel'
+import { ProxyVotePanel } from './ProxyVotePanel'
 
 export function NextSessionVoteTab({ club, settings, members, canEdit, user, toast }) {
   const { t } = useTranslation()
@@ -114,6 +115,18 @@ export function NextSessionVoteTab({ club, settings, members, canEdit, user, toa
               myResponse={myResponse}
               userId={user?.id}
               userName={userName}
+              toast={toast}
+              onChanged={reload}
+            />
+          )}
+
+          {/* Proxy vote — vote on behalf of other members */}
+          {vote && !closed && user?.id && (
+            <ProxyVotePanel
+              vote={vote}
+              members={members}
+              responses={responses}
+              userId={user?.id}
               toast={toast}
               onChanged={reload}
             />

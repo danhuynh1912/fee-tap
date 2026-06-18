@@ -61,9 +61,19 @@ export function ResultsPanel({ vote, attendees, responses, filledSlots, meId }) 
                   {mine && <span className="ml-2 text-xs font-medium text-lime-600">({t('vote_you')})</span>}
                 </p>
                 <p className="text-xs text-slate-500">
-                  {r.guests > 0
-                    ? t(r.guests > 1 ? 'vote_result_guest_line_plural' : 'vote_result_guest_line', { guests: r.guests, total })
-                    : t('vote_result_one_slot')}
+                  {r.guests > 0 ? (
+                    <span className="flex items-center gap-1.5 flex-wrap">
+                      <span>{t(r.guests > 1 ? 'vote_result_guest_line_plural' : 'vote_result_guest_line', { guests: r.guests, total })}</span>
+                      {(r.guest_male_count > 0 || r.guest_female_count > 0) && (
+                        <span className="inline-flex items-center gap-1 font-medium text-slate-400">
+                          {r.guest_male_count > 0 && <span>♂{r.guest_male_count}</span>}
+                          {r.guest_female_count > 0 && <span>♀{r.guest_female_count}</span>}
+                        </span>
+                      )}
+                    </span>
+                  ) : (
+                    t('vote_result_one_slot')
+                  )}
                 </p>
               </div>
               {r.guests > 0 && (
