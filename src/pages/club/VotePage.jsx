@@ -25,7 +25,8 @@ export function VotePage({ toast }) {
     if (!slots?.length || !settings) return null
     const sportHasEquipment = sport?.hasEquipment ?? true
     const timeline = computePaymentTimeline(slots, { ...settings, _hasEquipment: sportHasEquipment }, memberCount)
-    if (!timeline.upcoming?.length && !timeline.nextShuttleItem) return null
+    const nextShuttleItem = timeline.upcomingShuttleItems?.[0] ?? null
+    if (!timeline.upcoming?.length && !nextShuttleItem) return null
 
     const monthKey = (d) => (d ? `${d.getFullYear()}-${d.getMonth()}` : 'no-deadline')
     const groups = new Map()
@@ -34,9 +35,9 @@ export function VotePage({ toast }) {
       if (!groups.has(key)) groups.set(key, { deadline, daysUntil, courtItems: [], shuttleItem: null })
       return groups.get(key)
     }
-    if (timeline.nextShuttleItem) {
-      const g = getOrCreate(timeline.nextShuttleItem.deadline, timeline.nextShuttleItem.daysUntil)
-      g.shuttleItem = timeline.nextShuttleItem
+    if (nextShuttleItem) {
+      const g = getOrCreate(nextShuttleItem.deadline, nextShuttleItem.daysUntil)
+      g.shuttleItem = nextShuttleItem
     }
     for (const r of timeline.upcoming) {
       getOrCreate(r.nextDeadline, r.daysUntilNext).courtItems.push(r)
@@ -66,7 +67,8 @@ export function VotePage({ toast }) {
     const effectiveCount = hasCommitted ? pollTally.count : timeline.effectiveMemberCount
 
     const perMember = effectiveCount > 0 ? Math.ceil(total / effectiveCount) : 0
-    const periodLabel = first.courtItems[0] ? formatPeriodLabel(first.courtItems[0].nextPeriod, i18n.language) : ''
+    const periodSource = first.courtItems[0]?.nextPeriod ?? first.shuttleItem?.period ?? null
+    const periodLabel = periodSource ? formatPeriodLabel(periodSource, i18n.language) : ''
     return { perMember, periodLabel, deadline: first.deadline, hasCommitted }
   }, [slots, settings, memberCount, sport, i18n.language, pollTally])
 

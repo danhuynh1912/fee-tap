@@ -350,7 +350,10 @@ export function PaymentTimeline({
   }
   const effectiveCountFor = (ps) => {
     const groupHasCommitted = hasCommittedBase && matchesVotePeriod(ps)
-    return { hasCommitted: groupHasCommitted, effectiveCount: groupHasCommitted ? committedCount : timeline.effectiveMemberCount }
+    // If this group has an active committed vote → use committedCount
+    // Otherwise → always fall back to total memberCount (not the global effectiveMemberCount
+    // which may reflect committed_only mode from a different period)
+    return { hasCommitted: groupHasCommitted, effectiveCount: groupHasCommitted ? committedCount : memberCount }
   }
 
   const paymentGroups = useMemo(() => {
