@@ -1,18 +1,20 @@
+import { useMemo } from 'react'
 import { useTranslation } from 'react-i18next'
 import { useClub } from '../../contexts/ClubContext'
 import { useSettingsForm } from '../../hooks/useSettingsForm'
-import { Settings2, Coins, Wallet, Check, Plus, Loader2, Users, TrendingUp, MapPin, Package, UserCheck, RefreshCw, Calendar } from 'lucide-react'
+import { Settings2, Coins, Wallet, Check, Plus, Loader2, Users, TrendingUp, MapPin, Package, UserCheck, Calendar } from 'lucide-react'
 import { Card } from '../../components/ui/Card'
 import { Button } from '../../components/ui/Button'
 import { Field, inputCls } from '../../components/ui/Field'
-import { Segmented } from '../../components/ui/Segmented'
 import { CourtSlotModal } from '../../components/club/CourtSlotModal'
+import { ShuttleTubeWidget } from '../../components/club/ShuttleTubeWidget'
 import { CourtSlotCard } from '../../components/club/CourtSlotCard'
 import { PayOSSettings } from '../../components/club/PayOSSettings'
 import { UpcomingCollectionsList } from '../../components/club/UpcomingCollectionsList'
 import { MembersPanel } from './MembersPanel'
-import { cx, fmtVND, fmtInputNum, parseInputNum } from '../../lib/utils'
-import { cycleLabelShort, monthName, computeMembershipVoteCycle } from '../../engine/forecast'
+import { Segmented } from '../../components/ui/Segmented'
+import { cx, fmtVND, fmtInputNum, parseInputNum, num } from '../../lib/utils'
+import { cycleLabelShort, monthName, computeMembershipVoteCycle, computeShuttleStock } from '../../engine/forecast'
 
 export function SettingsPage({ toast }) {
   const { t, i18n } = useTranslation()
@@ -29,6 +31,8 @@ export function SettingsPage({ toast }) {
     currentUserId,
     canEdit,
     fundTxns,
+    shuttleTxns,
+    logs,
     payosConfig,
     setSettings,
     reload,
@@ -50,10 +54,14 @@ export function SettingsPage({ toast }) {
     submitTopUp,
     restockOpen,
     setRestockOpen,
+    restockUnit,
+    setRestockUnit,
     restockBoxes,
     setRestockBoxes,
     restockPrice,
     setRestockPrice,
+    restockNote,
+    setRestockNote,
     restockBusy,
     submitRestock,
     slots,
@@ -71,7 +79,9 @@ export function SettingsPage({ toast }) {
     club,
     settings,
     initialSlots,
+    shuttleTxns,
     fundTxns,
+    logs,
     members,
     pollTally,
     hostName,
@@ -82,6 +92,11 @@ export function SettingsPage({ toast }) {
     setSettings,
     openUpsell,
   })
+
+  const shuttleStatus = useMemo(
+    () => (sport?.hasEquipment ? computeShuttleStock(shuttleTxns || [], slots, form, logs || []) : null),
+    [sport, shuttleTxns, slots, form, logs]
+  )
 
   const cardTitleCls = 'flex items-center gap-2.5 text-base font-bold text-slate-900'
 
@@ -130,178 +145,133 @@ export function SettingsPage({ toast }) {
               {/* Shuttle */}
               {sport.hasEquipment && (
                 <div className="space-y-4">
-                  <p className="text-xs font-semibold uppercase tracking-wide text-slate-400">{t('shuttle_mode_title')}</p>
-                  <Field label={t('shuttle_mode_title')} icon={Package}>
-                    <Segmented
-                      value={form.shuttle_mode}
-                      onChange={(v) => setForm((f) => ({ ...f, shuttle_mode: v }))}
-                      disabled={!canEdit}
-                      options={[
-                        { value: 'estimate', label: t('shuttle_mode_estimate') },
-                        { value: 'inventory', label: t('shuttle_mode_inventory') },
-                      ]}
-                    />
-                  </Field>
-                  <p className="text-xs text-slate-400 italic -mt-2">
-                    {form.shuttle_mode === 'estimate' ? t('shuttle_mode_estimate_hint') : t('shuttle_mode_inventory_hint')}
-                  </p>
+                  <p className="text-xs font-semibold uppercase tracking-wide text-slate-400">{t('shuttle_section_title')}</p>
 
-                  {form.shuttle_mode === 'estimate' ? (
-                    <div className="space-y-4 animate-fade-in">
-                      <div className="grid gap-4 sm:grid-cols-2">
-                        <Field label={t('set_box_price')} icon={Coins} hint={t('set_box_hint')}>
+                  <div className="grid gap-4 sm:grid-cols-2">
+                    <Field label={t('set_shuttle')} icon={Package} hint={t('set_shuttle_hint')}>
+                      <input
+                        type="number"
+                        min="0"
+                        step="0.5"
+                        className={cx(inputCls, 'font-mono')}
+                        value={form.estimated_shuttlecocks ?? ''}
+                        disabled={!canEdit}
+                        onChange={(e) => setForm((f) => ({ ...f, estimated_shuttlecocks: e.target.value }))}
+                      />
+                    </Field>
+                    <Field label={t('set_box_price')} icon={Coins} hint={t('set_box_hint')}>
+                      <div className="relative">
+                        <input
+                          type="text"
+                          inputMode="numeric"
+                          className={cx(inputCls, 'pr-10 font-mono')}
+                          value={fmtInputNum(form.price_per_box)}
+                          disabled={!canEdit}
+                          onChange={(e) => setForm((f) => ({ ...f, price_per_box: parseInputNum(e.target.value) }))}
+                        />
+                        <span className="pointer-events-none absolute right-4 top-1/2 -translate-y-1/2 text-sm font-semibold text-slate-400">₫</span>
+                      </div>
+                    </Field>
+                  </div>
+
+                  {/* Shuttle cycle — how many months of stock to buy per restock */}
+                  <div className="grid gap-4 sm:grid-cols-2">
+                    <Field label={t('set_shuttle_cycle_months')} icon={Calendar} hint={t('set_shuttle_cycle_months_hint')}>
+                      <input
+                        type="number"
+                        min="1"
+                        step="1"
+                        className={cx(inputCls, 'font-mono')}
+                        value={form.shuttle_cycle_months ?? 1}
+                        disabled={!canEdit}
+                        onChange={(e) => setForm((f) => ({ ...f, shuttle_cycle_months: e.target.value }))}
+                      />
+                    </Field>
+                    {Number(form.shuttle_cycle_months) > 1 && (
+                      <Field label={t('set_shuttle_cycle_start')} icon={Calendar} hint={t('set_shuttle_cycle_start_hint')}>
+                        <select
+                          className={inputCls}
+                          value={form.shuttle_cycle_start_month ?? 1}
+                          disabled={!canEdit}
+                          onChange={(e) => setForm((f) => ({ ...f, shuttle_cycle_start_month: e.target.value }))}
+                        >
+                          {Array.from({ length: 12 }, (_, i) => (
+                            <option key={i + 1} value={i + 1}>{monthName(i, i18n.language)}</option>
+                          ))}
+                        </select>
+                      </Field>
+                    )}
+                  </div>
+
+                  {/* Current stock widget */}
+                  {shuttleStatus && (
+                    <div className="rounded-2xl border border-slate-100 bg-slate-50 p-4">
+                      <p className="text-xs font-semibold uppercase tracking-wide text-slate-400 mb-3">{t('shuttle_stock_title')}</p>
+                      <ShuttleTubeWidget
+                        shuttleStatus={shuttleStatus}
+                        onRestock={() => setRestockOpen(true)}
+                        canEdit={canEdit}
+                      />
+                    </div>
+                  )}
+
+                  {/* Restock form */}
+                  {restockOpen && canEdit && (
+                    <div className="rounded-2xl border border-cyan-200 bg-cyan-50 p-4 space-y-3 animate-fade-in">
+                      <div className="flex items-center justify-between">
+                        <p className="text-xs font-semibold text-slate-600">{t('shuttle_restock')}</p>
+                        <div className="flex rounded-xl overflow-hidden border border-slate-200 bg-white text-xs font-semibold">
+                          <button
+                            onClick={() => setRestockUnit('boxes')}
+                            className={cx('px-3 py-1.5 transition', restockUnit === 'boxes' ? 'bg-slate-900 text-lime-400' : 'text-slate-500 hover:bg-slate-50')}
+                          >
+                            {t('unit_box')}
+                          </button>
+                          <button
+                            onClick={() => setRestockUnit('balls')}
+                            className={cx('px-3 py-1.5 transition', restockUnit === 'balls' ? 'bg-slate-900 text-lime-400' : 'text-slate-500 hover:bg-slate-50')}
+                          >
+                            {t('unit_ball')}
+                          </button>
+                        </div>
+                      </div>
+                      <div className={cx('grid gap-3', restockUnit === 'boxes' ? 'sm:grid-cols-2' : '')}>
+                        <input
+                          type="number"
+                          min="1"
+                          className={cx(inputCls, 'font-mono bg-white')}
+                          placeholder={restockUnit === 'balls' ? t('shuttle_restock_balls') : t('shuttle_restock_boxes')}
+                          value={restockBoxes}
+                          onChange={(e) => setRestockBoxes(e.target.value)}
+                        />
+                        {restockUnit === 'boxes' && (
                           <div className="relative">
                             <input
                               type="text"
                               inputMode="numeric"
-                              className={cx(inputCls, 'pr-10 font-mono')}
-                              value={fmtInputNum(form.price_per_box)}
-                              disabled={!canEdit}
-                              onChange={(e) => setForm((f) => ({ ...f, price_per_box: parseInputNum(e.target.value) }))}
+                              className={cx(inputCls, 'pr-10 font-mono bg-white')}
+                              placeholder={t('shuttle_restock_price')}
+                              value={fmtInputNum(restockPrice)}
+                              onChange={(e) => setRestockPrice(parseInputNum(e.target.value))}
                             />
-                            <span className="pointer-events-none absolute right-4 top-1/2 -translate-y-1/2 text-sm font-semibold text-slate-400">
-                              ₫
-                            </span>
+                            <span className="pointer-events-none absolute right-4 top-1/2 -translate-y-1/2 text-sm font-semibold text-slate-400">₫</span>
                           </div>
-                        </Field>
-                        <Field label={t('set_shuttle')} icon={Package} hint={t('set_shuttle_hint')}>
-                          <input
-                            type="number"
-                            min="0"
-                            step="0.5"
-                            className={cx(inputCls, 'font-mono')}
-                            value={form.estimated_shuttlecocks ?? ''}
-                            disabled={!canEdit}
-                            onChange={(e) => setForm((f) => ({ ...f, estimated_shuttlecocks: e.target.value }))}
-                          />
-                        </Field>
-                      </div>
-                      <div className="grid gap-4 sm:grid-cols-2">
-                        <Field
-                          label={t('shuttle_cycle')}
-                          icon={RefreshCw}
-                          hint={cycleLabelShort(parseInt(form.shuttle_cycle_months, 10) || 1, i18n.language)}
-                        >
-                          <div className="relative">
-                            <input
-                              type="number"
-                              min="1"
-                              max="12"
-                              className={cx(inputCls, 'pr-16 font-mono')}
-                              value={form.shuttle_cycle_months}
-                              disabled={!canEdit}
-                              onChange={(e) => setForm((f) => ({ ...f, shuttle_cycle_months: e.target.value }))}
-                            />
-                            <span className="pointer-events-none absolute right-4 top-1/2 -translate-y-1/2 text-sm font-semibold text-slate-400">
-                              tháng
-                            </span>
-                          </div>
-                        </Field>
-                        {parseInt(form.shuttle_cycle_months, 10) > 1 && (
-                          <Field label={t('shuttle_cycle_start')} icon={Calendar}>
-                            <select
-                              className={inputCls}
-                              value={form.shuttle_cycle_start_month}
-                              disabled={!canEdit}
-                              onChange={(e) => setForm((f) => ({ ...f, shuttle_cycle_start_month: e.target.value }))}
-                            >
-                              {Array.from({ length: 12 }, (_, i) => i + 1).map((m) => (
-                                <option key={m} value={m}>
-                                  {monthName(m, i18n.language)}
-                                </option>
-                              ))}
-                            </select>
-                          </Field>
                         )}
                       </div>
-                    </div>
-                  ) : (
-                    <div className="animate-fade-in space-y-3">
-                      <div className="grid gap-4 sm:grid-cols-2">
-                        <Field label={t('shuttle_stock')} icon={Package} hint={t('shuttle_stock_hint')}>
-                          <input
-                            type="number"
-                            min="0"
-                            className={cx(inputCls, 'font-mono')}
-                            value={form.shuttle_stock ?? ''}
-                            disabled={!canEdit}
-                            onChange={(e) => setForm((f) => ({ ...f, shuttle_stock: e.target.value }))}
-                          />
-                        </Field>
-                        <Field label={t('set_shuttle_inventory')} icon={Package} hint={t('set_shuttle_inventory_hint')}>
-                          <input
-                            type="number"
-                            min="0"
-                            step="0.5"
-                            className={cx(inputCls, 'font-mono')}
-                            value={form.estimated_shuttlecocks ?? ''}
-                            disabled={!canEdit}
-                            onChange={(e) => setForm((f) => ({ ...f, estimated_shuttlecocks: e.target.value }))}
-                          />
-                        </Field>
-                      </div>
-                      <Field label={t('set_box_price')} icon={Coins} hint="Giá nhập hộp cầu — dùng khi cần tính chi phí nhập thêm">
-                        <div className="relative">
-                          <input
-                            type="text"
-                            inputMode="numeric"
-                            className={cx(inputCls, 'pr-10 font-mono')}
-                            value={fmtInputNum(form.price_per_box)}
-                            disabled={!canEdit}
-                            onChange={(e) => setForm((f) => ({ ...f, price_per_box: parseInputNum(e.target.value) }))}
-                          />
-                          <span className="pointer-events-none absolute right-4 top-1/2 -translate-y-1/2 text-sm font-semibold text-slate-400">
-                            ₫
-                          </span>
-                        </div>
-                      </Field>
-                      {canEdit && (
-                        <Button variant="subtle" size="sm" onClick={() => setRestockOpen((v) => !v)}>
-                          <Plus className="h-4 w-4" /> {t('shuttle_restock')}
+                      <input
+                        className={cx(inputCls, 'bg-white')}
+                        placeholder={t('shuttle_restock_note_ph')}
+                        value={restockNote}
+                        onChange={(e) => setRestockNote(e.target.value)}
+                      />
+                      <div className="flex gap-2">
+                        <Button variant="volt" size="sm" className="flex-1" onClick={submitRestock} disabled={restockBusy || !num(restockBoxes)}>
+                          {restockBusy ? <Loader2 className="h-4 w-4 animate-spin" /> : <><Plus className="h-4 w-4" /> {t('shuttle_restock_submit')}</>}
                         </Button>
-                      )}
-                      {restockOpen && canEdit && (
-                        <div className="rounded-2xl border border-cyan-200 bg-cyan-50 p-4 space-y-3 animate-fade-in">
-                          <p className="text-xs font-semibold text-slate-600">{t('shuttle_restock')}</p>
-                          <div className="grid gap-3 sm:grid-cols-2">
-                            <input
-                              type="number"
-                              min="1"
-                              className={cx(inputCls, 'font-mono bg-white')}
-                              placeholder={t('shuttle_restock_boxes')}
-                              value={restockBoxes}
-                              onChange={(e) => setRestockBoxes(e.target.value)}
-                            />
-                            <div className="relative">
-                              <input
-                                type="text"
-                                inputMode="numeric"
-                                className={cx(inputCls, 'pr-10 font-mono bg-white')}
-                                placeholder={t('shuttle_restock_price')}
-                                value={fmtInputNum(restockPrice)}
-                                onChange={(e) => setRestockPrice(parseInputNum(e.target.value))}
-                              />
-                              <span className="pointer-events-none absolute right-4 top-1/2 -translate-y-1/2 text-sm font-semibold text-slate-400">
-                                ₫
-                              </span>
-                            </div>
-                          </div>
-                          <div className="flex gap-2">
-                            <Button variant="volt" size="sm" className="flex-1" onClick={submitRestock} disabled={restockBusy || !restockBoxes}>
-                              {restockBusy ? (
-                                <Loader2 className="h-4 w-4 animate-spin" />
-                              ) : (
-                                <>
-                                  <Plus className="h-4 w-4" /> {t('shuttle_restock_submit')}
-                                </>
-                              )}
-                            </Button>
-                            <Button variant="ghost" size="sm" onClick={() => setRestockOpen(false)}>
-                              {t('cancel')}
-                            </Button>
-                          </div>
-                        </div>
-                      )}
+                        <Button variant="ghost" size="sm" onClick={() => { setRestockOpen(false); setRestockBoxes(''); setRestockNote('') }}>
+                          {t('cancel')}
+                        </Button>
+                      </div>
                     </div>
                   )}
                 </div>

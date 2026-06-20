@@ -185,7 +185,7 @@ function GroupSummary({
   openingCollection,
   payosConfigured,
 }) {
-  const total = courtCost + shuttleCost
+  const total = courtCost + (shuttleCost ?? 0)
   const perMember = effectiveCount > 0 ? Math.ceil(total / effectiveCount) : 0
   if (total === 0) return null
 
@@ -210,21 +210,6 @@ function GroupSummary({
             <p className="text-[10px] text-slate-500 mt-0.5">{t('no_cycle_committed')}</p>
           )}
         </div>
-      </div>
-
-      <div className="border-t border-slate-700 pt-3 space-y-1.5">
-        {courtCost > 0 && (
-          <div className="flex justify-between text-xs text-slate-400">
-            <span>{t('dash_court_cost')}</span>
-            <span className="font-mono">{fmtVND(courtCost)}</span>
-          </div>
-        )}
-        {shuttleCost > 0 && (
-          <div className="flex justify-between text-xs text-slate-400">
-            <span>{t('dash_shuttle_cost')}</span>
-            <span className="font-mono">{fmtVND(shuttleCost)}</span>
-          </div>
-        )}
       </div>
 
       {canEdit && nextAdjustedFee > 0 && isLast && (
@@ -350,7 +335,7 @@ export function PaymentTimeline({
     [settings, sport]
   )
 
-  const timeline = useMemo(() => computePaymentTimeline(slots, settingsWithEquip, memberCount), [slots, settingsWithEquip, memberCount])
+  const timeline = useMemo(() => computePaymentTimeline(slots, settingsWithEquip, memberCount, committedCount ?? null), [slots, settingsWithEquip, memberCount, committedCount])
 
   const hasCommittedBase = committedCount != null && committedCount > 0
 
@@ -384,13 +369,14 @@ export function PaymentTimeline({
       }
       return groups.get(key)
     }
-    if (timeline.nextShuttleItem) {
-      const g = getOrCreate(timeline.nextShuttleItem.deadline, timeline.nextShuttleItem.daysUntil)
-      g.shuttleItem = timeline.nextShuttleItem
-    }
     for (const r of timeline.upcoming) {
       const g = getOrCreate(r.nextDeadline, r.daysUntilNext)
       g.courtItems.push(r)
+    }
+    // Merge each shuttle item into the matching deadline-month group, or create its own group
+    for (const si of (timeline.upcomingShuttleItems || [])) {
+      const g = getOrCreate(si.deadline, si.daysUntil)
+      g.shuttleItem = si
     }
     return [...groups.values()].sort((a, b) => {
       if (!a.deadline) return 1
@@ -399,17 +385,13 @@ export function PaymentTimeline({
     })
   }, [timeline])
 
-  async function openCollection(group, courtCost, shuttleCost) {
-    const ps = group.courtItems[0]?.nextPeriod
-      ? periodStart(group.courtItems[0].nextPeriod)
-      : group.shuttleItem?.period
-        ? periodStart(group.shuttleItem.period)
-        : null
+  async function openCollection(group, courtCost) {
+    const ps = group.courtItems[0]?.nextPeriod ? periodStart(group.courtItems[0].nextPeriod) : null
     if (!ps || !clubId) return
 
     const { effectiveCount: groupEffectiveCount } = effectiveCountFor(ps)
-    const perMember = groupEffectiveCount > 0 ? Math.ceil((courtCost + shuttleCost) / groupEffectiveCount) : 0
-    const title = group.courtItems[0]?.slot?.name || (group.shuttleItem ? t('timeline_shuttle_estimate') : t('collection_open_btn'))
+    const perMember = groupEffectiveCount > 0 ? Math.ceil(courtCost / groupEffectiveCount) : 0
+    const title = group.courtItems[0]?.slot?.name || t('collection_open_btn')
 
     setOpeningGroup(ps)
     try {
@@ -494,11 +476,12 @@ export function PaymentTimeline({
             const isLastGroup = gi === paymentGroups.length - 1
 
             // Match this group to a payment_collection by period_start
+            // Fall back to shuttle period when there are no court items in this group
             const ps = group.courtItems[0]?.nextPeriod
               ? periodStart(group.courtItems[0].nextPeriod)
               : group.shuttleItem?.period
-                ? periodStart(group.shuttleItem.period)
-                : null
+              ? periodStart(group.shuttleItem.period)
+              : null
             const collection = ps ? collections.find((c) => c.period_start === ps) : null
             const groupPayments = collection ? memberPayments.filter((p) => p.collection_id === collection.id) : []
             const myRecord = currentMemberId ? groupPayments.find((p) => p.member_id === currentMemberId) : null
@@ -518,28 +501,27 @@ export function PaymentTimeline({
                 )}
 
                 <div className="divide-y divide-slate-100">
+                  {group.courtItems.map((r, i) => (
+                    <UpcomingSlotCard key={r.slot.id || i} result={r} lang={lang} memberCount={effectiveCount} t={t} />
+                  ))}
                   {group.shuttleItem && (
                     <div className="p-4 flex items-start justify-between gap-3 bg-white">
                       <div className="min-w-0">
-                        <div className="flex items-center gap-1.5">
+                        <div className="flex items-center gap-2">
                           <Package className="h-3.5 w-3.5 text-slate-400 shrink-0" />
                           <span className="font-semibold text-sm text-slate-900">{t('timeline_shuttle_estimate')}</span>
                         </div>
                         <p className="text-xs text-slate-400 mt-0.5">
-                          {formatPeriodLabel(group.shuttleItem.period, lang)} · {fmtNum(group.shuttleItem.sessions)} {t('dash_sessions')}
+                          {formatPeriodLabel(group.shuttleItem.period, lang)}
+                          {group.shuttleItem.totalSessions > 0 && <> · {fmtNum(group.shuttleItem.totalSessions)} {t('dash_sessions')}</>}
                         </p>
                       </div>
                       <div className="text-right shrink-0">
                         <p className="font-mono text-sm font-bold text-slate-900">{fmtVND(group.shuttleItem.cost)}</p>
-                        <p className="text-[11px] text-slate-400">
-                          {fmtNum(group.shuttleItem.boxes)} {t('dash_boxes')}
-                        </p>
+                        <p className="text-[11px] text-slate-400">{fmtNum(group.shuttleItem.boxes)} {t('shuttle_box_unit')}</p>
                       </div>
                     </div>
                   )}
-                  {group.courtItems.map((r, i) => (
-                    <UpcomingSlotCard key={r.slot.id || i} result={r} lang={lang} memberCount={effectiveCount} t={t} />
-                  ))}
                 </div>
 
                 {isLastGroup && openSpots > 0 && (
@@ -569,7 +551,7 @@ export function PaymentTimeline({
                   currentMemberId={currentMemberId}
                   members={members}
                   openingCollection={openingGroup === ps}
-                  onOpenCollection={() => openCollection(group, courtCost, shuttleCost)}
+                  onOpenCollection={() => openCollection(group, courtCost)}
                   onViewCollection={() => setCollectionModal({ collection, groupPayments, committedUserIds: pollTally?.committedUserIds })}
                   onPayQR={(liveAmount) => {
                     const m = members.find((m) => m.id === currentMemberId)

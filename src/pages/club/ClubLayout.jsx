@@ -18,6 +18,7 @@ import { handleError } from '../../lib/handleError'
 import { ClubContext } from '../../contexts/ClubContext'
 import { computeAll, getSessionConfigs, periodDateRange } from '../../engine/forecast'
 import { num } from '../../lib/utils'
+import { BALLS_PER_BOX } from '../../constants'
 
 // Routes: /club/:id → dashboard, /club/:id/settings, /club/:id/vote, /club/:id/log, /club/:id/fund
 function activeTab(path, clubId) {
@@ -36,7 +37,7 @@ export function ClubLayout({ session, club, setClub, path, toast, onSignOut }) {
   const [upsell, setUpsell] = useState(false)
   const [sidebarOpen, setSidebarOpen] = useState(false)
 
-  const { settings, setSettings, slots, setSlots, members, logs, fundTxns, collections, memberPayments, payosConfig, pollTally, loading, reload } =
+  const { settings, setSettings, slots, setSlots, members, logs, fundTxns, shuttleTxns, collections, memberPayments, payosConfig, pollTally, loading, reload } =
     useClubData(club.id)
 
   // Derive fund balance from append-only ledger (SSOT) instead of mutable current_fund field
@@ -75,14 +76,16 @@ export function ClubLayout({ session, club, setClub, path, toast, onSignOut }) {
   const currentMemberId = currentMember?.id || null
   const sport = SPORT_CONFIGS[club.sport_type] || SPORT_CONFIGS.badminton
 
-  // Live fund = total inflows − actual spending (logged + estimated unlogged) — mirrors HeroCard
+  // Live fund = total inflows − actual court spending − shuttle consumption (logged + estimated).
   const liveFundBalance = useMemo(() => {
     if (!effectiveSettings || !slots?.length) return fundBalance
-    const isInventory = sport?.trackInventory ?? false
     const memberCount = effectiveMembers.length
-    const all = computeAll(effectiveSettings, memberCount, sport?.hasEquipment ?? true, new Date(), slots)
+    const hasEquipment = sport?.hasEquipment ?? true
+    const all = computeAll(effectiveSettings, memberCount, hasEquipment, new Date(), slots)
     const sessionConfigs = getSessionConfigs(effectiveSettings)
-    const shuttlePerSession = !isInventory ? (num(effectiveSettings.estimated_shuttlecocks) * num(effectiveSettings.price_per_box)) / 12 : 0
+    const pricePerBox = hasEquipment ? num(effectiveSettings.price_per_box) : 0
+    const estRate = hasEquipment ? num(effectiveSettings.estimated_shuttlecocks) : 0
+
     const totalActualSpent = all.venues.reduce((sum, v) => {
       if (v.weekday === null || v.weekday === undefined) return sum
       const { start, end } = periodDateRange(v.period)
@@ -92,17 +95,29 @@ export function ClubLayout({ session, club, setClub, path, toast, onSignOut }) {
       )
       const loggedCount = venueLogs.length
       const estimatedCount = Math.max(0, v.happened - loggedCount)
+
+      // Court cost
+      let courtCost
       if (v.court_payment_mode === 'cycle') {
-        const shuttleActual = isInventory ? 0 : venueLogs.reduce((s, l) => s + num(l.shuttle_cost), 0)
-        const shuttleEst = isInventory ? 0 : estimatedCount * shuttlePerSession
-        return sum + v.courtCost + shuttleActual + shuttleEst
+        courtCost = v.courtCost
       } else {
         const sc = sessionConfigs.find((c) => c.weekday === v.weekday) || {}
         const courtPerSession = num(sc.court_price_per_hour) * num(sc.hours_per_session)
         const courtActual = venueLogs.reduce((s, l) => s + num(l.court_cost), 0)
-        const shuttleActual = isInventory ? 0 : venueLogs.reduce((s, l) => s + num(l.shuttle_cost), 0)
-        return sum + courtActual + estimatedCount * courtPerSession + shuttleActual + estimatedCount * shuttlePerSession
+        courtCost = courtActual + estimatedCount * courtPerSession
       }
+
+      // Shuttle consumption cost (per session, not per restock)
+      let shuttleCost = 0
+      if (pricePerBox > 0 && estRate > 0) {
+        const shuttleActual = venueLogs.reduce((s, l) => {
+          const balls = num(l.actual_shuttlecocks) || estRate
+          return s + (balls / BALLS_PER_BOX) * pricePerBox
+        }, 0)
+        shuttleCost = shuttleActual + estimatedCount * (estRate / BALLS_PER_BOX) * pricePerBox
+      }
+
+      return sum + courtCost + shuttleCost
     }, 0)
     return fundBalance - totalActualSpent
   }, [effectiveSettings, slots, effectiveMembers, logs, fundBalance, sport])
@@ -137,6 +152,7 @@ export function ClubLayout({ session, club, setClub, path, toast, onSignOut }) {
     members: effectiveMembers,
     logs,
     fundTxns,
+    shuttleTxns,
     collections,
     memberPayments,
     liveFundBalance,

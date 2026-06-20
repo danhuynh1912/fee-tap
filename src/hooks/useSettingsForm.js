@@ -3,9 +3,10 @@ import { useTranslation } from 'react-i18next'
 import { supabase } from '../lib/supabase'
 import { handleError } from '../lib/handleError'
 import { num } from '../lib/utils'
-import { computeSlot, estimateShuttle, projectUpcomingCollections } from '../engine/forecast'
+import { computeSlot, projectUpcomingCollections, buildSettleInserts } from '../engine/forecast'
+import { BALLS_PER_BOX } from '../constants'
 
-export function useSettingsForm({ club, settings, initialSlots, fundTxns, members, pollTally, hostName, sport, canEdit, toast, reload, setSettings, openUpsell }) {
+export function useSettingsForm({ club, settings, initialSlots, shuttleTxns, fundTxns, logs, members, pollTally, hostName, sport, canEdit, toast, reload, setSettings, openUpsell }) {
   const { t } = useTranslation()
 
   // ── global form ──────────────────────────────────────────
@@ -13,8 +14,6 @@ export function useSettingsForm({ club, settings, initialSlots, fundTxns, member
     price_per_box: settings.price_per_box ?? 320000,
     estimated_shuttlecocks: settings.estimated_shuttlecocks ?? 6,
     current_fund: settings.current_fund ?? 0,
-    shuttle_mode: settings.shuttle_mode ?? 'estimate',
-    shuttle_stock: settings.shuttle_stock ?? 0,
     shuttle_cycle_months: settings.shuttle_cycle_months ?? 1,
     shuttle_cycle_start_month: settings.shuttle_cycle_start_month ?? 1,
     fee_split_mode: settings.fee_split_mode ?? 'committed_only',
@@ -33,9 +32,11 @@ export function useSettingsForm({ club, settings, initialSlots, fundTxns, member
 
   // ── restock shuttle ──────────────────────────────────────
   const [restockOpen, setRestockOpen] = useState(false)
+  const [restockUnit, setRestockUnit] = useState('boxes') // 'boxes' | 'balls'
   const [restockBoxes, setRestockBoxes] = useState('')
   const [restockPrice, setRestockPrice] = useState(settings.price_per_box ?? 320000)
   const [restockBusy, setRestockBusy] = useState(false)
+  const [restockNote, setRestockNote] = useState('')
 
   // ── slot modal ───────────────────────────────────────────
   const [slots, setSlots] = useState(initialSlots || [])
@@ -53,7 +54,7 @@ export function useSettingsForm({ club, settings, initialSlots, fundTxns, member
   const actualSpent = useMemo(() => {
     if (!isFirstSetup || !initialSlots?.length) return 0
     const now = new Date()
-    const shuttlePerSession = (num(form.estimated_shuttlecocks) * num(form.price_per_box)) / 12
+    const shuttlePerSession = (num(form.estimated_shuttlecocks) * num(form.price_per_box)) / BALLS_PER_BOX
     return initialSlots.reduce((total, slot) => {
       const { happened, courtCost } = computeSlot(slot, now)
       if (slot.payment_mode === 'cycle') {
@@ -66,33 +67,32 @@ export function useSettingsForm({ club, settings, initialSlots, fundTxns, member
 
   const effective = form.fee_split_mode === 'committed_only' && committedCount ? committedCount : memberCount
 
-  // Inventory mode has its own one-off restock flow, not a recurring cycle — keep it
-  // out of the projected list (it's surfaced separately via the restock card).
   const upcomingCollections = useMemo(() => {
-    if (!slots.length || form.shuttle_mode === 'inventory') return []
-    return projectUpcomingCollections(slots, {
-      _hasEquipment: sport.hasEquipment,
-      shuttle_mode: form.shuttle_mode,
-      estimated_shuttlecocks: form.estimated_shuttlecocks,
-      price_per_box: form.price_per_box,
-      shuttle_cycle_months: parseInt(form.shuttle_cycle_months, 10) || 1,
-      shuttle_cycle_start_month: parseInt(form.shuttle_cycle_start_month, 10) || 1,
-    })
-  }, [slots, form, sport.hasEquipment])
+    if (!slots.length) return []
+    return projectUpcomingCollections(slots, form)
+  }, [slots, form])
 
   // ── actions ──────────────────────────────────────────────
   async function save() {
     if (!canEdit || busy) return
     setBusy(true)
     try {
+      // Settle unlogged past sessions at OLD rate before saving new rate
+      const oldRate = num(settings.estimated_shuttlecocks)
+      const newRate = num(form.estimated_shuttlecocks)
+      if (sport.hasEquipment && newRate !== oldRate && oldRate > 0) {
+        const settleInserts = buildSettleInserts(shuttleTxns || [], slots, logs || [], club.id, oldRate)
+        if (settleInserts.length > 0) {
+          await supabase.from('shuttle_transactions').insert(settleInserts)
+        }
+      }
+
       const firstSlot = slots[0]
       const payload = {
         club_id: club.id,
         price_per_box: num(form.price_per_box),
         estimated_shuttlecocks: num(form.estimated_shuttlecocks),
         current_fund: num(form.current_fund),
-        shuttle_mode: form.shuttle_mode,
-        shuttle_stock: num(form.shuttle_stock),
         shuttle_cycle_months: Math.max(1, parseInt(form.shuttle_cycle_months, 10) || 1),
         shuttle_cycle_start_month: Math.max(1, Math.min(12, parseInt(form.shuttle_cycle_start_month, 10) || 1)),
         fee_split_mode: form.fee_split_mode,
@@ -169,21 +169,37 @@ export function useSettingsForm({ club, settings, initialSlots, fundTxns, member
   }
 
   async function submitRestock() {
-    const boxes = num(restockBoxes)
+    const qty = num(restockBoxes)
     const price = num(restockPrice)
-    if (!boxes || restockBusy) return
+    if (!qty || restockBusy) return
     setRestockBusy(true)
+    const isBalls = restockUnit === 'balls'
     try {
-      const totalCost = boxes * price
-      const newStock = num(form.shuttle_stock) + boxes
-      const newFund = num(settings.current_fund) - totalCost
-      await Promise.all([
-        supabase.from('fund_transactions').insert({ club_id: club.id, amount: -totalCost, note: `Nhập ${boxes} hộp cầu`, type: 'shuttle_purchase' }),
-        supabase.from('club_settings').update({ shuttle_stock: newStock, current_fund: newFund, price_per_box: price }).eq('club_id', club.id),
-      ])
+      const delta = isBalls ? qty : qty * BALLS_PER_BOX
+      const note = restockNote.trim() || (isBalls ? `Thêm ${qty} quả cầu` : `Nhập ${qty} hộp cầu`)
+      if (isBalls) {
+        await supabase.from('shuttle_transactions').insert({
+          club_id: club.id, delta, source: 'adjustment', note,
+          rate_used: num(form.estimated_shuttlecocks),
+        })
+      } else {
+        const totalCost = qty * price
+        const newFund = num(settings.current_fund) - totalCost
+        await Promise.all([
+          supabase.from('shuttle_transactions').insert({
+            club_id: club.id, delta, source: 'restock', note,
+            rate_used: num(form.estimated_shuttlecocks),
+          }),
+          supabase.from('fund_transactions').insert({
+            club_id: club.id, amount: -totalCost, note, type: 'shuttle_purchase',
+          }),
+          supabase.from('club_settings').update({ current_fund: newFund, price_per_box: price }).eq('club_id', club.id),
+        ])
+        setForm((f) => ({ ...f, price_per_box: price }))
+      }
       toast(t('shuttle_restock_submit'))
-      setForm((f) => ({ ...f, shuttle_stock: newStock, price_per_box: price }))
       setRestockBoxes('')
+      setRestockNote('')
       setRestockOpen(false)
       reload()
     } catch (e) {
@@ -245,8 +261,10 @@ export function useSettingsForm({ club, settings, initialSlots, fundTxns, member
     topUpBusy, submitTopUp,
     // restock
     restockOpen, setRestockOpen,
+    restockUnit, setRestockUnit,
     restockBoxes, setRestockBoxes,
     restockPrice, setRestockPrice,
+    restockNote, setRestockNote,
     restockBusy, submitRestock,
     // slots
     slots, setSlots,

@@ -208,8 +208,9 @@ export function SessionLogPage({ toast }) {
       const sc = getSessionConfigs(settings).find((c) => c.weekday === wd) || getSessionConfigs(settings)[0] || {}
       const isCycleMode = sc.court_payment_mode === 'cycle'
       const courtCost = num(sc.court_price_per_hour) * num(sc.hours_per_session)
-      const shuttleCost = hasEquipment ? Math.round(actualCount * (num(settings.price_per_box) / BALLS_PER_BOX)) : 0
-      const totalCost = courtCost + shuttleCost
+      // Shuttle cost is 0 per-session — shuttle fund deduction happens at restock, not per-session
+      const shuttleCost = 0
+      const totalCost = isCycleMode ? 0 : courtCost
 
       const gm = editForm.guestMale || 0
       const gf = editForm.guestFemale || 0
@@ -219,7 +220,7 @@ export function SessionLogPage({ toast }) {
         guestFemale: gf,
         feeMale: num(settings.guest_fee_male),
         feeFemale: num(settings.guest_fee_female),
-        shuttleCost,
+        shuttleCost: 0,
         courtCost,
         memberCount,
       })
@@ -233,7 +234,7 @@ export function SessionLogPage({ toast }) {
             actual_shuttlecocks: actualCount,
             note: editForm.note.trim() || null,
             court_cost: courtCost,
-            shuttle_cost: shuttleCost,
+            shuttle_cost: 0,
             total_cost: totalCost,
             vote_id: editForm.voteId || null,
             guest_male: gm,
@@ -242,23 +243,31 @@ export function SessionLogPage({ toast }) {
           })
           .eq('id', existingLog.id)
 
-        const oldDeduct = isCycleMode ? num(existingLog.shuttle_cost) : num(existingLog.total_cost)
-        const newDeduct = isCycleMode ? shuttleCost : totalCost
-        const fundAdj = oldDeduct - newDeduct + (guestRevenue - num(existingLog.guest_revenue))
+        // Court fund adjustment (shuttle excluded from fund math now)
+        const oldCourtDeduct = isCycleMode ? 0 : num(existingLog.court_cost)
+        const newCourtDeduct = isCycleMode ? 0 : courtCost
+        const fundAdj = oldCourtDeduct - newCourtDeduct + (guestRevenue - num(existingLog.guest_revenue))
         if (fundAdj !== 0) {
-          await supabase
-            .from('club_settings')
-            .update({ current_fund: num(settings.current_fund) + fundAdj })
-            .eq('club_id', club.id)
+          await supabase.from('club_settings').update({ current_fund: num(settings.current_fund) + fundAdj }).eq('club_id', club.id)
         }
+
+        // Replace the shuttle_transaction for this log (void old estimated, insert real)
+        if (hasEquipment) {
+          await supabase.from('shuttle_transactions').delete().eq('session_log_id', existingLog.id)
+          await supabase.from('shuttle_transactions').delete().eq('club_id', club.id).eq('session_date', editingDate).eq('source', 'estimated')
+          await supabase.from('shuttle_transactions').insert({
+            club_id: club.id,
+            delta: -actualCount,
+            source: 'session_log',
+            session_log_id: existingLog.id,
+            session_date: editingDate,
+            rate_used: actualCount,
+          })
+        }
+
         if (guestRevenue > 0) {
           await supabase.from('fund_transactions').upsert(
-            {
-              club_id: club.id,
-              amount: guestRevenue,
-              note: `${t('log_guest_section')} ${fmtDate(editingDate)}: ${gm}M ${gf}F`,
-              session_log_id: existingLog.id,
-            },
+            { club_id: club.id, amount: guestRevenue, note: `${t('log_guest_section')} ${fmtDate(editingDate)}: ${gm}M ${gf}F`, session_log_id: existingLog.id },
             { onConflict: 'session_log_id' }
           )
         }
@@ -271,7 +280,7 @@ export function SessionLogPage({ toast }) {
             actual_shuttlecocks: actualCount,
             note: editForm.note.trim() || null,
             court_cost: courtCost,
-            shuttle_cost: shuttleCost,
+            shuttle_cost: 0,
             total_cost: totalCost,
             vote_id: editForm.voteId || null,
             guest_male: gm,
@@ -282,20 +291,28 @@ export function SessionLogPage({ toast }) {
           .single()
         if (insertErr) throw insertErr
 
-        const netChange = -(isCycleMode ? shuttleCost : totalCost) + guestRevenue
-        await supabase
-          .from('club_settings')
-          .update({ current_fund: Math.max(0, num(settings.current_fund) + netChange) })
-          .eq('club_id', club.id)
+        // Court-only fund deduction
+        const netChange = (isCycleMode ? 0 : -courtCost) + guestRevenue
+        if (netChange !== 0) {
+          await supabase.from('club_settings').update({ current_fund: Math.max(0, num(settings.current_fund) + netChange) }).eq('club_id', club.id)
+        }
+
+        // Void any estimated transaction for this date + insert real deduction
+        if (hasEquipment) {
+          await supabase.from('shuttle_transactions').delete().eq('club_id', club.id).eq('session_date', editingDate).eq('source', 'estimated')
+          await supabase.from('shuttle_transactions').insert({
+            club_id: club.id,
+            delta: -actualCount,
+            source: 'session_log',
+            session_log_id: newLog.id,
+            session_date: editingDate,
+            rate_used: actualCount,
+          })
+        }
 
         if (guestRevenue > 0) {
           await supabase.from('fund_transactions').upsert(
-            {
-              club_id: club.id,
-              amount: guestRevenue,
-              note: `${t('log_guest_section')} ${fmtDate(editingDate)}: ${gm}M ${gf}F`,
-              session_log_id: newLog.id,
-            },
+            { club_id: club.id, amount: guestRevenue, note: `${t('log_guest_section')} ${fmtDate(editingDate)}: ${gm}M ${gf}F`, session_log_id: newLog.id },
             { onConflict: 'session_log_id' }
           )
         }
@@ -314,16 +331,19 @@ export function SessionLogPage({ toast }) {
     if (!canEdit || !log) return
     try {
       await supabase.from('session_logs').delete().eq('id', log.id)
+      // shuttle_transaction with session_log_id is cascade-deleted or SET NULL via FK;
+      // explicitly delete to ensure inventory reverts
+      if (hasEquipment) {
+        await supabase.from('shuttle_transactions').delete().eq('session_log_id', log.id)
+      }
       const wd = new Date(log.played_on).getDay()
       const sc = getSessionConfigs(settings).find((c) => c.weekday === wd) || getSessionConfigs(settings)[0] || {}
       const isCycleMode = sc.court_payment_mode === 'cycle'
-      const restore = isCycleMode ? num(log.shuttle_cost) : num(log.total_cost)
+      // Restore court cost only (shuttle no longer tracked per-session in fund)
+      const restore = isCycleMode ? 0 : num(log.court_cost)
       const fundAdj = restore - num(log.guest_revenue)
       if (fundAdj !== 0) {
-        await supabase
-          .from('club_settings')
-          .update({ current_fund: num(settings.current_fund) + fundAdj })
-          .eq('club_id', club.id)
+        await supabase.from('club_settings').update({ current_fund: num(settings.current_fund) + fundAdj }).eq('club_id', club.id)
       }
       onChanged()
     } catch (e) {
@@ -335,16 +355,14 @@ export function SessionLogPage({ toast }) {
     if (!editingDate) return 0
     const wd = new Date(editingDate).getDay()
     const sc = getSessionConfigs(settings).find((c) => c.weekday === wd) || getSessionConfigs(settings)[0] || {}
-    const actualCount = editForm.actual === '' ? est : num(editForm.actual)
     const courtCost = num(sc.court_price_per_hour) * num(sc.hours_per_session)
-    const shuttleCost = hasEquipment ? Math.round(actualCount * (num(settings.price_per_box) / BALLS_PER_BOX)) : 0
     return calcGuestRevenue({
       mode: settings.guest_fee_mode || 'split_all',
       guestMale: editForm.guestMale || 0,
       guestFemale: editForm.guestFemale || 0,
       feeMale: num(settings.guest_fee_male),
       feeFemale: num(settings.guest_fee_female),
-      shuttleCost,
+      shuttleCost: 0,
       courtCost,
       memberCount,
     })

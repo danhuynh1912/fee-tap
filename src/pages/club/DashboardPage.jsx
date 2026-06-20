@@ -1,6 +1,13 @@
 import { useMemo, useState, useEffect } from 'react'
 import { useTranslation } from 'react-i18next'
-import { SlidersHorizontal } from 'lucide-react'
+import { SlidersHorizontal, Plus, Loader2, X } from 'lucide-react'
+import { supabase } from '../../lib/supabase'
+import { handleError } from '../../lib/handleError'
+import { cx, fmtInputNum, parseInputNum } from '../../lib/utils'
+import { inputCls } from '../../components/ui/Field'
+import { Button } from '../../components/ui/Button'
+import { Modal } from '../../components/ui/Modal'
+import { Switch } from '../../components/ui/Toggle'
 import { DashboardConfigDrawer } from '../../components/club/DashboardConfigDrawer'
 import { MembersPanel } from './MembersPanel'
 import { PaymentTimeline } from '../../components/club/PaymentTimeline'
@@ -9,10 +16,143 @@ import { DeficitCallout } from '../../components/club/DeficitCallout'
 import { CostByCycleBreakdown } from '../../components/club/CostByCycleBreakdown'
 import { SpentBreakdownModal } from '../../components/club/SpentBreakdownModal'
 import { AdvancedForecast } from '../../components/club/AdvancedForecast'
-import { computeAll, getSessionConfigs, periodDateRange } from '../../engine/forecast'
+import { computeAll, getSessionConfigs, periodDateRange, computeShuttleStock } from '../../engine/forecast'
+import { ShuttleTubeWidget } from '../../components/club/ShuttleTubeWidget'
 import { num } from '../../lib/utils'
-import { BALLS_PER_BOX } from '../../constants'
+import { BALLS_PER_BOX, SPORT_CONFIGS } from '../../constants'
 import { useClub } from '../../contexts/ClubContext'
+
+// ─── restock modal ────────────────────────────────────────────────────────────
+function RestockModal({ club, settings, liveFundBalance, onClose, onDone, toast }) {
+  const { t } = useTranslation()
+  const [unit, setUnit] = useState('boxes') // 'boxes' | 'balls'
+  const [qty, setQty] = useState('')
+  const [price, setPrice] = useState(settings.price_per_box ?? 320000)
+  const [note, setNote] = useState('')
+  const [useFund, setUseFund] = useState(true)
+  const [busy, setBusy] = useState(false)
+
+  const isBalls = unit === 'balls'
+  const qtyNum = parseInt(qty, 10) || 0
+  const totalCost = !isBalls && useFund ? qtyNum * num(price) : 0
+  const fundInsufficient = useFund && !isBalls && qtyNum > 0 && totalCost > liveFundBalance
+
+  async function submit() {
+    if (!qtyNum || qtyNum < 1 || busy) return
+    setBusy(true)
+    try {
+      const delta = isBalls ? qtyNum : qtyNum * BALLS_PER_BOX
+      const noteStr = note.trim() || (isBalls ? `Thêm ${qtyNum} quả cầu` : `Nhập ${qtyNum} hộp cầu`)
+      if (isBalls || !useFund) {
+        await supabase.from('shuttle_transactions').insert({
+          club_id: club.id, delta, source: isBalls ? 'adjustment' : 'restock', note: noteStr,
+          rate_used: num(settings.estimated_shuttlecocks),
+        })
+        if (!isBalls) {
+          await supabase.from('club_settings').update({ price_per_box: num(price) }).eq('club_id', club.id)
+        }
+      } else {
+        const newFund = liveFundBalance - totalCost
+        await Promise.all([
+          supabase.from('shuttle_transactions').insert({
+            club_id: club.id, delta, source: 'restock', note: noteStr,
+            rate_used: num(settings.estimated_shuttlecocks),
+          }),
+          supabase.from('fund_transactions').insert({
+            club_id: club.id, amount: -totalCost, note: noteStr, type: 'shuttle_purchase',
+          }),
+          supabase.from('club_settings').update({ current_fund: newFund, price_per_box: num(price) }).eq('club_id', club.id),
+        ])
+      }
+      toast(t('shuttle_restock_submit'))
+      onDone()
+      onClose()
+    } catch (e) {
+      handleError(e, toast, t)
+    } finally {
+      setBusy(false)
+    }
+  }
+
+  return (
+    <Modal open onClose={onClose} maxW="max-w-sm">
+      <div className="space-y-4">
+        <div className="flex items-center justify-between">
+          <h2 className="text-base font-bold text-slate-900">{t('shuttle_restock')}</h2>
+          <button onClick={onClose} className="grid h-8 w-8 place-items-center rounded-xl border border-slate-200 text-slate-500 hover:bg-slate-50">
+            <X className="h-4 w-4" />
+          </button>
+        </div>
+
+        <div className="flex rounded-xl border border-slate-200 overflow-hidden text-sm font-semibold">
+          {[['boxes', t('shuttle_box_unit')], ['balls', t('shuttle_ball_unit')]].map(([val, label]) => (
+            <button
+              key={val}
+              onClick={() => { setUnit(val); setQty('') }}
+              className={cx('flex-1 py-2 transition', unit === val ? 'bg-slate-900 text-white' : 'text-slate-500 hover:bg-slate-50')}
+            >
+              {label}
+            </button>
+          ))}
+        </div>
+
+        <div className="grid gap-3">
+          <input
+            type="number" min="1" autoFocus
+            className={inputCls + ' font-mono'}
+            placeholder={isBalls ? t('shuttle_qty_balls_ph') : t('shuttle_restock_boxes')}
+            value={qty}
+            onChange={(e) => setQty(e.target.value)}
+          />
+          {!isBalls && (
+            <div className="relative">
+              <input
+                type="text" inputMode="numeric"
+                className={inputCls + ' pr-10 font-mono'}
+                placeholder={t('shuttle_restock_price')}
+                value={fmtInputNum(price)}
+                onChange={(e) => setPrice(parseInputNum(e.target.value))}
+              />
+              <span className="pointer-events-none absolute right-4 top-1/2 -translate-y-1/2 text-sm font-semibold text-slate-400">₫</span>
+            </div>
+          )}
+          <input
+            className={inputCls}
+            placeholder={t('shuttle_restock_note_ph')}
+            value={note}
+            onChange={(e) => setNote(e.target.value)}
+          />
+        </div>
+        {!isBalls && (
+          <div className="rounded-2xl border border-slate-100 bg-slate-50 px-4 py-3 space-y-2">
+            <Switch
+              checked={useFund}
+              onChange={setUseFund}
+              label={t('restock_use_fund')}
+            />
+            {useFund && qtyNum > 0 && (
+              fundInsufficient ? (
+                <p className="text-xs font-semibold text-red-600">
+                  {t('restock_fund_insufficient', { amount: fmtInputNum(String(Math.round(liveFundBalance))) })}
+                </p>
+              ) : (
+                <p className="text-xs text-slate-500">
+                  {qtyNum} {t('shuttle_box_unit')} × {fmtInputNum(price)} ₫ = <span className="font-mono font-bold text-slate-700">{fmtInputNum(String(totalCost))} ₫</span>
+                </p>
+              )
+            )}
+          </div>
+        )}
+        <div className="flex gap-2">
+          <Button variant="volt" className="flex-1" onClick={submit} disabled={busy || !qtyNum || fundInsufficient}>
+            {busy ? <Loader2 className="h-4 w-4 animate-spin" /> : <><Plus className="h-4 w-4" /> {t('shuttle_restock_submit')}</>}
+          </Button>
+          <Button variant="ghost" onClick={onClose}>{t('cancel')}</Button>
+        </div>
+      </div>
+    </Modal>
+  )
+}
 
 // ─── forecast orchestrator ────────────────────────────────────────────────────
 function ForecastDashboard({
@@ -26,6 +166,7 @@ function ForecastDashboard({
   onUnlock,
   logs,
   fundTxns,
+  shuttleTxns,
   sections: sectionsProp,
   collections,
   memberPayments,
@@ -39,7 +180,9 @@ function ForecastDashboard({
   pollTally,
   club,
   user,
+  onRestock,
 }) {
+  const { t } = useTranslation()
   const hasEquipment = sport?.hasEquipment ?? true
   const [spentTipOpen, setSpentTipOpen] = useState(false)
   const [sections, setSections] = useState(() => sectionsProp || {})
@@ -58,10 +201,15 @@ function ForecastDashboard({
 
   const all = useMemo(() => computeAll(settings, memberCount, hasEquipment, new Date(), slots), [settings, slots, memberCount, hasEquipment])
   const sessionConfigs = useMemo(() => getSessionConfigs(settings), [settings])
-  const isInventory = hasEquipment && settings.shuttle_mode === 'inventory'
 
+  const shuttleStatus = useMemo(
+    () => (hasEquipment ? computeShuttleStock(shuttleTxns || [], slots, settings, logs || []) : null),
+    [hasEquipment, shuttleTxns, slots, settings, logs]
+  )
+
+  // Shuttle purchases that hit the fund this period (for actualSpent tracking)
   const shuttleTxnsInPeriod = useMemo(() => {
-    if (!isInventory || !fundTxns?.length) return 0
+    if (!hasEquipment || !fundTxns?.length) return 0
     const ranges = all.venues.filter((v) => v.period).map((v) => periodDateRange(v.period))
     if (!ranges.length) return 0
     const periodStart = ranges.reduce((min, r) => (r.start < min ? r.start : min), ranges[0].start)
@@ -69,9 +217,7 @@ function ForecastDashboard({
     return fundTxns
       .filter((tx) => tx.type === 'shuttle_purchase' && tx.created_at >= periodStart && tx.created_at <= periodEnd + 'T23:59:59')
       .reduce((s, tx) => s + Math.abs(num(tx.amount)), 0)
-  }, [isInventory, fundTxns, all.venues])
-
-  const shuttlePerSession = hasEquipment && !isInventory ? (num(settings.estimated_shuttlecocks) * num(settings.price_per_box)) / BALLS_PER_BOX : 0
+  }, [hasEquipment, fundTxns, all.venues])
 
   const { actualSpent, spentBreakdown } = useMemo(
     () =>
@@ -87,11 +233,22 @@ function ForecastDashboard({
           const estimatedCount = Math.max(0, v.happened - loggedCount)
           const venueLabel = [v.name, v.venue_name].filter(Boolean).join(' · ') || v.weekday?.toString()
 
+          // Shuttle consumption cost (per session, not per restock)
+          const pricePerBox = num(settings.price_per_box)
+          const estRate = num(settings.estimated_shuttlecocks)
+          let shuttleActual = 0
+          let shuttleEst = 0
+          if (hasEquipment && pricePerBox > 0 && estRate > 0) {
+            shuttleActual = venueLogs.reduce((s, l) => {
+              const balls = num(l.actual_shuttlecocks) || estRate
+              return s + (balls / BALLS_PER_BOX) * pricePerBox
+            }, 0)
+            shuttleEst = estimatedCount * (estRate / BALLS_PER_BOX) * pricePerBox
+          }
+
           if (v.court_payment_mode === 'cycle') {
-            const shuttleActual = isInventory ? 0 : venueLogs.reduce((s, l) => s + num(l.shuttle_cost), 0)
-            const shuttleEst = isInventory ? 0 : estimatedCount * shuttlePerSession
-            const venueCost = v.courtCost + shuttleActual + shuttleEst
-            acc.actualSpent += venueCost
+            const total = v.courtCost + shuttleActual + shuttleEst
+            acc.actualSpent += total
             acc.spentBreakdown.push({
               label: venueLabel,
               courtCost: v.courtCost,
@@ -99,7 +256,7 @@ function ForecastDashboard({
               shuttleEst,
               loggedCount,
               estimatedCount,
-              total: venueCost,
+              total,
               isCycle: true,
             })
           } else {
@@ -107,17 +264,17 @@ function ForecastDashboard({
             const courtPerSession = num(sc.court_price_per_hour) * num(sc.hours_per_session)
             const courtActual = venueLogs.reduce((s, l) => s + num(l.court_cost), 0)
             const courtEst = estimatedCount * courtPerSession
-            const shuttleActual = isInventory ? 0 : venueLogs.reduce((s, l) => s + num(l.shuttle_cost), 0)
-            const shuttleEst = isInventory ? 0 : estimatedCount * shuttlePerSession
-            const venueCost = courtActual + courtEst + shuttleActual + shuttleEst
-            acc.actualSpent += venueCost
+            const total = courtActual + courtEst + shuttleActual + shuttleEst
+            acc.actualSpent += total
             acc.spentBreakdown.push({
               label: venueLabel,
-              costActual: courtActual + shuttleActual,
-              costEst: courtEst + shuttleEst,
+              costActual: courtActual,
+              costEst: courtEst,
+              shuttleActual,
+              shuttleEst,
               loggedCount,
               estimatedCount,
-              total: venueCost,
+              total,
               isCycle: false,
             })
           }
@@ -125,35 +282,28 @@ function ForecastDashboard({
         },
         { actualSpent: 0, spentBreakdown: [] }
       ),
-    [all.venues, logs, isInventory, shuttlePerSession, sessionConfigs]
+    [all.venues, logs, sessionConfigs, settings, hasEquipment]
   )
 
-  const totalActualSpent = isInventory ? actualSpent + shuttleTxnsInPeriod : actualSpent
+  const totalActualSpent = actualSpent
 
   const remainingForecast = useMemo(() => {
-    if (isInventory) {
-      const tubesPerSession = num(settings.estimated_shuttlecocks) || 0
-      const totalSessionsLeft = all.venues.reduce((s, v) => s + Math.max(0, v.totalSessions - v.happened), 0)
-      const boxesLeft = num(settings.shuttle_stock)
-      const sessionsLeft = tubesPerSession > 0 ? Math.floor((boxesLeft * BALLS_PER_BOX) / tubesPerSession) : Infinity
-      const refillBoxes = sessionsLeft < totalSessionsLeft ? Math.ceil(((totalSessionsLeft - sessionsLeft) * tubesPerSession) / BALLS_PER_BOX) : 0
-      const shuttleRefillCost = refillBoxes > 0 ? refillBoxes * num(settings.price_per_box) : 0
-      const courtRemaining = all.venues.reduce((total, v) => {
-        const remaining = Math.max(0, v.totalSessions - v.happened)
-        if (v.court_payment_mode === 'cycle') return total
-        const sc = sessionConfigs.find((c) => c.weekday === v.weekday) || {}
-        return total + remaining * (num(sc.court_price_per_hour) * num(sc.hours_per_session))
-      }, 0)
-      return courtRemaining + shuttleRefillCost
-    }
-    const sps = hasEquipment ? (num(settings.estimated_shuttlecocks) * num(settings.price_per_box)) / BALLS_PER_BOX : 0
-    return all.venues.reduce((total, v) => {
+    const rate = num(settings.estimated_shuttlecocks) || 0
+    const totalBallsLeft = shuttleStatus?.totalBalls ?? 0
+    const totalSessionsLeft = all.venues.reduce((s, v) => s + Math.max(0, v.totalSessions - v.happened), 0)
+    const shuttleSessionsLeft = rate > 0 ? Math.floor(totalBallsLeft / rate) : Infinity
+    const shortfallSessions = Math.max(0, totalSessionsLeft - shuttleSessionsLeft)
+    const shuttleRefillBoxes = shortfallSessions > 0 ? Math.ceil((shortfallSessions * rate) / BALLS_PER_BOX) : 0
+    const shuttleRefillCost = hasEquipment ? shuttleRefillBoxes * num(settings.price_per_box) : 0
+
+    const courtRemaining = all.venues.reduce((total, v) => {
       const remaining = Math.max(0, v.totalSessions - v.happened)
-      if (v.court_payment_mode === 'cycle') return total + remaining * sps
+      if (v.court_payment_mode === 'cycle') return total
       const sc = sessionConfigs.find((c) => c.weekday === v.weekday) || {}
-      return total + remaining * (num(sc.court_price_per_hour) * num(sc.hours_per_session) + sps)
+      return total + remaining * (num(sc.court_price_per_hour) * num(sc.hours_per_session))
     }, 0)
-  }, [all.venues, sessionConfigs, settings, hasEquipment, isInventory])
+    return courtRemaining + shuttleRefillCost
+  }, [all.venues, sessionConfigs, settings, hasEquipment, shuttleStatus])
 
   const projectedBalance = all.fund - totalActualSpent - remainingForecast
   const projectedSurplus = projectedBalance >= 0
@@ -252,6 +402,7 @@ export function DashboardPage({ toast }) {
     members,
     logs,
     fundTxns,
+    shuttleTxns,
     collections,
     memberPayments,
     currentMemberId,
@@ -274,7 +425,13 @@ export function DashboardPage({ toast }) {
   const committedCount = pollTally?.count ?? null
   const [configOpen, setConfigOpen] = useState(false)
   const [sectionsOverride, setSectionsOverride] = useState(null)
+  const [restockOpen, setRestockOpen] = useState(false)
   const effectiveSections = sectionsOverride ?? settings?.dashboard_sections ?? {}
+  const hasEquipment = sport?.hasEquipment ?? true
+  const shuttleStatus = useMemo(
+    () => (hasEquipment ? computeShuttleStock(shuttleTxns || [], slots, settings, logs || []) : null),
+    [hasEquipment, shuttleTxns, slots, settings, logs]
+  )
 
   return (
     <div className="relative grid gap-6 lg:grid-cols-3">
@@ -304,6 +461,7 @@ export function DashboardPage({ toast }) {
           onUnlock={openUpsell}
           logs={logs}
           fundTxns={fundTxns}
+          shuttleTxns={shuttleTxns}
           sections={effectiveSections}
           collections={collections}
           memberPayments={memberPayments}
@@ -317,10 +475,23 @@ export function DashboardPage({ toast }) {
           pollTally={pollTally}
           club={club}
           user={session?.user}
+          onRestock={() => setRestockOpen(true)}
         />
       </div>
 
       <div className="space-y-6">
+        {hasEquipment && shuttleStatus && (
+          <div className="rounded-3xl border border-slate-100 bg-white p-6 shadow-xl shadow-slate-900/[0.03]">
+            <div className="flex items-center gap-2 mb-4">
+              <span className="text-base font-bold text-slate-900">🏸 {t('shuttle_stock_title')}</span>
+            </div>
+            <ShuttleTubeWidget
+              shuttleStatus={shuttleStatus}
+              onRestock={() => setRestockOpen(true)}
+              canEdit={canEdit}
+            />
+          </div>
+        )}
         <MembersPanel
           club={club}
           members={members}
@@ -334,6 +505,17 @@ export function DashboardPage({ toast }) {
           toast={toast}
         />
       </div>
+
+      {restockOpen && canEdit && (
+        <RestockModal
+          club={club}
+          settings={settings}
+          liveFundBalance={liveFundBalance}
+          toast={toast}
+          onClose={() => setRestockOpen(false)}
+          onDone={reload}
+        />
+      )}
 
       {canEdit && (
         <DashboardConfigDrawer

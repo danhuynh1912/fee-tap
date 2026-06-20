@@ -36,18 +36,6 @@ export function SpentBreakdownModal({ open, onClose, spentBreakdown, totalActual
                     <span className="text-slate-500">{t('dash_court_lump')}</span>
                     <span className="font-mono font-semibold text-slate-900">{fmtVND(b.courtCost)}</span>
                   </div>
-                  {b.loggedCount > 0 && (
-                    <div className="flex justify-between text-sm">
-                      <span className="text-slate-500">{t('dash_shuttle_logged', { n: b.loggedCount })}</span>
-                      <span className="font-mono font-semibold text-slate-900">{fmtVND(b.shuttleActual)}</span>
-                    </div>
-                  )}
-                  {b.estimatedCount > 0 && (
-                    <div className="flex justify-between text-sm">
-                      <span className="text-slate-500">{t('dash_shuttle_est', { n: b.estimatedCount })}</span>
-                      <span className="font-mono font-semibold text-slate-500">{fmtVND(b.shuttleEst)}</span>
-                    </div>
-                  )}
                 </>
               ) : (
                 <>
@@ -64,6 +52,18 @@ export function SpentBreakdownModal({ open, onClose, spentBreakdown, totalActual
                     </div>
                   )}
                 </>
+              )}
+              {b.shuttleActual > 0 && (
+                <div className="flex justify-between text-sm">
+                  <span className="text-slate-500">{t('dash_shuttle_actual', { n: b.loggedCount })}</span>
+                  <span className="font-mono font-semibold text-slate-900">{fmtVND(b.shuttleActual)}</span>
+                </div>
+              )}
+              {b.shuttleEst > 0 && (
+                <div className="flex justify-between text-sm">
+                  <span className="text-slate-500">{t('dash_shuttle_est', { n: b.estimatedCount })}</span>
+                  <span className="font-mono font-semibold text-slate-500">{fmtVND(b.shuttleEst)}</span>
+                </div>
               )}
             </div>
             <div className="flex justify-between mt-3 pt-3 border-t border-slate-200">

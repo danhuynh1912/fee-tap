@@ -181,64 +181,282 @@ export function inventoryStatus(shuttleStock, slots, shuttleConfig, now = new Da
   const tubesShort = Math.max(0, tubesNeededThisMonth - tubesLeft)
   const refillBoxes = tubesShort > 0 ? Math.ceil(tubesShort / BALLS_PER_BOX) : 0
   const refillCost = refillBoxes * num(shuttleConfig.price_per_box)
-  // cost = amount that still needs to be paid (0 if stock is sufficient)
   const cost = refillCost
 
   return { boxesLeft, sessionsLeft, estimatedEmptyDate, refillBoxes, refillCost, cost }
 }
 
 // ---------------------------------------------------------------------------
+// computeShuttleStock — event-sourced inventory projection
+//
+// currentStock  = SUM(delta) — confirmed from all transactions
+// projectedStock = currentStock − (unlogged past sessions × rate)
+//   where "unlogged past sessions" = scheduled sessions since the last restock
+//   that have neither a session_log entry nor a shuttle_transaction deduction
+//
+// Rate change (settle flow): caller inserts 'estimated' transactions for all
+// unlogged sessions at the OLD rate before saving the new rate. This locks
+// history so future projections start clean from the new rate.
+// ---------------------------------------------------------------------------
+
+function localDateStr(d) {
+  return `${d.getFullYear()}-${String(d.getMonth() + 1).padStart(2, '0')}-${String(d.getDate()).padStart(2, '0')}`
+}
+
+export function computeShuttleStock(shuttleTxns, slots, settings, logs, now = new Date()) {
+  const rate = num(settings.estimated_shuttlecocks) || 0
+  const allWeekdays = [...new Set(slots.flatMap((s) => (Array.isArray(s.weekdays) ? s.weekdays : [])))]
+  const currentStock = (shuttleTxns || []).reduce((sum, t) => sum + (t.delta || 0), 0)
+
+  if (!allWeekdays.length || rate === 0) {
+    return {
+      currentStock,
+      projectedStock: currentStock,
+      unloggedCount: 0,
+      sessionsLeft: rate > 0 ? Math.floor(currentStock / rate) : 0,
+      nextBuyDate: null,
+      totalBalls: Math.max(0, currentStock),
+    }
+  }
+
+  // Anchor = most recent restock or opening transaction
+  const restocks = (shuttleTxns || []).filter((t) => t.source === 'restock' || t.source === 'opening')
+  if (!restocks.length) {
+    // No restock anchor — use most recent adjustment as soft anchor.
+    // Deduct actual balls consumed in session logs after that adjustment date.
+    const adjustments = (shuttleTxns || []).filter((t) => t.source === 'adjustment' || t.source === 'estimated')
+    if (!adjustments.length) {
+      return { currentStock: 0, projectedStock: 0, unloggedCount: 0, sessionsLeft: 0, nextBuyDate: null, totalBalls: 0 }
+    }
+    const latestAdj = adjustments.reduce((a, b) => (a.created_at > b.created_at ? a : b))
+    const adjDate = new Date(latestAdj.created_at)
+    adjDate.setHours(0, 0, 0, 0)
+    const adjStr = localDateStr(adjDate)
+    const logsByDate = Object.fromEntries((logs || []).filter((l) => l.played_on >= adjStr).map((l) => [l.played_on, l]))
+    const wdSet = new Set(allWeekdays.map(Number))
+    const todayStr = localDateStr(now)
+    let used = 0
+    let unloggedCount = 0
+    const d = new Date(adjDate)
+    while (localDateStr(d) < todayStr) {
+      const ds = localDateStr(d)
+      if (wdSet.has(d.getDay())) {
+        const log = logsByDate[ds]
+        if (log) {
+          used += num(log.actual_shuttlecocks) || rate
+        } else {
+          used += rate
+          unloggedCount++
+        }
+      }
+      d.setDate(d.getDate() + 1)
+    }
+    const projectedStock = currentStock - used
+    return {
+      currentStock,
+      projectedStock,
+      unloggedCount,
+      sessionsLeft: projectedStock > 0 && rate > 0 ? Math.floor(projectedStock / rate) : 0,
+      nextBuyDate: projectedStock <= 0 ? localDateStr(now) : null,
+      totalBalls: Math.max(0, projectedStock),
+    }
+  }
+
+  const latestRestock = restocks.reduce((latest, t) => (t.created_at > latest.created_at ? t : latest))
+  const anchorDate = new Date(latestRestock.created_at)
+  anchorDate.setHours(0, 0, 0, 0)
+
+  const todayStr = localDateStr(now)
+
+  // Dates already settled via existing transactions or logs
+  const settledDates = new Set()
+  for (const t of shuttleTxns || []) {
+    if (t.session_date && t.source !== 'restock' && t.source !== 'opening') {
+      settledDates.add(t.session_date)
+    }
+  }
+  for (const l of logs || []) {
+    if (l.played_on) settledDates.add(l.played_on)
+  }
+
+  // Walk from anchor to yesterday, collect unlogged scheduled sessions
+  const wdSet = new Set(allWeekdays.map(Number))
+  const unloggedDates = []
+  const d = new Date(anchorDate)
+  while (true) {
+    const dateStr = localDateStr(d)
+    if (dateStr >= todayStr) break
+    if (wdSet.has(d.getDay()) && !settledDates.has(dateStr)) {
+      unloggedDates.push(dateStr)
+    }
+    d.setDate(d.getDate() + 1)
+  }
+
+  const projectedStock = currentStock - unloggedDates.length * rate
+
+  // Project forward: how many future sessions before stock runs out?
+  let stockLeft = projectedStock
+  let sessionsLeft = 0
+  let nextBuyDate = null
+
+  if (projectedStock <= 0) {
+    nextBuyDate = todayStr
+  } else {
+    const fd = new Date(now)
+    fd.setHours(0, 0, 0, 0)
+    let iters = 0
+    while (stockLeft > 0 && iters++ < 730) {
+      if (wdSet.has(fd.getDay())) {
+        stockLeft -= rate
+        if (stockLeft >= 0) sessionsLeft++
+        else if (!nextBuyDate) nextBuyDate = localDateStr(fd)
+      }
+      fd.setDate(fd.getDate() + 1)
+    }
+  }
+
+  return {
+    currentStock,
+    projectedStock,
+    unloggedCount: unloggedDates.length,
+    unloggedDates,
+    sessionsLeft,
+    nextBuyDate,
+    totalBalls: Math.max(0, projectedStock),
+  }
+}
+
+// ---------------------------------------------------------------------------
+// settleUnloggedSessions — called before saving a new estimated_shuttlecocks
+// value. Inserts 'estimated' deduction transactions for every past unlogged
+// session using the OLD rate, so history is frozen before the new rate applies.
+// Returns the list of inserted rows (or [] if nothing to settle).
+// ---------------------------------------------------------------------------
+
+export function buildSettleInserts(shuttleTxns, slots, logs, clubId, oldRate, now = new Date()) {
+  const allWeekdays = [...new Set(slots.flatMap((s) => (Array.isArray(s.weekdays) ? s.weekdays : [])))]
+  if (!allWeekdays.length || !oldRate) return []
+
+  const restocks = (shuttleTxns || []).filter((t) => t.source === 'restock' || t.source === 'opening')
+  if (!restocks.length) return []
+
+  const latestRestock = restocks.reduce((latest, t) => (t.created_at > latest.created_at ? t : latest))
+  const anchorDate = new Date(latestRestock.created_at)
+  anchorDate.setHours(0, 0, 0, 0)
+
+  const todayStr = localDateStr(now)
+  const settledDates = new Set()
+  for (const t of shuttleTxns || []) {
+    if (t.session_date && t.source !== 'restock' && t.source !== 'opening') {
+      settledDates.add(t.session_date)
+    }
+  }
+  for (const l of logs || []) {
+    if (l.played_on) settledDates.add(l.played_on)
+  }
+
+  const wdSet = new Set(allWeekdays.map(Number))
+  const inserts = []
+  const d = new Date(anchorDate)
+  while (true) {
+    const dateStr = localDateStr(d)
+    if (dateStr >= todayStr) break
+    if (wdSet.has(d.getDay()) && !settledDates.has(dateStr)) {
+      inserts.push({
+        club_id: clubId,
+        delta: -Math.round(oldRate),
+        source: 'estimated',
+        session_date: dateStr,
+        rate_used: oldRate,
+        note: 'Auto-settled before rate change',
+      })
+    }
+    d.setDate(d.getDate() + 1)
+  }
+  return inserts
+}
+
+// ---------------------------------------------------------------------------
+// buildUpcomingShuttleItems — shared helper used by computePaymentTimeline
+// and projectUpcomingCollections to generate shuttle purchase items.
+//
+// courtDeadlines: array of Date objects from court slots — used to set horizon.
+// Generates one item per shuttle cycle, up to (and including) the month of
+// the furthest court deadline, then always at least 1 item.
+// ---------------------------------------------------------------------------
+
+function buildUpcomingShuttleItems(slots, settings, courtDeadlines, now = new Date()) {
+  if (!num(settings.price_per_box) || !num(settings.estimated_shuttlecocks)) return []
+
+  const rate = num(settings.estimated_shuttlecocks)
+  const pricePerBox = num(settings.price_per_box)
+  const n = Math.max(1, Math.round(num(settings.shuttle_cycle_months)) || 1)
+  const anchor = Math.max(1, Math.min(12, Math.round(num(settings.shuttle_cycle_start_month, 1)))) - 1
+  const here = mIdx(now.getFullYear(), now.getMonth())
+  const off = n === 1 ? 0 : (((now.getMonth() - anchor) % n) + n) % n
+  const allWeekdays = [...new Set(slots.flatMap((s) => Array.isArray(s.weekdays) ? s.weekdays : []))]
+
+  const furthest = courtDeadlines.reduce((max, d) => d > max ? d : max, now)
+  // Horizon = end of the month of the furthest court deadline
+  // (shuttle deadline Jul 31 must not be cut when court deadline is Jul 25)
+  const horizonEnd = new Date(furthest.getFullYear(), furthest.getMonth() + 1, 0)
+  const msPerDay = 86400000
+
+  const items = []
+  let i = 1
+  while (i <= 24) {
+    const period = makePeriod(n === 1 ? 'month' : 'cycle', here - off + n * i, n)
+    const { year: sy, month0: sm0 } = period.months[0]
+    const deadline = new Date(sy, sm0, 0) // last day of month before period
+    if (deadline > horizonEnd) break
+    const totalSessions = allWeekdays.length ? sessionsForPeriod(allWeekdays, period).total : 0
+    if (totalSessions > 0) {
+      const boxes = Math.ceil((totalSessions * rate) / BALLS_PER_BOX)
+      const daysUntil = Math.ceil((deadline - now) / msPerDay)
+      items.push({ period, deadline, daysUntil, totalSessions, boxes, cost: boxes * pricePerBox })
+    }
+    i++
+  }
+  // Always at least 1
+  if (!items.length) {
+    const period = makePeriod(n === 1 ? 'month' : 'cycle', here - off + n, n)
+    const { year: sy, month0: sm0 } = period.months[0]
+    const deadline = new Date(sy, sm0, 0)
+    const totalSessions = allWeekdays.length ? sessionsForPeriod(allWeekdays, period).total : 0
+    if (totalSessions > 0) {
+      const boxes = Math.ceil((totalSessions * rate) / BALLS_PER_BOX)
+      const daysUntil = Math.ceil((deadline - now) / msPerDay)
+      items.push({ period, deadline, daysUntil, totalSessions, boxes, cost: boxes * pricePerBox })
+    }
+  }
+  return items
+}
+
+// ---------------------------------------------------------------------------
 // computePaymentTimeline — aggregates all slots into running + upcoming
 // ---------------------------------------------------------------------------
 
-export function computePaymentTimeline(slots, settings, memberCount, now = new Date()) {
+export function computePaymentTimeline(slots, settings, memberCount, committedCount = null, now = new Date()) {
   if (!slots || !slots.length) {
-    return { running: [], upcoming: [], shuttleThisMonth: null, totalUpcomingPerMember: 0, effectiveMemberCount: memberCount }
+    return { running: [], upcoming: [], nextShuttleItem: null, totalUpcomingPerMember: 0, effectiveMemberCount: memberCount }
   }
 
   const slotResults = slots.map((slot) => computeSlot(slot, now))
   const running = [...slotResults]
   const upcoming = slotResults.filter((r) => r.nextDeadline).sort((a, b) => a.nextDeadline - b.nextDeadline)
 
-  const hasEquipment = settings._hasEquipment !== false
-  let shuttleThisMonth = null
-  if (hasEquipment) {
-    shuttleThisMonth =
-      settings.shuttle_mode === 'inventory'
-        ? { mode: 'inventory', ...inventoryStatus(settings.shuttle_stock, slots, settings, now) }
-        : { mode: 'estimate', ...estimateShuttle(slots, settings, now) }
-  }
-
-  const effectiveMemberCount = resolveFeeMemberCount(settings, memberCount)
+  const effectiveMemberCount = resolveFeeMemberCount(settings, memberCount, committedCount)
   const soonCourtCost = upcoming.reduce((sum, r) => sum + r.nextCourtCost, 0)
 
-  // Next shuttle period item — independent from court cycle
-  let nextShuttleItem = null
-  let soonShuttleCost = 0
-  if (hasEquipment && settings.shuttle_mode !== 'inventory') {
-    const n = Math.max(1, Math.round(num(settings.shuttle_cycle_months)) || 1)
-    const here = mIdx(now.getFullYear(), now.getMonth())
-    const anchor = Math.max(1, Math.min(12, Math.round(num(settings.shuttle_cycle_start_month, 1)))) - 1
-    const off = n === 1 ? 0 : (((now.getMonth() - anchor) % n) + n) % n
-    const nextShuttlePeriod = makePeriod(n === 1 ? 'month' : 'cycle', here - off + n, n)
-    const sessions = slots.reduce((sum, slot) => {
-      return sum + sessionsForPeriod(Array.isArray(slot.weekdays) ? slot.weekdays : [], nextShuttlePeriod).total
-    }, 0)
-    const boxes = Math.ceil((sessions * num(settings.estimated_shuttlecocks)) / BALLS_PER_BOX)
-    const cost = boxes * num(settings.price_per_box)
-    soonShuttleCost = cost
-    if (cost > 0) {
-      // deadline = last day of the CURRENT shuttle cycle (collect before next period starts)
-      const currentEnd = fromIdx(here - off + n - 1)
-      const shuttleDeadline = new Date(currentEnd.year, currentEnd.month0 + 1, 0)
-      const msPerDay = 86400000
-      const daysUntil = Math.ceil((shuttleDeadline - now) / msPerDay)
-      nextShuttleItem = { period: nextShuttlePeriod, sessions, boxes, cost, deadline: shuttleDeadline, daysUntil }
-    }
-  }
+  const hasEquip = settings._hasEquipment !== false
+  const upcomingShuttleItems = hasEquip
+    ? buildUpcomingShuttleItems(slots, settings, upcoming.map((r) => r.nextDeadline).filter(Boolean), now)
+    : []
+
+  const soonShuttleCost = upcomingShuttleItems[0]?.cost ?? 0
   const totalUpcomingPerMember = effectiveMemberCount > 0 ? Math.ceil((soonCourtCost + soonShuttleCost) / effectiveMemberCount) : 0
 
-  return { running, upcoming, shuttleThisMonth, nextShuttleItem, totalUpcomingPerMember, soonCourtCost, soonShuttleCost, effectiveMemberCount }
+  return { running, upcoming, upcomingShuttleItems, totalUpcomingPerMember, soonCourtCost, soonShuttleCost, effectiveMemberCount }
 }
 
 // ---------------------------------------------------------------------------
@@ -256,7 +474,6 @@ function advancePeriod(period, n) {
 
 export function projectUpcomingCollections(slots, settings, now = new Date()) {
   if (!slots || !slots.length) return []
-  const hasEquipment = settings._hasEquipment !== false && settings.shuttle_mode !== 'inventory'
 
   const slotStreams = slots.map((slot) => {
     const n = Math.max(1, Math.round(num(slot.cycle_months)) || 1)
@@ -265,26 +482,9 @@ export function projectUpcomingCollections(slots, settings, now = new Date()) {
     return { kind: 'court', slot, period: next, n, weekdays }
   })
 
-  let shuttleStream = null
-  if (hasEquipment) {
-    const n = Math.max(1, Math.round(num(settings.shuttle_cycle_months)) || 1)
-    const here = mIdx(now.getFullYear(), now.getMonth())
-    const anchor = Math.max(1, Math.min(12, Math.round(num(settings.shuttle_cycle_start_month, 1)))) - 1
-    const off = n === 1 ? 0 : (((now.getMonth() - anchor) % n) + n) % n
-    const nextPeriod = makePeriod(n === 1 ? 'month' : 'cycle', here - off + n, n)
-    shuttleStream = { kind: 'shuttle', period: nextPeriod, n }
-  }
+  if (!slotStreams.length) return []
 
-  const streams = [...slotStreams, ...(shuttleStream ? [shuttleStream] : [])]
-  if (!streams.length) return []
-
-  const shuttleDeadlineFor = (period) => {
-    const { year, month0 } = fromIdx(period.startIdx - 1)
-    return new Date(year, month0 + 1, 0)
-  }
-
-  // Each stream must appear at least once — the list must cover up to the furthest first occurrence
-  const firstDeadlines = streams.map((s) => (s.kind === 'court' ? slotCollectionDeadline(s.slot, s.period) : shuttleDeadlineFor(s.period)))
+  const firstDeadlines = slotStreams.map((s) => slotCollectionDeadline(s.slot, s.period))
   const validFirstDeadlines = firstDeadlines.filter(Boolean)
   if (!validFirstDeadlines.length) return []
   const monthKey = (d) => d.getFullYear() * 12 + d.getMonth()
@@ -292,37 +492,40 @@ export function projectUpcomingCollections(slots, settings, now = new Date()) {
 
   const groups = []
   const MAX_ITER = 36
-  for (const s of streams) {
+  for (const s of slotStreams) {
     let period = s.period
     let guard = 0
     while (guard++ < MAX_ITER) {
-      let deadline, cost, sessions
-      if (s.kind === 'court') {
-        deadline = slotCollectionDeadline(s.slot, period)
-        sessions = sessionsForPeriod(s.weekdays, period).total
-        cost = num(s.slot.price_per_hour) * num(s.slot.hours_per_session) * sessions
-      } else {
-        deadline = shuttleDeadlineFor(period)
-        sessions = slots.reduce((sum, slot) => sum + sessionsForPeriod(Array.isArray(slot.weekdays) ? slot.weekdays : [], period).total, 0)
-        const boxes = Math.ceil((sessions * num(settings.estimated_shuttlecocks)) / BALLS_PER_BOX)
-        cost = boxes * num(settings.price_per_box)
-      }
+      const deadline = slotCollectionDeadline(s.slot, period)
+      const sessions = sessionsForPeriod(s.weekdays, period).total
+      const cost = num(s.slot.price_per_hour) * num(s.slot.hours_per_session) * sessions
       if (!deadline || monthKey(deadline) > thresholdKey) break
 
       const key = `${deadline.getFullYear()}-${deadline.getMonth()}`
       let group = groups.find((g) => g.key === key)
       if (!group) {
-        group = { key, deadline, court: [], shuttle: null }
+        group = { key, deadline, court: [] }
         groups.push(group)
       }
       if (deadline < group.deadline) group.deadline = deadline
-      if (s.kind === 'court') {
-        group.court.push({ slot: s.slot, cost, sessions, period })
-      } else {
-        group.shuttle = { cost, sessions, period }
-      }
+      group.court.push({ slot: s.slot, cost, sessions, period })
       period = advancePeriod(period, s.n)
     }
+  }
+
+  // Add shuttle stream — same horizon/merge logic as computePaymentTimeline
+  // Use shared helper — same logic as computePaymentTimeline
+  const courtDeadlines = groups.map((g) => g.deadline).filter(Boolean)
+  const shuttleItems = buildUpcomingShuttleItems(slots, settings, courtDeadlines, now)
+  for (const si of shuttleItems) {
+    const key = `${si.deadline.getFullYear()}-${si.deadline.getMonth()}`
+    let group = groups.find((g) => g.key === key)
+    if (!group) {
+      group = { key, deadline: si.deadline, court: [] }
+      groups.push(group)
+    }
+    if (si.deadline < group.deadline) group.deadline = si.deadline
+    group.shuttle = si
   }
 
   groups.sort((a, b) => a.deadline - b.deadline)

@@ -9,6 +9,7 @@ export function useClubData(clubId) {
   const [members, setMembers] = useState([])
   const [logs, setLogs] = useState([])
   const [fundTxns, setFundTxns] = useState([])
+  const [shuttleTxns, setShuttleTxns] = useState([])
   const [collections, setCollections] = useState([])
   const [memberPayments, setMemberPayments] = useState([])
   const [payosConfig, setPayosConfig] = useState(null)
@@ -50,6 +51,11 @@ export function useClubData(clubId) {
   const fetchFundTxns = useCallback(async () => {
     const { data: ft } = await supabase.from('fund_transactions').select('*').eq('club_id', clubId).order('created_at', { ascending: false })
     setFundTxns(ft || [])
+  }, [clubId])
+
+  const fetchShuttleTxns = useCallback(async () => {
+    const { data: st } = await supabase.from('shuttle_transactions').select('*').eq('club_id', clubId).order('created_at', { ascending: true })
+    setShuttleTxns(st || [])
   }, [clubId])
 
   const fetchCollections = useCallback(async () => {
@@ -97,12 +103,13 @@ export function useClubData(clubId) {
 
   const loadAll = useCallback(async () => {
     if (!clubId) return
-    const [{ data: s }, { data: sl }, { data: m }, { data: lg }, { data: ft }, { data: cols }, { data: mpr }, { data: pc }] = await Promise.all([
+    const [{ data: s }, { data: sl }, { data: m }, { data: lg }, { data: ft }, { data: st }, { data: cols }, { data: mpr }, { data: pc }] = await Promise.all([
       supabase.from('club_settings').select('*').eq('club_id', clubId).maybeSingle(),
       supabase.from('court_slots').select('*').eq('club_id', clubId).order('sort_order'),
       supabase.from('club_members').select('*').eq('club_id', clubId).order('created_at', { ascending: true }),
       supabase.from('session_logs').select('*').eq('club_id', clubId).order('played_on', { ascending: false }),
       supabase.from('fund_transactions').select('*').eq('club_id', clubId).order('created_at', { ascending: false }),
+      supabase.from('shuttle_transactions').select('*').eq('club_id', clubId).order('created_at', { ascending: true }),
       supabase.from('payment_collections').select('*').eq('club_id', clubId).order('period_start', { ascending: false }),
       supabase.from('member_payment_records').select('*').eq('club_id', clubId),
       // SECURITY DEFINER fn — safe for members to call, never exposes API keys
@@ -135,6 +142,7 @@ export function useClubData(clubId) {
     setMembers((m || []).map((r) => ({ ...r, avatar_url: profileMap[r.user_id]?.avatar_url || null })))
     setLogs(lg || [])
     setFundTxns(ft || [])
+    setShuttleTxns(st || [])
     setCollections(cols || [])
     setMemberPayments(mpr || [])
     setPayosConfig(pc === true ? true : null)
@@ -182,6 +190,7 @@ export function useClubData(clubId) {
       .on('postgres_changes', { event: '*', schema: 'public', table: 'club_members', filter: `club_id=eq.${clubId}` }, fetchMembers)
       .on('postgres_changes', { event: '*', schema: 'public', table: 'session_logs', filter: `club_id=eq.${clubId}` }, fetchLogs)
       .on('postgres_changes', { event: '*', schema: 'public', table: 'fund_transactions', filter: `club_id=eq.${clubId}` }, fetchFundTxns)
+      .on('postgres_changes', { event: '*', schema: 'public', table: 'shuttle_transactions', filter: `club_id=eq.${clubId}` }, fetchShuttleTxns)
       .on('postgres_changes', { event: '*', schema: 'public', table: 'payment_collections', filter: `club_id=eq.${clubId}` }, fetchCollections)
       .on('postgres_changes', { event: '*', schema: 'public', table: 'member_payment_records', filter: `club_id=eq.${clubId}` }, fetchMemberPayments)
       .on('postgres_changes', { event: '*', schema: 'public', table: 'votes', filter: `club_id=eq.${clubId}` }, fetchPollTally)
@@ -190,7 +199,7 @@ export function useClubData(clubId) {
     return () => {
       supabase.removeChannel(ch)
     }
-  }, [clubId, loadAll, fetchSettings, fetchSlots, fetchMembers, fetchLogs, fetchFundTxns, fetchCollections, fetchMemberPayments, fetchPollTally])
+  }, [clubId, loadAll, fetchSettings, fetchSlots, fetchMembers, fetchLogs, fetchFundTxns, fetchShuttleTxns, fetchCollections, fetchMemberPayments, fetchPollTally])
 
   return {
     settings,
@@ -200,6 +209,7 @@ export function useClubData(clubId) {
     members,
     logs,
     fundTxns,
+    shuttleTxns,
     collections,
     memberPayments,
     payosConfig,
