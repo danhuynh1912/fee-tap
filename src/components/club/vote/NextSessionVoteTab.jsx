@@ -10,7 +10,7 @@ import { VotePanel } from './VotePanel'
 import { ResultsPanel } from './ResultsPanel'
 import { ProxyVotePanel } from './ProxyVotePanel'
 
-export function NextSessionVoteTab({ club, settings, members, canEdit, user, toast }) {
+export function NextSessionVoteTab({ club, settings, members, canEdit, user, toast, pickerProps }) {
   const { t } = useTranslation()
   const { vote, previousVote, previousCount, responses, loading, reload } = useNextVote(club.id)
   const countdown = useCountdown(vote?.deadline)
@@ -90,7 +90,7 @@ export function NextSessionVoteTab({ club, settings, members, canEdit, user, toa
         </div>
       )}
 
-      <div className="grid gap-6 lg:grid-cols-5">
+      <div className="sm:grid gap-6 sm:space-y-0 space-y-6 lg:grid-cols-5">
         <div className="space-y-6 lg:col-span-2">
           {/* Admin form — always shown to admin (to create or manage) */}
           {canEdit && (
@@ -117,6 +117,7 @@ export function NextSessionVoteTab({ club, settings, members, canEdit, user, toa
               userName={userName}
               toast={toast}
               onChanged={reload}
+              pickerProps={pickerProps}
             />
           )}
 

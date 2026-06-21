@@ -1,5 +1,5 @@
 import { useState, useEffect } from 'react'
-import { Check, X, Plus, Minus, Shield, Lock, Loader2 } from 'lucide-react'
+import { Check, X, Plus, Minus, Shield, Lock, Loader2, ChevronDown } from 'lucide-react'
 import { useTranslation } from 'react-i18next'
 import { supabase } from '../../../lib/supabase'
 import { cx } from '../../../lib/utils'
@@ -10,7 +10,8 @@ import { inputCls } from '../../ui/Field'
 
 // Identity is the authenticated FeeTap user — no localStorage needed.
 // hideSlots: true for cycle votes (no slot counting, no guest section)
-export function VotePanel({ vote, closed, filledSlots, myResponse, userId, userName, toast, onChanged, hideSlots = false }) {
+// pickerProps: optional { members, selectedId, onSelect } for public (unauthenticated) vote page
+export function VotePanel({ vote, closed, filledSlots, myResponse, userId, userName, toast, onChanged, hideSlots = false, pickerProps }) {
   const { t } = useTranslation()
   const [attending, setAttending] = useState(myResponse ? myResponse.attending : null)
   const [withGuests, setWithGuests] = useState((myResponse?.guests || 0) > 0)
@@ -31,6 +32,11 @@ export function VotePanel({ vote, closed, filledSlots, myResponse, userId, userN
       setGuestMale(gm)
       setGuestFemale(gf)
       setWithGuests(gm + gf > 0)
+    } else {
+      setAttending(null)
+      setGuestMale(0)
+      setGuestFemale(0)
+      setWithGuests(false)
     }
   }, [myResponse?.id, myResponse?.attending, myResponse?.guest_male_count, myResponse?.guest_female_count])
 
@@ -119,20 +125,43 @@ export function VotePanel({ vote, closed, filledSlots, myResponse, userId, userN
   return (
     <div className="rounded-3xl border border-slate-100 bg-white/80 p-7 backdrop-blur-xl">
       <h3 className="text-lg font-bold text-slate-900">{hideSlots ? t('cycle_vote_register_q') : t('vote_will_you_play')}</h3>
-      <p className="mt-1 text-sm text-slate-500">
-        {userName ? (
-          <>
-            {t('vote_voting_as')} <strong className="text-slate-700">{userName}</strong>
-          </>
-        ) : (
-          t('vote_no_identity')
-        )}
-      </p>
+      {!pickerProps && (
+        <p className="mt-1 text-sm text-slate-500">
+          {userName ? (
+            <>{t('vote_voting_as')} <strong className="text-slate-700">{userName}</strong></>
+          ) : (
+            t('vote_no_identity')
+          )}
+        </p>
+      )}
+
+      {pickerProps && (
+        <div className="mt-4 space-y-1">
+          <label className="text-xs font-semibold text-slate-500">{t('vote_who_are_you')}</label>
+          <div className="relative">
+            <select
+              value={pickerProps.selectedId}
+              onChange={(e) => pickerProps.onSelect(e.target.value)}
+              className={cx(
+                'w-full appearance-none rounded-xl border border-slate-200 bg-slate-50 py-2 pl-3 pr-8 text-sm font-semibold text-slate-900',
+                'focus:border-lime-400 focus:outline-none focus:ring-0',
+                !pickerProps.selectedId && 'text-slate-400'
+              )}
+            >
+              <option value="">{t('vote_select_member')}</option>
+              {pickerProps.members.map((m) => (
+                <option key={m.id} value={m.id}>{m.name}</option>
+              ))}
+            </select>
+            <ChevronDown className="pointer-events-none absolute right-2.5 top-1/2 h-4 w-4 -translate-y-1/2 text-slate-400" />
+          </div>
+        </div>
+      )}
 
       <div className="mt-5 grid grid-cols-2 gap-3">
         <button
           onClick={() => choose(true)}
-          disabled={saving || yesFull}
+          disabled={saving || yesFull || !userId}
           className={cx(
             'group flex items-center justify-center gap-2.5 rounded-2xl border-2 px-4 py-3 transition disabled:opacity-50',
             'sm:flex-col sm:items-start sm:p-5',
@@ -153,7 +182,7 @@ export function VotePanel({ vote, closed, filledSlots, myResponse, userId, userN
 
         <button
           onClick={() => choose(false)}
-          disabled={saving}
+          disabled={saving || !userId}
           className={cx(
             'group flex items-center justify-center gap-2.5 rounded-2xl border-2 px-4 py-3 transition disabled:opacity-50',
             'sm:flex-col sm:items-start sm:p-5',

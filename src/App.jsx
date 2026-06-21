@@ -14,6 +14,7 @@ import { WelcomeModal } from './pages/WelcomeModal'
 
 const OnboardingPage = lazy(() => import('./pages/OnboardingPage').then((m) => ({ default: m.OnboardingPage })))
 const ClubLayout = lazy(() => import('./pages/club/ClubLayout').then((m) => ({ default: m.ClubLayout })))
+const PublicVotePage = lazy(() => import('./pages/club/PublicVotePage').then((m) => ({ default: m.PublicVotePage })))
 
 function PageLoader() {
   const { t } = useTranslation()
@@ -83,6 +84,8 @@ export default function App() {
 
   const loading = !authReady || (session && resolving)
 
+  const isPublicVote = !session && !!matchPath('/club/:id/vote', path)
+
   let body
   if (loading) {
     body = (
@@ -93,8 +96,13 @@ export default function App() {
       </div>
     )
   } else if (!session) {
+    const voteMatch = matchPath('/club/:id/vote', path)
     body = joinClubId ? (
       <PreJoinPage clubId={joinClubId} onGoogle={signInGoogle} busy={signinBusy} />
+    ) : voteMatch ? (
+      <Suspense fallback={<PageLoader />}>
+        <PublicVotePage clubId={voteMatch.params.id} />
+      </Suspense>
     ) : (
       <SignInPage onGoogle={signInGoogle} busy={signinBusy} />
     )
@@ -171,13 +179,15 @@ export default function App() {
 
   return (
     <div className="flex min-h-screen flex-col bg-slate-50/50 text-slate-900 antialiased">
-      <Nav
-        session={session}
-        myClubs={myClubs}
-        activeClub={activeClub}
-        onSignOut={signOut}
-        onSelectClub={(c) => (c === 'new' ? navigate('/new') : navigate(`/club/${c.id}`))}
-      />
+      {!isPublicVote && (
+        <Nav
+          session={session}
+          myClubs={myClubs}
+          activeClub={activeClub}
+          onSignOut={signOut}
+          onSelectClub={(c) => (c === 'new' ? navigate('/new') : navigate(`/club/${c.id}`))}
+        />
+      )}
       {!isConfigured && <ConfigWarning />}
       {body}
       {welcomeClubId && <WelcomeModal clubId={welcomeClubId} myClubs={myClubs} onClose={() => setWelcomeClubId(null)} />}

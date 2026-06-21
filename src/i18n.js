@@ -1,5 +1,5 @@
 /* ============================================================================
- *  FEETAP — i18n (English + Vietnamese)
+ *  SPOFUND — i18n (English + Vietnamese)
  *  react-i18next setup. The whole UI reads from these dictionaries via the
  *  useTranslation() hook, so the language toggle in the nav re-renders live.
  *  Persisted choice: localStorage `feetap_lang`.
@@ -381,7 +381,7 @@ const en = {
   vote_stat_total: 'Total slots',
   vote_will_you_play: 'Will you play?',
   vote_voting_as: 'Voting as',
-  vote_no_identity: 'Sign in to vote.',
+  vote_no_identity: 'Select your name above to vote.',
   vote_yes: 'Yes',
   vote_no: 'No',
   vote_count_me_in: 'Count me in',
@@ -404,6 +404,10 @@ const en = {
   vote_not_attending_answer: 'Not attending',
   vote_closed_hint: 'The deadline has passed. Check the results.',
   vote_name_ph: 'Your name',
+  vote_who_are_you: 'You are:',
+  vote_select_member: 'Select your name…',
+  vote_public_hint: 'Select your name to vote. You can change it at any time.',
+  vote_public_club_not_found: 'Club not found.',
 
   // ── session log — vote linking & guests ──────────────────────────────────
   log_create_vote: 'Create vote for next session',
@@ -940,7 +944,7 @@ const vi = {
   vote_stat_total: 'Tổng slot',
   vote_will_you_play: 'Bạn có đánh không?',
   vote_voting_as: 'Đang vote với tư cách',
-  vote_no_identity: 'Đăng nhập để vote.',
+  vote_no_identity: 'Chọn tên của bạn ở trên để vote.',
   vote_yes: 'Có',
   vote_no: 'Không',
   vote_count_me_in: 'Cho tôi vào',
@@ -963,6 +967,10 @@ const vi = {
   vote_not_attending_answer: 'Không tham gia',
   vote_closed_hint: 'Đã hết deadline. Xem kết quả bên phải.',
   vote_name_ph: 'Tên của bạn',
+  vote_who_are_you: 'Bạn là:',
+  vote_select_member: 'Chọn tên của bạn…',
+  vote_public_hint: 'Chọn tên của bạn để vote. Bạn có thể đổi bất cứ lúc nào.',
+  vote_public_club_not_found: 'Không tìm thấy câu lạc bộ.',
 
   // ── session log — vote linking & guests ──────────────────────────────────
   log_create_vote: 'Tạo vote cho buổi kế tiếp',
@@ -1136,7 +1144,7 @@ const vi = {
   set_cycle_months_unit: 'tháng',
 }
 
-const saved = (typeof localStorage !== 'undefined' && localStorage.getItem('feetap_lang')) || 'en'
+const saved = (typeof localStorage !== 'undefined' && localStorage.getItem('feetap_lang')) || 'vi'
 
 i18n.use(initReactI18next).init({
   resources: {

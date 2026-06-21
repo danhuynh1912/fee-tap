@@ -10,7 +10,7 @@ import { AdminCycleVoteForm } from './AdminCycleVoteForm'
 import { VotePanel } from './VotePanel'
 import { CycleResultsPanel } from './CycleResultsPanel'
 
-export function CycleVoteTab({ club, members, settings, slots, canEdit, user, toast, upcomingFeeInfo }) {
+export function CycleVoteTab({ club, members, settings, slots, canEdit, user, toast, upcomingFeeInfo, pickerProps }) {
   const { t, i18n } = useTranslation()
   const { vote, responses, loading, reload } = useCycleVote(club.id)
   const countdown = useCountdown(vote?.deadline)
@@ -83,7 +83,7 @@ export function CycleVoteTab({ club, members, settings, slots, canEdit, user, to
         </div>
       )}
 
-      <div className="grid gap-6 lg:grid-cols-5">
+      <div className="sm:grid gap-6 sm:space-y-0 space-y-6 lg:grid-cols-5">
         <div className="space-y-6 lg:col-span-2">
           {canEdit && (
             <AdminCycleVoteForm
@@ -108,6 +108,7 @@ export function CycleVoteTab({ club, members, settings, slots, canEdit, user, to
               toast={toast}
               onChanged={reload}
               hideSlots
+              pickerProps={pickerProps}
             />
           )}
 

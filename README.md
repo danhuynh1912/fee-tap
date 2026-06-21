@@ -1,4 +1,4 @@
-# 💸 FEETAP — Fee + Tap
+# 💸 SPOFUND
 
 **The financial forecasting & fund-management engine for sports clubs.**
 
