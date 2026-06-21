@@ -75,7 +75,7 @@ export function CycleResultsPanel({ responses, members, meId }) {
       {rows.length === 0 ? (
         <p className="text-sm text-slate-400 text-center py-6">{t('cycle_vote_no_responses')}</p>
       ) : (
-        <div className="space-y-2 max-h-72 overflow-y-auto">
+        <div className="space-y-2 overflow-y-auto">
           {rows.map(({ member, attending }) => (
             <MemberVoteRow
               key={member.id}
