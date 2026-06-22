@@ -86,13 +86,17 @@ export default function App() {
   const loading = !authReady || (session && resolving)
 
   const tgVoteMatch = matchPath('/tg/vote/:id', path)
+  // When opened via t.me/bot/spofund?startapp=<voteId>, Telegram passes start_param
+  const tgStartParam = window.Telegram?.WebApp?.initDataUnsafe?.start_param
   const isPublicVote = !session && !!matchPath('/club/:id/vote', path)
 
   // Telegram Mini App route — fully standalone, no auth, no nav
-  if (tgVoteMatch) {
+  // Supports both /tg/vote/:id URL and t.me/bot/app?startapp=<voteId> direct link
+  const tgVoteId = tgVoteMatch?.params?.id || tgStartParam
+  if (tgVoteId) {
     return (
       <Suspense fallback={<div className="min-h-screen flex items-center justify-center"><Loader2 className="h-6 w-6 animate-spin text-slate-300" /></div>}>
-        <TgVotePage voteId={tgVoteMatch.params.id} />
+        <TgVotePage voteId={tgVoteId} />
       </Suspense>
     )
   }
