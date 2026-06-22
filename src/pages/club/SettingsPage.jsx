@@ -10,6 +10,7 @@ import { CourtSlotModal } from '../../components/club/CourtSlotModal'
 import { ShuttleTubeWidget } from '../../components/club/ShuttleTubeWidget'
 import { CourtSlotCard } from '../../components/club/CourtSlotCard'
 import { PayOSSettings } from '../../components/club/PayOSSettings'
+import { TelegramSettings } from '../../components/club/TelegramSettings'
 import { UpcomingCollectionsList } from '../../components/club/UpcomingCollectionsList'
 import { MembersPanel } from './MembersPanel'
 import { Segmented } from '../../components/ui/Segmented'
@@ -527,6 +528,8 @@ export function SettingsPage({ toast }) {
           />
 
           <PayOSSettings club={club} plan={plan} payosConfig={payosConfig} canEdit={canEdit} onChanged={reload} toast={toast} onUnlock={() => {}} />
+
+          <TelegramSettings club={club} canEdit={canEdit} currentUserId={currentUserId} onChanged={reload} toast={toast} />
         </div>
       </div>
 

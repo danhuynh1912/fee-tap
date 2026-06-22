@@ -15,6 +15,7 @@ import { WelcomeModal } from './pages/WelcomeModal'
 const OnboardingPage = lazy(() => import('./pages/OnboardingPage').then((m) => ({ default: m.OnboardingPage })))
 const ClubLayout = lazy(() => import('./pages/club/ClubLayout').then((m) => ({ default: m.ClubLayout })))
 const PublicVotePage = lazy(() => import('./pages/club/PublicVotePage').then((m) => ({ default: m.PublicVotePage })))
+const TgVotePage = lazy(() => import('./pages/tg/TgVotePage').then((m) => ({ default: m.TgVotePage })))
 
 function PageLoader() {
   const { t } = useTranslation()
@@ -84,7 +85,17 @@ export default function App() {
 
   const loading = !authReady || (session && resolving)
 
+  const tgVoteMatch = matchPath('/tg/vote/:id', path)
   const isPublicVote = !session && !!matchPath('/club/:id/vote', path)
+
+  // Telegram Mini App route — fully standalone, no auth, no nav
+  if (tgVoteMatch) {
+    return (
+      <Suspense fallback={<div className="min-h-screen flex items-center justify-center"><Loader2 className="h-6 w-6 animate-spin text-slate-300" /></div>}>
+        <TgVotePage voteId={tgVoteMatch.params.id} />
+      </Suspense>
+    )
+  }
 
   let body
   if (loading) {
