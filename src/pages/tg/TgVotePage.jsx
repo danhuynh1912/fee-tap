@@ -47,7 +47,9 @@ export function TgVotePage({ voteId }) {
   const [members, setMembers]   = useState([])
   const [responses, setResponses] = useState([])
   const [selectedId, setSelectedId] = useState('')
+  const [guests, setGuests]         = useState(0)
   const [myResponse, setMyResponse] = useState(null)   // 'yes' | 'no' | null
+  const [myGuests, setMyGuests]     = useState(0)
   const [submitting, setSubmitting] = useState(false)
   const [done, setDone]         = useState(false)
   const [loading, setLoading]   = useState(true)
@@ -90,6 +92,7 @@ export function TgVotePage({ voteId }) {
       const mine = (r ?? []).find(x => x.anonymous_user_id === anonId.current)
       if (mine) {
         setMyResponse(mine.attending ? 'yes' : 'no')
+        setMyGuests(mine.guests ?? 0)
         setDone(true)
       }
 
@@ -115,21 +118,23 @@ export function TgVotePage({ voteId }) {
 
     setSubmitting(true)
     try {
+      const guestCount = attending ? guests : 0
       const { error } = await supabase.from('responses').upsert({
         vote_id:           voteId,
         anonymous_user_id: anonId.current,
         name:              member.name,
         attending,
-        guests:            0,
+        guests:            guestCount,
         voted_via:         'telegram',
       }, { onConflict: 'vote_id,anonymous_user_id' })
       if (error) throw error
 
       setMyResponse(attending ? 'yes' : 'no')
+      setMyGuests(guestCount)
       setDone(true)
       // Refresh responses
       const { data: r } = await supabase
-        .from('responses').select('anonymous_user_id, name, attending').eq('vote_id', voteId)
+        .from('responses').select('anonymous_user_id, name, attending, guests').eq('vote_id', voteId)
       setResponses(r ?? [])
 
       // Close mini app after short delay
@@ -156,6 +161,7 @@ export function TgVotePage({ voteId }) {
 
   const attending = responses.filter(r => r.attending)
   const notAttending = responses.filter(r => !r.attending)
+  const totalAttending = attending.reduce((sum, r) => sum + 1 + (r.guests ?? 0), 0)
   const isClosed = vote.is_closed || new Date() > new Date(vote.deadline)
   const sport = club?.sport_type === 'football' ? '⚽' : '🏸'
 
@@ -182,7 +188,7 @@ export function TgVotePage({ voteId }) {
         {/* Tally bar */}
         <div className="mt-5 flex items-center gap-3">
           <span className="flex items-center gap-1.5 text-sm font-bold text-lime-400">
-            <CheckCircle2 className="h-4 w-4" /> {attending.length} tham gia
+            <CheckCircle2 className="h-4 w-4" /> {totalAttending} tham gia
           </span>
           <span className="text-slate-600">·</span>
           <span className="flex items-center gap-1.5 text-sm font-medium text-slate-400">
@@ -217,7 +223,9 @@ export function TgVotePage({ voteId }) {
               : <XCircle className="h-8 w-8 text-red-400 mx-auto mb-2" />
             }
             <p className="font-bold text-slate-800">
-              {myResponse === 'yes' ? '✅ Bạn đã xác nhận tham gia!' : '❌ Bạn đã báo vắng'}
+              {myResponse === 'yes'
+                ? `✅ Tham gia${myGuests > 0 ? ` (+${myGuests} khách)` : '!'}`
+                : '❌ Bạn đã báo vắng'}
             </p>
             <button
               className="mt-3 text-xs text-slate-400 underline"
@@ -245,6 +253,27 @@ export function TgVotePage({ voteId }) {
                 ))}
               </select>
             </div>
+
+            {/* Guests input — chỉ hiện khi đã chọn tên */}
+            {selectedId && (
+              <div className="animate-fade-in">
+                <label className="block text-xs font-semibold text-slate-500 mb-2 uppercase tracking-wide">
+                  Dẫn theo khách? (tuỳ chọn)
+                </label>
+                <div className="flex items-center gap-3">
+                  <button
+                    className="h-9 w-9 rounded-full bg-slate-100 text-slate-600 text-lg font-bold flex items-center justify-center active:scale-95 transition"
+                    onClick={() => setGuests(g => Math.max(0, g - 1))}
+                  >−</button>
+                  <span className="text-lg font-bold text-slate-800 w-8 text-center">{guests}</span>
+                  <button
+                    className="h-9 w-9 rounded-full bg-slate-100 text-slate-600 text-lg font-bold flex items-center justify-center active:scale-95 transition"
+                    onClick={() => setGuests(g => g + 1)}
+                  >+</button>
+                  <span className="text-sm text-slate-400">người</span>
+                </div>
+              </div>
+            )}
 
             {/* Yes / No buttons */}
             <div className="grid grid-cols-2 gap-3 pt-1">
@@ -285,7 +314,7 @@ export function TgVotePage({ voteId }) {
                 <div className="flex flex-wrap gap-2">
                   {attending.map(r => (
                     <span key={r.anonymous_user_id} className="rounded-full bg-lime-50 border border-lime-200 px-3 py-1 text-xs font-semibold text-lime-700">
-                      {r.name}
+                      {r.name}{r.guests > 0 ? ` +${r.guests}` : ''}
                     </span>
                   ))}
                 </div>

@@ -55,10 +55,12 @@ export function TelegramSettings({ club, canEdit, currentUserId, onChanged, toas
   // ── Save group chat ID ──────────────────────────────────────────────
 
   async function saveChat() {
-    let parsed = parseInt(chatId.trim(), 10)
-    if (!parsed) return
-    // Group IDs are always negative — auto-fix if user pastes positive number
-    if (parsed > 0) parsed = -parsed
+    // Supergroup IDs in Bot API = -100{digits}
+    // Handle all paste formats: "4331417382", "-4331417382", "-1004331417382", "1004331417382"
+    const digits = chatId.trim().replace(/^-/, '')  // strip leading minus
+    const withPrefix = digits.startsWith('100') ? digits : '100' + digits
+    const parsed = -parseInt(withPrefix, 10)
+    if (!parsed || isNaN(parsed)) return
     setSavingChat(true)
     try {
       const { error } = await supabase
@@ -150,6 +152,23 @@ export function TelegramSettings({ club, canEdit, currentUserId, onChanged, toas
         {/* ── Section 1: Group Chat ── */}
         <div>
           <p className="text-xs font-semibold uppercase tracking-wide text-slate-400 mb-3">{t('tg_group_section')}</p>
+
+          {/* Bot admin notice */}
+          <div className="flex items-start gap-2 rounded-xl bg-amber-50 border border-amber-200 px-3 py-2.5 mb-3">
+            <span className="text-amber-500 text-sm mt-0.5">⚠️</span>
+            <p className="text-xs text-amber-700">
+              {t('tg_bot_admin_notice_prefix')}{' '}
+              <a
+                href="https://t.me/SPOFUND_bot"
+                target="_blank"
+                rel="noopener noreferrer"
+                className="font-semibold underline hover:text-amber-900 transition"
+              >
+                @SPOFUND_bot
+              </a>
+              {' '}{t('tg_bot_admin_notice_suffix')}
+            </p>
+          </div>
 
           {config ? (
             <div className="flex items-center gap-3 rounded-2xl border border-slate-100 bg-slate-50 px-4 py-3">
