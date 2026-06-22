@@ -32,7 +32,7 @@ export function AdminVoteForm({ vote, closed, filledSlots, club, settings, membe
   const { t } = useTranslation()
   const [busy, setBusy] = useState(false)
 
-  // Create-vote form state (only used when vote === null)
+  // Create-vote form state (used when vote === null OR creating next vote after closed)
   const defaultPlayDate = nextPlayDate(settings)
   const defaultMatchDt = toDatetimeLocal(new Date(defaultPlayDate.getFullYear(), defaultPlayDate.getMonth(), defaultPlayDate.getDate(), 8, 0))
   const defaultDeadline = toDatetimeLocal(new Date(defaultPlayDate.getFullYear(), defaultPlayDate.getMonth(), defaultPlayDate.getDate(), 20, 0))
