@@ -198,10 +198,10 @@ function GroupSummary({
 
   const paidPayments = groupPayments.filter((p) => p.status === 'paid' || p.status === 'manual')
   const paidCount = paidPayments.length
-  const totalMembers = effectiveCount || members.length
+  const totalMembers = isFixedCount && feeCtx?.committedCount > 0 ? feeCtx.committedCount : effectiveCount || members.length
   const myIsPaid = myRecord && (myRecord.status === 'paid' || myRecord.status === 'manual')
 
-  const guestRecruitment = isFixedCount && shuttleCost > 0
+  const guestRecruitment = isFixedCount && shuttleCost > 0 && collection
     ? computeGuestRecruitment({ feeCtx, perMember, shuttleCost, period: shuttlePeriod, slots, settings })
     : null
 

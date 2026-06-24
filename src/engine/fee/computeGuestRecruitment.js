@@ -38,7 +38,12 @@ export function computeGuestRecruitment({ feeCtx, perMember, shuttleCost, period
   const courtPerSession = courtCostForPeriod / numSessions
   const shuttlePerSession = shuttleCost / numSessions
 
-  const Y = shuttleCost + courtCostForPeriod - perMember * committedCount
+  // totalPerMember = what each person (member + guest) owes if cost split by fixedCount
+  // committed members only paid perMember (shuttle share from their collection);
+  // court is collected separately — so we compute the full per-person cost here
+  const totalCost = shuttleCost + courtCostForPeriod
+  const totalPerMember = Math.ceil(totalCost / fixedCount)
+  const Y = totalCost - totalPerMember * committedCount
   if (Y <= 0) return null
 
   const perSessionShortfall = Y / numSessions
@@ -60,11 +65,18 @@ function resolveCombinations({ settings, perSessionShortfall, committedCount, co
   const { guest_fee_mode, guest_fee_male, guest_fee_female } = settings
 
   if (guest_fee_mode === 'split_all') {
-    // Each guest pays same shuttle share as a member slot + court per session
-    const guestFee = perMember / numSessions + courtPerSession
-    if (guestFee <= 0) return []
-    const total = Math.ceil(perSessionShortfall / guestFee)
-    return [{ males: null, females: null, total, genderless: true }]
+    // Total cost split equally among all players (committed + guests).
+    // Revenue from g guests = g × totalPerSession / (committedCount + g)
+    // Find minimum g where that revenue >= perSessionShortfall.
+    const totalPerSession = shuttlePerSession + courtPerSession
+    if (totalPerSession <= 0) return []
+    for (let g = 1; g <= 20; g++) {
+      const revenue = (g * totalPerSession) / (committedCount + g)
+      if (revenue >= perSessionShortfall) {
+        return [{ males: null, females: null, total: g, genderless: true }]
+      }
+    }
+    return []
   }
 
   if (guest_fee_mode === 'split_shuttle') {
