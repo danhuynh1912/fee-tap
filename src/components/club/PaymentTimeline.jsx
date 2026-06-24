@@ -168,6 +168,7 @@ function GroupSummary({
   shuttleCost,
   effectiveCount,
   hasCommitted,
+  isFixedCount,
   t,
   isLast,
   canEdit,
@@ -200,13 +201,13 @@ function GroupSummary({
         <div className="flex items-center gap-2">
           <Users className="h-4 w-4 text-slate-400" />
           <span className="text-sm text-slate-300">
-            {effectiveCount} {t('members')}
+            {effectiveCount} {isFixedCount ? t('slots_per_session') : t('members')}
           </span>
         </div>
         <div className="text-right">
-          <p className={cx('font-mono text-2xl font-black', hasCommitted ? 'text-lime-400' : 'text-yellow-400')}>{fmtVND(perMember)}</p>
+          <p className={cx('font-mono text-2xl font-black', (hasCommitted || isFixedCount) ? 'text-lime-400' : 'text-yellow-400')}>{fmtVND(perMember)}</p>
           <p className="text-xs text-slate-400 mt-0.5">{t('timeline_per_member')}</p>
-          {!hasCommitted && (
+          {!hasCommitted && !isFixedCount && (
             <p className="text-[10px] text-slate-500 mt-0.5">{t('no_cycle_committed')}</p>
           )}
         </div>
@@ -349,6 +350,9 @@ export function PaymentTimeline({
     return d >= start && d <= end
   }
   const effectiveCountFor = (ps) => {
+    if (settings.fee_split_mode === 'fixed_count' && settings.fee_split_fixed_count > 0) {
+      return { hasCommitted: false, effectiveCount: settings.fee_split_fixed_count }
+    }
     const groupHasCommitted = hasCommittedBase && matchesVotePeriod(ps)
     // If this group has an active committed vote → use committedCount
     // Otherwise → always fall back to total memberCount (not the global effectiveMemberCount
@@ -542,6 +546,7 @@ export function PaymentTimeline({
                   shuttleCost={shuttleCost}
                   effectiveCount={effectiveCount}
                   hasCommitted={hasCommitted}
+                  isFixedCount={settings.fee_split_mode === 'fixed_count'}
                   t={t}
                   isLast={isLastGroup}
                   canEdit={canEdit}

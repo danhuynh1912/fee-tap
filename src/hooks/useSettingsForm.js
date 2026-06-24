@@ -17,6 +17,7 @@ export function useSettingsForm({ club, settings, initialSlots, shuttleTxns, fun
     shuttle_cycle_months: settings.shuttle_cycle_months ?? 1,
     shuttle_cycle_start_month: settings.shuttle_cycle_start_month ?? 1,
     fee_split_mode: settings.fee_split_mode ?? 'committed_only',
+    fee_split_fixed_count: settings.fee_split_fixed_count ?? '',
     guest_fee_mode: settings.guest_fee_mode ?? 'split_all',
     guest_fee_male: settings.guest_fee_male ?? 0,
     guest_fee_female: settings.guest_fee_female ?? 0,
@@ -65,7 +66,11 @@ export function useSettingsForm({ club, settings, initialSlots, shuttleTxns, fun
     }, 0)
   }, [isFirstSetup, initialSlots, form.price_per_box, form.estimated_shuttlecocks])
 
-  const effective = form.fee_split_mode === 'committed_only' && committedCount ? committedCount : memberCount
+  const effective = form.fee_split_mode === 'fixed_count' && num(form.fee_split_fixed_count) > 0
+    ? num(form.fee_split_fixed_count)
+    : form.fee_split_mode === 'committed_only' && committedCount
+      ? committedCount
+      : memberCount
 
   const upcomingCollections = useMemo(() => {
     if (!slots.length) return []
@@ -96,6 +101,7 @@ export function useSettingsForm({ club, settings, initialSlots, shuttleTxns, fun
         shuttle_cycle_months: Math.max(1, parseInt(form.shuttle_cycle_months, 10) || 1),
         shuttle_cycle_start_month: Math.max(1, Math.min(12, parseInt(form.shuttle_cycle_start_month, 10) || 1)),
         fee_split_mode: form.fee_split_mode,
+        fee_split_fixed_count: form.fee_split_mode === 'fixed_count' && num(form.fee_split_fixed_count) > 0 ? num(form.fee_split_fixed_count) : null,
         guest_fee_mode: form.guest_fee_mode,
         guest_fee_male: num(form.guest_fee_male),
         guest_fee_female: num(form.guest_fee_female),

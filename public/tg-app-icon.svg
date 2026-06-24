@@ -1,0 +1,25 @@
+<svg xmlns='http://www.w3.org/2000/svg' width='640' height='360' viewBox='0 0 640 360'>
+  <!-- Background -->
+  <rect width='640' height='360' fill='#0f172a'/>
+  
+  <!-- Grid dots -->
+  <pattern id='grid' width='32' height='32' patternUnits='userSpaceOnUse'>
+    <circle cx='16' cy='16' r='1' fill='#ffffff' opacity='0.04'/>
+  </pattern>
+  <rect width='640' height='360' fill='url(#grid)'/>
+  
+  <!-- Logo icon background -->
+  <rect x='272' y='120' width='96' height='96' rx='24' fill='#ccff00'/>
+  
+  <!-- F letter -->
+  <path d='M297 168V148h24M297 158h18' fill='none' stroke='#0f172a' stroke-width='6' stroke-linecap='round' stroke-linejoin='round'/>
+  
+  <!-- Coin dot -->
+  <circle cx='343' cy='149' r='7' fill='#0f172a'/>
+
+  <!-- SPOFUND wordmark -->
+  <text x='320' y='252' font-family='Inter, Arial Black, sans-serif' font-weight='900' font-size='36' fill='white' text-anchor='middle' letter-spacing='-1'>SPOFUND</text>
+  
+  <!-- Tagline -->
+  <text x='320' y='284' font-family='Inter, Arial, sans-serif' font-weight='400' font-size='14' fill='#64748b' text-anchor='middle' letter-spacing='2'>FUND ENGINE FOR SPORTS CLUBS</text>
+</svg>

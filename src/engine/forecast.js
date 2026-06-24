@@ -537,6 +537,9 @@ export function projectUpcomingCollections(slots, settings, now = new Date()) {
 // ---------------------------------------------------------------------------
 
 export function resolveFeeMemberCount(settings, totalMembers, committedCount = null) {
+  if (settings.fee_split_mode === 'fixed_count' && settings.fee_split_fixed_count > 0) {
+    return settings.fee_split_fixed_count
+  }
   if (settings.fee_split_mode === 'committed_only' && committedCount !== null) {
     return committedCount
   }

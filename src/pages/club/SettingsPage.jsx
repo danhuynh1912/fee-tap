@@ -398,11 +398,27 @@ export function SettingsPage({ toast }) {
                     options={[
                       { value: 'committed_only', label: t('fee_split_committed') },
                       { value: 'total_members', label: t('fee_split_total') },
+                      { value: 'fixed_count', label: t('fee_split_fixed') },
                     ]}
                   />
                 </Field>
+                {form.fee_split_mode === 'fixed_count' && (
+                  <div className="mt-3">
+                    <input
+                      type="number"
+                      min="1"
+                      className={inputCls}
+                      value={form.fee_split_fixed_count}
+                      onChange={(e) => setForm((f) => ({ ...f, fee_split_fixed_count: e.target.value }))}
+                      disabled={!canEdit}
+                      placeholder="10"
+                    />
+                  </div>
+                )}
                 <p className="mt-2 text-xs text-slate-400 italic">
-                  {form.fee_split_mode === 'committed_only' ? t('fee_split_committed_hint') : t('fee_split_total_hint')}
+                  {form.fee_split_mode === 'committed_only' ? t('fee_split_committed_hint')
+                    : form.fee_split_mode === 'fixed_count' ? t('fee_split_fixed_hint')
+                    : t('fee_split_total_hint')}
                 </p>
               </div>
 

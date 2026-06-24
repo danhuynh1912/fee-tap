@@ -28,6 +28,7 @@ const en = {
   quarter: 'Quarter',
   members: 'members',
   member: 'member',
+  slots_per_session: 'slots/session',
   wd_0: 'Sun',
   wd_1: 'Mon',
   wd_2: 'Tue',
@@ -323,7 +324,7 @@ const en = {
   set_guest_fee_hint: 'Guests brought by members to fill spots left by absentees',
   set_guest_mode: 'Fee mode',
   set_guest_mode_fixed: 'Fixed by gender',
-  set_guest_mode_shuttle: 'Female fixed + Male splits shuttle',
+  set_guest_mode_shuttle: 'Female fixed + Male splits equally',
   set_guest_mode_split: 'Equal split (all players)',
   set_guest_fee_male: 'Male guest fee',
   set_guest_fee_female: 'Female guest fee',
@@ -493,6 +494,9 @@ const en = {
   fee_split_total: 'Split by total members (fill gaps with guests)',
   fee_split_committed_hint: 'Fee per person is higher, but fund stays balanced.',
   fee_split_total_hint: 'Collect from committed only; remaining slots need guest fill-ins or fund covers the gap.',
+  fee_split_fixed: 'Split by fixed number',
+  fee_split_fixed_count_label: 'Fixed number of people',
+  fee_split_fixed_hint: 'Cost is always split by this fixed number, regardless of how many members vote.',
 
   // ── payment timeline (dashboard) ─────────────────────────
   timeline_running_title: 'Current periods',
@@ -631,6 +635,7 @@ const vi = {
   quarter: 'Quý',
   members: 'thành viên',
   member: 'thành viên',
+  slots_per_session: 'slots/buổi',
   wd_0: 'CN',
   wd_1: 'T2',
   wd_2: 'T3',
@@ -916,7 +921,7 @@ const vi = {
   set_guest_fee_hint: 'Khách do thành viên rủ vào để bù số người nghỉ',
   set_guest_mode: 'Hình thức tính phí giao lưu',
   set_guest_mode_fixed: 'Cố định theo giới tính',
-  set_guest_mode_shuttle: 'Nữ cố định + Nam chia tiền cầu',
+  set_guest_mode_shuttle: 'Nữ cố định + Nam chia đều',
   set_guest_mode_split: 'Chia đều tất cả mọi người',
   set_guest_fee_male: 'Phí khách nam',
   set_guest_fee_female: 'Phí khách nữ',
@@ -1154,6 +1159,9 @@ const vi = {
   fee_split_total: 'Chia đều cho tổng thành viên (bù bằng giao lưu)',
   fee_split_committed_hint: 'Phí/người cao hơn nhưng quỹ không bị hụt.',
   fee_split_total_hint: 'Thu từ người đăng ký; chỗ trống cần tìm người giao lưu hoặc quỹ bù.',
+  fee_split_fixed: 'Chia đều cho số cụ thể',
+  fee_split_fixed_count_label: 'Số người cố định',
+  fee_split_fixed_hint: 'Phí luôn được chia đều cho con số này',
 
   // ── payment timeline (dashboard) ─────────────────────────
   timeline_running_title: 'Kỳ đang chạy',
