@@ -29,7 +29,7 @@ function makePeriod(kind, startIdx, len) {
   return { kind, startIdx, len, months }
 }
 
-function sessionsForPeriod(weekdays, period) {
+export function sessionsForPeriod(weekdays, period) {
   if (!weekdays.length) return { total: 0, breakdown: {} }
   let total = 0
   const breakdown = {}
