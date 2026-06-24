@@ -4,6 +4,7 @@ import { supabase } from '../lib/supabase'
 import { handleError } from '../lib/handleError'
 import { num } from '../lib/utils'
 import { computeSlot, projectUpcomingCollections, buildSettleInserts } from '../engine/forecast'
+import { resolveFeeContext } from '../engine/fee/resolveFeeContext'
 import { BALLS_PER_BOX } from '../constants'
 
 export function useSettingsForm({ club, settings, initialSlots, shuttleTxns, fundTxns, logs, members, pollTally, hostName, sport, canEdit, toast, reload, setSettings, openUpsell }) {
@@ -66,11 +67,7 @@ export function useSettingsForm({ club, settings, initialSlots, shuttleTxns, fun
     }, 0)
   }, [isFirstSetup, initialSlots, form.price_per_box, form.estimated_shuttlecocks])
 
-  const effective = form.fee_split_mode === 'fixed_count' && num(form.fee_split_fixed_count) > 0
-    ? num(form.fee_split_fixed_count)
-    : form.fee_split_mode === 'committed_only' && committedCount
-      ? committedCount
-      : memberCount
+  const effective = resolveFeeContext({ settings: form, memberCount, committedCount }).effectiveCount
 
   const upcomingCollections = useMemo(() => {
     if (!slots.length) return []

@@ -1,5 +1,6 @@
 import { num } from '../lib/utils'
 import { BALLS_PER_BOX } from '../constants'
+import { resolveFeeContext } from './fee/resolveFeeContext'
 
 // ---------------------------------------------------------------------------
 // Calendar helpers
@@ -533,17 +534,11 @@ export function projectUpcomingCollections(slots, settings, now = new Date()) {
 }
 
 // ---------------------------------------------------------------------------
-// Fee member count — respects fee_split_mode + committed vote
+// Fee member count — thin wrapper kept for backward compat
 // ---------------------------------------------------------------------------
 
 export function resolveFeeMemberCount(settings, totalMembers, committedCount = null) {
-  if (settings.fee_split_mode === 'fixed_count' && settings.fee_split_fixed_count > 0) {
-    return settings.fee_split_fixed_count
-  }
-  if (settings.fee_split_mode === 'committed_only' && committedCount !== null) {
-    return committedCount
-  }
-  return totalMembers
+  return resolveFeeContext({ settings, memberCount: totalMembers, committedCount }).effectiveCount
 }
 
 // ---------------------------------------------------------------------------

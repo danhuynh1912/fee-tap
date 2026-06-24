@@ -3,6 +3,7 @@ import { useTranslation } from 'react-i18next'
 import { MapPin, AlertTriangle, Clock, Package, Users, CheckCircle2, QrCode, PlusCircle, Loader2 } from 'lucide-react'
 import { cx, fmtVND, fmtNum } from '../../lib/utils'
 import { computePaymentTimeline, formatPeriodLabel } from '../../engine/forecast'
+import { resolveFeeContext } from '../../engine/fee/resolveFeeContext'
 import { Badge } from '../ui/Badge'
 import { Button } from '../ui/Button'
 import { supabase } from '../../lib/supabase'
@@ -338,27 +339,8 @@ export function PaymentTimeline({
 
   const timeline = useMemo(() => computePaymentTimeline(slots, settingsWithEquip, memberCount, committedCount ?? null), [slots, settingsWithEquip, memberCount, committedCount])
 
-  const hasCommittedBase = committedCount != null && committedCount > 0
-
-  // The membership-cycle vote applies only to the cycle period it was opened for —
-  // not to every upcoming payment group, which may span different periods/slots.
-  const matchesVotePeriod = (ps) => {
-    if (!ps || !pollTally?.cyclePeriodStart) return false
-    const d = new Date(ps)
-    const start = new Date(pollTally.cyclePeriodStart)
-    const end = pollTally.cyclePeriodEnd ? new Date(pollTally.cyclePeriodEnd) : start
-    return d >= start && d <= end
-  }
-  const effectiveCountFor = (ps) => {
-    if (settings.fee_split_mode === 'fixed_count' && settings.fee_split_fixed_count > 0) {
-      return { hasCommitted: false, effectiveCount: settings.fee_split_fixed_count }
-    }
-    const groupHasCommitted = hasCommittedBase && matchesVotePeriod(ps)
-    // If this group has an active committed vote → use committedCount
-    // Otherwise → always fall back to total memberCount (not the global effectiveMemberCount
-    // which may reflect committed_only mode from a different period)
-    return { hasCommitted: groupHasCommitted, effectiveCount: groupHasCommitted ? committedCount : memberCount }
-  }
+  const effectiveCountFor = (ps) =>
+    resolveFeeContext({ settings, memberCount, committedCount, pollTally, periodStart: ps })
 
   const paymentGroups = useMemo(() => {
     const monthKey = (d) => (d ? `${d.getFullYear()}-${d.getMonth()}` : 'no-deadline')
@@ -492,8 +474,12 @@ export function PaymentTimeline({
             const collection = ps ? collections.find((c) => c.period_start === ps) : null
             const groupPayments = collection ? memberPayments.filter((p) => p.collection_id === collection.id) : []
             const myRecord = currentMemberId ? groupPayments.find((p) => p.member_id === currentMemberId) : null
-            const { hasCommitted, effectiveCount } = effectiveCountFor(ps)
-            const openSpots = !hasCommitted && matchesVotePeriod(ps) && settings.fee_split_mode === 'total_members' && committedCount !== null ? Math.max(0, memberCount - committedCount) : 0
+            const feeCtx = effectiveCountFor(ps)
+            const { hasCommitted, effectiveCount } = feeCtx
+            const openSpots =
+              feeCtx.votePeriodMatch && settings.fee_split_mode === 'total_members' && committedCount !== null
+                ? Math.max(0, memberCount - committedCount)
+                : 0
 
             return (
               <div key={gi}>
@@ -546,7 +532,7 @@ export function PaymentTimeline({
                   shuttleCost={shuttleCost}
                   effectiveCount={effectiveCount}
                   hasCommitted={hasCommitted}
-                  isFixedCount={settings.fee_split_mode === 'fixed_count'}
+                  isFixedCount={feeCtx.isFixed}
                   t={t}
                   isLast={isLastGroup}
                   canEdit={canEdit}
