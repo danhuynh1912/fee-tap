@@ -498,6 +498,15 @@ const en = {
   fee_split_fixed_count_label: 'Fixed number of people',
   fee_split_fixed_hint: 'Cost is always split by this fixed number, regardless of how many members vote.',
 
+  // ── guest recruitment (fixed_count mode) ─────────────────
+  guest_recruit_title: 'Min. guests per session to cover gap',
+  guest_recruit_shortfall: 'cover {{amount}}/session',
+  guest_recruit_n_total: '{{n}} guests',
+  guest_recruit_males: '{{n}} male',
+  guest_recruit_females: '{{n}} female',
+  guest_recruit_or: 'or',
+  guest_recruit_impossible: 'Cannot be covered by guests alone.',
+
   // ── payment timeline (dashboard) ─────────────────────────
   timeline_running_title: 'Current periods',
   timeline_upcoming_title: 'Upcoming collections',
@@ -1162,6 +1171,15 @@ const vi = {
   fee_split_fixed: 'Chia đều cho số cụ thể',
   fee_split_fixed_count_label: 'Số người cố định',
   fee_split_fixed_hint: 'Phí luôn được chia đều cho con số này',
+
+  // ── guest recruitment (fixed_count mode) ─────────────────
+  guest_recruit_title: 'Tối thiểu giao lưu mỗi buổi cần tuyển',
+  guest_recruit_shortfall: 'bù {{amount}}/buổi',
+  guest_recruit_n_total: '{{n}} người',
+  guest_recruit_males: '{{n}} nam',
+  guest_recruit_females: '{{n}} nữ',
+  guest_recruit_or: 'hoặc',
+  guest_recruit_impossible: 'Không thể bù đủ bằng giao lưu.',
 
   // ── payment timeline (dashboard) ─────────────────────────
   timeline_running_title: 'Kỳ đang chạy',

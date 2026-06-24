@@ -1,9 +1,10 @@
 import { useMemo, useState } from 'react'
 import { useTranslation } from 'react-i18next'
-import { MapPin, AlertTriangle, Clock, Package, Users, CheckCircle2, QrCode, PlusCircle, Loader2 } from 'lucide-react'
+import { MapPin, AlertTriangle, Clock, Package, Users, CheckCircle2, QrCode, PlusCircle, Loader2, UserPlus } from 'lucide-react'
 import { cx, fmtVND, fmtNum } from '../../lib/utils'
 import { computePaymentTimeline, formatPeriodLabel } from '../../engine/forecast'
 import { resolveFeeContext } from '../../engine/fee/resolveFeeContext'
+import { computeGuestRecruitment } from '../../engine/fee/computeGuestRecruitment'
 import { Badge } from '../ui/Badge'
 import { Button } from '../ui/Button'
 import { supabase } from '../../lib/supabase'
@@ -169,7 +170,10 @@ function GroupSummary({
   shuttleCost,
   effectiveCount,
   hasCommitted,
-  isFixedCount,
+  feeCtx,
+  shuttlePeriod,
+  slots,
+  settings,
   t,
   isLast,
   canEdit,
@@ -187,6 +191,7 @@ function GroupSummary({
   openingCollection,
   payosConfigured,
 }) {
+  const isFixedCount = feeCtx?.isFixed ?? false
   const total = courtCost + (shuttleCost ?? 0)
   const perMember = effectiveCount > 0 ? Math.ceil(total / effectiveCount) : 0
   if (total === 0) return null
@@ -195,6 +200,10 @@ function GroupSummary({
   const paidCount = paidPayments.length
   const totalMembers = effectiveCount || members.length
   const myIsPaid = myRecord && (myRecord.status === 'paid' || myRecord.status === 'manual')
+
+  const guestRecruitment = isFixedCount && shuttleCost > 0
+    ? computeGuestRecruitment({ feeCtx, perMember, shuttleCost, period: shuttlePeriod, slots, settings })
+    : null
 
   return (
     <div className="bg-slate-900 text-white px-5 py-4 space-y-3">
@@ -213,6 +222,41 @@ function GroupSummary({
           )}
         </div>
       </div>
+
+      {guestRecruitment && (
+        <div className="border-t border-slate-700 pt-3">
+          <div className="flex items-center gap-1.5 mb-2">
+            <UserPlus className="h-3.5 w-3.5 text-slate-400" />
+            <span className="text-xs text-slate-400">{t('guest_recruit_title')}</span>
+            <span className="text-[10px] text-slate-600 ml-auto font-mono">
+              {t('guest_recruit_shortfall', { amount: fmtVND(Math.ceil(guestRecruitment.perSessionShortfall)) })}
+            </span>
+          </div>
+          {guestRecruitment.combinations.length === 0 ? (
+            <p className="text-xs text-red-400 italic">{t('guest_recruit_impossible')}</p>
+          ) : (
+            <div className="flex flex-wrap gap-1.5">
+              {guestRecruitment.combinations.map((c, i) => (
+                <span key={i} className="inline-flex items-center gap-1">
+                  <span className="bg-slate-800 border border-slate-700 text-slate-200 text-xs font-semibold px-2.5 py-1 rounded-full">
+                    {c.genderless
+                      ? t('guest_recruit_n_total', { n: c.total })
+                      : [
+                          c.males > 0 && t('guest_recruit_males', { n: c.males }),
+                          c.females > 0 && t('guest_recruit_females', { n: c.females }),
+                        ]
+                          .filter(Boolean)
+                          .join(' + ')}
+                  </span>
+                  {i < guestRecruitment.combinations.length - 1 && (
+                    <span className="text-[10px] text-slate-600">{t('guest_recruit_or')}</span>
+                  )}
+                </span>
+              ))}
+            </div>
+          )}
+        </div>
+      )}
 
       {canEdit && nextAdjustedFee > 0 && isLast && (
         <div className={cx('rounded-xl px-4 py-3 flex items-center justify-between mt-1', projectedSurplus ? 'bg-lime-900/40' : 'bg-red-900/30')}>
@@ -532,7 +576,10 @@ export function PaymentTimeline({
                   shuttleCost={shuttleCost}
                   effectiveCount={effectiveCount}
                   hasCommitted={hasCommitted}
-                  isFixedCount={feeCtx.isFixed}
+                  feeCtx={feeCtx}
+                  shuttlePeriod={group.shuttleItem?.period ?? null}
+                  slots={slots}
+                  settings={settings}
                   t={t}
                   isLast={isLastGroup}
                   canEdit={canEdit}
