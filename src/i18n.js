@@ -612,6 +612,13 @@ const en = {
   open_cycle_vote: 'Open roster vote',
   no_cycle_committed: 'No fixed registrations yet',
   cycle_vote_copy_link: 'Copy roster vote link',
+  collection_copy_link: 'Copy payment link',
+  payment_collection_label: 'Payment collection',
+  public_pay_select_member: 'Select your name to pay',
+  public_pay_select_placeholder: '— Choose member —',
+  public_pay_collection_not_found: 'Payment collection not found or already closed.',
+  public_pay_club_not_found: 'Club not found.',
+  public_pay_link_copied: 'Payment link copied!',
 
   // ── cycle vote settings ───────────────────────────────────
   set_cycle_vote_title: 'Fixed roster vote settings',
@@ -1218,6 +1225,13 @@ const vi = {
   open_cycle_vote: 'Mở vote cố định',
   no_cycle_committed: 'Chưa có ai đăng ký cố định',
   cycle_vote_copy_link: 'Sao chép link vote cố định',
+  collection_copy_link: 'Copy link thu tiền',
+  payment_collection_label: 'Đợt thu tiền',
+  public_pay_select_member: 'Chọn tên của bạn để thanh toán',
+  public_pay_select_placeholder: '— Chọn thành viên —',
+  public_pay_collection_not_found: 'Đợt thu không tồn tại hoặc đã đóng.',
+  public_pay_club_not_found: 'Không tìm thấy câu lạc bộ.',
+  public_pay_link_copied: 'Đã copy link thu tiền!',
 
   // ── cycle vote settings ───────────────────────────────────
   set_cycle_vote_title: 'Cài đặt vote đăng ký cố định',

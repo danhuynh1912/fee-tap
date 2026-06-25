@@ -15,6 +15,7 @@ import { WelcomeModal } from './pages/WelcomeModal'
 const OnboardingPage = lazy(() => import('./pages/OnboardingPage').then((m) => ({ default: m.OnboardingPage })))
 const ClubLayout = lazy(() => import('./pages/club/ClubLayout').then((m) => ({ default: m.ClubLayout })))
 const PublicVotePage = lazy(() => import('./pages/club/PublicVotePage').then((m) => ({ default: m.PublicVotePage })))
+const PublicPayPage = lazy(() => import('./pages/club/PublicPayPage').then((m) => ({ default: m.PublicPayPage })))
 const TgVotePage = lazy(() => import('./pages/tg/TgVotePage').then((m) => ({ default: m.TgVotePage })))
 
 function PageLoader() {
@@ -89,6 +90,8 @@ export default function App() {
   // When opened via t.me/bot/spofund?startapp=<voteId>, Telegram passes start_param
   const tgStartParam = window.Telegram?.WebApp?.initDataUnsafe?.start_param
   const isPublicVote = !session && !!matchPath('/club/:id/vote', path)
+  const publicPayMatch = matchPath('/club/:id/pay/:collectionId', path)
+  const isPublicPay = !!publicPayMatch
 
   // Telegram Mini App route — fully standalone, no auth, no nav
   // Supports both /tg/vote/:id URL and t.me/bot/app?startapp=<voteId> direct link
@@ -97,6 +100,15 @@ export default function App() {
     return (
       <Suspense fallback={<div className="min-h-screen flex items-center justify-center"><Loader2 className="h-6 w-6 animate-spin text-slate-300" /></div>}>
         <TgVotePage voteId={tgVoteId} />
+      </Suspense>
+    )
+  }
+
+  // Public pay page — no auth required, fully standalone
+  if (isPublicPay) {
+    return (
+      <Suspense fallback={<div className="min-h-screen flex items-center justify-center"><Loader2 className="h-6 w-6 animate-spin text-slate-300" /></div>}>
+        <PublicPayPage clubId={publicPayMatch.params.id} collectionId={publicPayMatch.params.collectionId} />
       </Suspense>
     )
   }

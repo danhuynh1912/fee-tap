@@ -1,6 +1,6 @@
 import { useMemo, useState } from 'react'
 import { useTranslation } from 'react-i18next'
-import { MapPin, AlertTriangle, Clock, Package, Users, CheckCircle2, QrCode, PlusCircle, Loader2, UserPlus } from 'lucide-react'
+import { MapPin, AlertTriangle, Clock, Package, Users, CheckCircle2, QrCode, PlusCircle, Loader2, UserPlus, Link } from 'lucide-react'
 import { cx, fmtVND, fmtNum } from '../../lib/utils'
 import { computePaymentTimeline, formatPeriodLabel } from '../../engine/forecast'
 import { resolveFeeContext } from '../../engine/fee/resolveFeeContext'
@@ -187,6 +187,7 @@ function GroupSummary({
   members,
   onOpenCollection,
   onViewCollection,
+  onCopyLink,
   onPayQR,
   openingCollection,
   payosConfigured,
@@ -294,17 +295,29 @@ function GroupSummary({
               </div>
             )}
 
-            {/* Paid count progress + admin view button */}
+            {/* Paid count progress + copy link + admin view button */}
             <div className="flex items-center justify-between gap-3">
               <div className="flex items-center gap-2">
                 <CheckCircle2 className={cx('h-4 w-4', paidCount > 0 ? 'text-lime-400' : 'text-slate-600')} />
                 <span className="text-xs text-slate-400">{t('collection_paid_count', { paid: paidCount, total: totalMembers })}</span>
               </div>
-              {canEdit && (
-                <Button variant="darkSubtle" size="sm" onClick={onViewCollection}>
-                  {t('collection_view_btn')}
-                </Button>
-              )}
+              <div className="flex items-center gap-1.5">
+                {onCopyLink && (
+                  <button
+                    onClick={onCopyLink}
+                    title={t('collection_copy_link')}
+                    className="flex items-center gap-1 rounded-xl border border-slate-700 px-2 py-1.5 text-xs font-semibold text-slate-400 hover:border-slate-500 hover:text-slate-200 transition active:scale-[0.97]"
+                  >
+                    <Link className="h-3 w-3" />
+                    {t('collection_copy_link')}
+                  </button>
+                )}
+                {canEdit && (
+                  <Button variant="darkSubtle" size="sm" onClick={onViewCollection}>
+                    {t('collection_view_btn')}
+                  </Button>
+                )}
+              </div>
             </div>
 
             {/* Member own payment status + QR (if PayOS ready) — shown for both member and admin */}
@@ -594,6 +607,10 @@ export function PaymentTimeline({
                   openingCollection={openingGroup === ps}
                   onOpenCollection={() => openCollection(group, courtCost)}
                   onViewCollection={() => setCollectionModal({ collection, groupPayments, committedUserIds: pollTally?.committedUserIds })}
+                  onCopyLink={collection ? () => {
+                    const url = `${window.location.origin}/club/${clubId}/pay/${collection.id}`
+                    navigator.clipboard.writeText(url).then(() => toast?.(t('public_pay_link_copied')))
+                  } : undefined}
                   onPayQR={(liveAmount) => {
                     const m = members.find((m) => m.id === currentMemberId)
                     setQrModal({ record: myRecord, memberName: m?.name || '', liveAmount })
