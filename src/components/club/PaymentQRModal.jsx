@@ -1,6 +1,6 @@
 import { useState, useEffect, useCallback } from 'react'
 import { useTranslation } from 'react-i18next'
-import { QrCode, CheckCircle2, Loader2, ExternalLink, RefreshCw, Globe } from 'lucide-react'
+import { QrCode, CheckCircle2, Loader2, ExternalLink, RefreshCw, Globe, Download } from 'lucide-react'
 import { Modal } from '../ui/Modal'
 import { Button } from '../ui/Button'
 import { cx, fmtVND } from '../../lib/utils'
@@ -67,11 +67,8 @@ export function PaymentQRModal({ open, onClose, record, memberName, liveAmount, 
   // Extra fields from PayOS API needed for dl.vietqr.io links
   const [vietQRMeta, setVietQRMeta] = useState(null) // { accountNumber, accountName, bin, description }
   const [showAllBanks, setShowAllBanks] = useState(false)
-  const [loadingBankId, setLoadingBankId] = useState(null)
 
   const isMobile = /android|iphone|ipad/i.test(navigator.userAgent)
-  // FBAN = Facebook App (Messenger), FB_IAB = Facebook In-App Browser
-  const isFBWebView = /FBAN|FB_IAB|FBAV|FBIOS/i.test(navigator.userAgent)
 
   useEffect(() => {
     const wasPending = localRecord?.status === 'pending'
@@ -127,62 +124,48 @@ export function PaymentQRModal({ open, onClose, record, memberName, liveAmount, 
     }
   }
 
-  const handleBankClick = useCallback(async (bank) => {
+  const handleBankClick = useCallback((bank) => {
     const checkoutUrl = localRecord?.payos_checkout_url
     if (!checkoutUrl) return
-
-    const openBank = () => {
-      if (isMobile && vietQRMeta) {
-        openUrl(buildVietQRLink({
-          appId: bank.appId,
-          accountNumber: vietQRMeta.accountNumber,
-          bin: vietQRMeta.bin,
-          accountName: vietQRMeta.accountName,
-          amount: liveAmount ?? localRecord?.amount,
-          description: vietQRMeta.description,
-          checkoutUrl,
-          strictNote: bank.strictNote,
-        }))
-      } else {
-        openUrl(checkoutUrl)
-      }
+    if (isMobile && vietQRMeta) {
+      openUrl(buildVietQRLink({
+        appId: bank.appId,
+        accountNumber: vietQRMeta.accountNumber,
+        bin: vietQRMeta.bin,
+        accountName: vietQRMeta.accountName,
+        amount: liveAmount ?? localRecord?.amount,
+        description: vietQRMeta.description,
+        checkoutUrl,
+        strictNote: bank.strictNote,
+      }))
+    } else {
+      openUrl(checkoutUrl)
     }
+  }, [vietQRMeta, localRecord?.payos_checkout_url, localRecord?.amount, liveAmount, isMobile])
 
+  const handleDownloadQR = useCallback(async () => {
     const qrImg = localRecord?.payos_qr_code
       ? `https://api.qrserver.com/v1/create-qr-code/?size=240x240&data=${encodeURIComponent(localRecord.payos_qr_code)}`
       : null
-    if (!bank.autoFill && qrImg) {
-      setLoadingBankId(bank.id)
-      try {
-        const res = await fetch(qrImg)
-        const blob = await res.blob()
-        const file = new File([blob], 'vietqr.png', { type: 'image/png' })
-
-        if (navigator.canShare?.({ files: [file] })) {
-          // iOS/Android: native share sheet → user taps "Save Image" → vào Photos library
-          await navigator.share({ files: [file], title: 'VietQR' })
-        } else {
-          // Desktop fallback: download to Downloads folder
-          const blobUrl = URL.createObjectURL(blob)
-          const a = document.createElement('a')
-          a.href = blobUrl
-          a.download = 'vietqr.png'
-          document.body.appendChild(a)
-          a.click()
-          document.body.removeChild(a)
-          URL.revokeObjectURL(blobUrl)
-        }
-      } catch {
-        // User cancelled share or fetch failed — still redirect
-      } finally {
-        setLoadingBankId(null)
+    if (!qrImg) return
+    try {
+      const res = await fetch(qrImg)
+      const blob = await res.blob()
+      const file = new File([blob], 'vietqr.png', { type: 'image/png' })
+      if (navigator.canShare?.({ files: [file] })) {
+        await navigator.share({ files: [file], title: 'VietQR' })
+      } else {
+        const blobUrl = URL.createObjectURL(blob)
+        const a = document.createElement('a')
+        a.href = blobUrl
+        a.download = 'vietqr.png'
+        document.body.appendChild(a)
+        a.click()
+        document.body.removeChild(a)
+        URL.revokeObjectURL(blobUrl)
       }
-      // Messenger WebView needs time to dismiss share sheet before navigation works
-      isFBWebView ? setTimeout(openBank, 300) : openBank()
-    } else {
-      openBank()
-    }
-  }, [vietQRMeta, localRecord?.payos_checkout_url, localRecord?.payos_qr_code, localRecord?.amount, liveAmount, isMobile])
+    } catch { /* cancelled or failed */ }
+  }, [localRecord?.payos_qr_code])
 
   const openWeb = useCallback(() => {
     if (localRecord?.payos_checkout_url) openUrl(localRecord.payos_checkout_url)
@@ -234,8 +217,16 @@ export function PaymentQRModal({ open, onClose, record, memberName, liveAmount, 
                 </div>
               )}
               {!loading && qrImageUrl && (
-                <div className="rounded-2xl border-2 border-slate-200 p-3 bg-white">
-                  <img src={qrImageUrl} alt="VietQR" width={240} height={240} className="rounded-xl" />
+                <div className="relative">
+                  <div className="rounded-2xl border-2 border-slate-200 p-3 bg-white">
+                    <img src={qrImageUrl} alt="VietQR" width={240} height={240} className="rounded-xl" />
+                  </div>
+                  <button
+                    onClick={handleDownloadQR}
+                    className="absolute bottom-2 right-2 grid h-7 w-7 place-items-center rounded-full bg-white/90 border border-slate-200 text-slate-400 hover:text-slate-600 hover:bg-white shadow-sm transition active:scale-95"
+                  >
+                    <Download className="h-3.5 w-3.5" />
+                  </button>
                 </div>
               )}
               {!loading && !qrImageUrl && (
@@ -263,31 +254,23 @@ export function PaymentQRModal({ open, onClose, record, memberName, liveAmount, 
                         className="flex flex-col items-center gap-1.5 rounded-2xl border border-slate-100 bg-slate-50 py-3 transition active:scale-95 hover:bg-slate-100"
                       >
                         <span className="relative shrink-0">
-                          {loadingBankId === bank.id ? (
-                            <span className="h-8 w-8 rounded-xl bg-slate-100 grid place-items-center">
-                              <Loader2 className="h-4 w-4 animate-spin text-slate-400" />
-                            </span>
-                          ) : (
-                            <>
-                              <img
-                                src={bank.logo}
-                                alt={bank.fullName}
-                                width={32}
-                                height={32}
-                                className="h-8 w-8 rounded-xl object-cover"
-                                onError={e => {
-                                  e.currentTarget.style.display = 'none'
-                                  e.currentTarget.nextSibling.style.display = 'grid'
-                                }}
-                              />
-                              <span
-                                className="h-8 w-8 rounded-xl place-items-center text-white text-[9px] font-black hidden"
-                                style={{ backgroundColor: bank.color }}
-                              >
-                                {bank.label}
-                              </span>
-                            </>
-                          )}
+                          <img
+                            src={bank.logo}
+                            alt={bank.fullName}
+                            width={32}
+                            height={32}
+                            className="h-8 w-8 rounded-xl object-cover"
+                            onError={e => {
+                              e.currentTarget.style.display = 'none'
+                              e.currentTarget.nextSibling.style.display = 'grid'
+                            }}
+                          />
+                          <span
+                            className="h-8 w-8 rounded-xl place-items-center text-white text-[9px] font-black hidden"
+                            style={{ backgroundColor: bank.color }}
+                          >
+                            {bank.label}
+                          </span>
                           {bank.autoFill && (
                             <span className="absolute -top-1 -right-1 h-3 w-3 rounded-full bg-emerald-400 border-2 border-white" />
                           )}
