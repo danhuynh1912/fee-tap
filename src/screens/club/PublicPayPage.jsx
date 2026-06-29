@@ -1,3 +1,4 @@
+'use client'
 import { useState, useEffect, useCallback, useMemo } from 'react'
 import { useTranslation } from 'react-i18next'
 import { Loader2, QrCode, Clock, CheckCircle2 } from 'lucide-react'
@@ -76,16 +77,16 @@ function computeLiveFee({ collection, slots, settings, memberCount, committedCou
   return null
 }
 
-function usePublicPayData(clubId, collectionId) {
-  const [club, setClub] = useState(null)
-  const [collection, setCollection] = useState(null)
-  const [members, setMembers] = useState([])
-  const [payments, setPayments] = useState([])
-  const [settings, setSettings] = useState(null)
-  const [slots, setSlots] = useState([])
-  const [pollTally, setPollTally] = useState(null)
-  const [loading, setLoading] = useState(true)
-  const [notFound, setNotFound] = useState(false)
+function usePublicPayData(clubId, collectionId, initialData) {
+  const [club, setClub] = useState(initialData?.club ?? null)
+  const [collection, setCollection] = useState(initialData?.collection ?? null)
+  const [members, setMembers] = useState(initialData?.members ?? [])
+  const [payments, setPayments] = useState(initialData?.payments ?? [])
+  const [settings, setSettings] = useState(initialData?.settings ?? null)
+  const [slots, setSlots] = useState(initialData?.slots ?? [])
+  const [pollTally, setPollTally] = useState(initialData?.pollTally ?? null)
+  const [loading, setLoading] = useState(!initialData)
+  const [notFound, setNotFound] = useState(initialData?.notFound ?? false)
 
   const load = useCallback(async () => {
     if (!clubId || !collectionId) return
@@ -117,7 +118,6 @@ function usePublicPayData(clubId, collectionId) {
       setCollection(colRow)
     }
 
-    // Load poll_tally — same pattern as useClubData
     const { data: voteRows } = await supabase
       .from('votes')
       .select('id, cycle_period_start, cycle_period_end')
@@ -147,7 +147,10 @@ function usePublicPayData(clubId, collectionId) {
     setLoading(false)
   }, [clubId, collectionId])
 
-  useEffect(() => { load() }, [load])
+  useEffect(() => {
+    if (initialData) return
+    load()
+  }, [load, initialData])
 
   // Realtime: watch payment status changes on this collection
   useEffect(() => {
@@ -175,9 +178,9 @@ function usePublicPayData(clubId, collectionId) {
   return { club, collection, members, payments, settings, slots, pollTally, loading, notFound }
 }
 
-export function PublicPayPage({ clubId, collectionId }) {
+export function PublicPayPage({ clubId, collectionId, initialData }) {
   const { t, i18n } = useTranslation()
-  const { club, collection, members, payments, settings, slots, pollTally, loading, notFound } = usePublicPayData(clubId, collectionId)
+  const { club, collection, members, payments, settings, slots, pollTally, loading, notFound } = usePublicPayData(clubId, collectionId, initialData)
 
   const [toastMsg, setToastMsg] = useState(null)
   const toastTimer = useState(null)
@@ -368,3 +371,5 @@ export function PublicPayPage({ clubId, collectionId }) {
     </div>
   )
 }
+
+export default PublicPayPage

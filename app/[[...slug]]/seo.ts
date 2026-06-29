@@ -1,30 +1,14 @@
-import { createClient } from '@supabase/supabase-js'
 import type { Metadata } from 'next'
-
-const SUPABASE_URL = process.env.NEXT_PUBLIC_SUPABASE_URL || ''
-const SUPABASE_ANON_KEY = process.env.NEXT_PUBLIC_SUPABASE_ANON_KEY || ''
-
-const configured =
-  SUPABASE_URL.startsWith('https://') &&
-  !SUPABASE_URL.includes('YOUR-PROJECT') &&
-  !!SUPABASE_ANON_KEY &&
-  !SUPABASE_ANON_KEY.includes('YOUR-ANON')
+import { configured, serverDb } from '../_data/serverDb'
 
 function vnd(amount: number): string {
   return new Intl.NumberFormat('vi-VN').format(amount) + ' ₫'
 }
 
-/** Lightweight read-only client for server-side metadata. No realtime/session. */
-function serverClient() {
-  return createClient(SUPABASE_URL, SUPABASE_ANON_KEY, {
-    auth: { persistSession: false, autoRefreshToken: false },
-  })
-}
-
 async function clubName(clubId: string): Promise<string | null> {
   if (!configured) return null
   try {
-    const sb = serverClient()
+    const sb = serverDb()
     const { data } = await sb.from('clubs').select('name').eq('id', clubId).maybeSingle()
     return data?.name ?? null
   } catch {
@@ -42,7 +26,7 @@ const VI_WEEKDAYS = ['Chủ nhật', 'Thứ 2', 'Thứ 3', 'Thứ 4', 'Thứ 5',
 async function latestVoteTitle(clubId: string, isCycle: boolean): Promise<string | null> {
   if (!configured) return null
   try {
-    const sb = serverClient()
+    const sb = serverDb()
     const q = sb
       .from('votes')
       .select('vote_type, match_date, title')
@@ -92,7 +76,7 @@ async function latestVoteTitle(clubId: string, isCycle: boolean): Promise<string
 async function paymentPeriodTitle(clubId: string, collectionId?: string): Promise<string | null> {
   if (!configured || !collectionId) return null
   try {
-    const sb = serverClient()
+    const sb = serverDb()
     const [{ data: col }, { data: settings }] = await Promise.all([
       sb.from('payment_collections').select('period_start').eq('id', collectionId).maybeSingle(),
       sb.from('club_settings').select('billing_cycle').eq('club_id', clubId).maybeSingle(),

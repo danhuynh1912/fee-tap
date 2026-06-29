@@ -1,3 +1,4 @@
+'use client'
 import { useState, useEffect, useCallback } from 'react'
 import { useTranslation } from 'react-i18next'
 import { Vote, Users, Loader2 } from 'lucide-react'
@@ -7,12 +8,12 @@ import { NextSessionVoteTab } from '../../components/club/vote/NextSessionVoteTa
 import { CycleVoteTab } from '../../components/club/vote/CycleVoteTab'
 import { Toast } from '../../components/ui/Toast'
 
-function usePublicVoteData(clubId) {
-  const [club, setClub] = useState(null)
-  const [members, setMembers] = useState([])
-  const [settings, setSettings] = useState(null)
-  const [slots, setSlots] = useState([])
-  const [loading, setLoading] = useState(true)
+function usePublicVoteData(clubId, initialData) {
+  const [club, setClub] = useState(initialData?.club ?? null)
+  const [members, setMembers] = useState(initialData?.members ?? [])
+  const [settings, setSettings] = useState(initialData?.settings ?? null)
+  const [slots, setSlots] = useState(initialData?.slots ?? [])
+  const [loading, setLoading] = useState(!initialData)
 
   const load = useCallback(async () => {
     if (!clubId) return
@@ -29,16 +30,19 @@ function usePublicVoteData(clubId) {
     setLoading(false)
   }, [clubId])
 
-  useEffect(() => { load() }, [load])
+  useEffect(() => {
+    if (initialData) return
+    load()
+  }, [load, initialData])
 
   return { club, members, settings, slots, loading }
 }
 
 const STORAGE_KEY = (clubId) => `vote-identity-${clubId}`
 
-export function PublicVotePage({ clubId }) {
+export function PublicVotePage({ clubId, initialData, defaultTab }) {
   const { t } = useTranslation()
-  const { club, members, settings, slots, loading } = usePublicVoteData(clubId)
+  const { club, members, settings, slots, loading } = usePublicVoteData(clubId, initialData)
   const [toastMsg, setToastMsg] = useState(null)
   const toastRef = useState(null)
 
@@ -49,6 +53,7 @@ export function PublicVotePage({ clubId }) {
   }, [toastRef])
 
   const [activeTab, setActiveTab] = useState(() => {
+    if (defaultTab) return defaultTab
     const params = new URLSearchParams(window.location.search)
     return params.get('tab') === 'cycle' ? 'cycle' : 'vote'
   })
@@ -154,3 +159,5 @@ export function PublicVotePage({ clubId }) {
     </div>
   )
 }
+
+export default PublicVotePage
