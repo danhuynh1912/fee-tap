@@ -217,15 +217,16 @@ export function PaymentQRModal({ open, onClose, record, memberName, liveAmount, 
                 </div>
               )}
               {!loading && qrImageUrl && (
-                <div className="relative">
+                <div className="flex flex-col items-center gap-2">
                   <div className="rounded-2xl border-2 border-slate-200 p-3 bg-white">
                     <img src={qrImageUrl} alt="VietQR" width={240} height={240} className="rounded-xl" />
                   </div>
                   <button
                     onClick={handleDownloadQR}
-                    className="absolute bottom-2 right-2 grid h-7 w-7 place-items-center rounded-full bg-white/90 border border-slate-200 text-slate-400 hover:text-slate-600 hover:bg-white shadow-sm transition active:scale-95"
+                    className="flex items-center gap-1.5 text-xs text-slate-400 hover:text-slate-600 border border-slate-200 rounded-full px-3 py-1.5 transition active:scale-95 hover:border-slate-300"
                   >
                     <Download className="h-3.5 w-3.5" />
+                    {t('payment_qr_download')}
                   </button>
                 </div>
               )}
