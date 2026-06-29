@@ -2,7 +2,7 @@ import { useMemo } from 'react'
 import { useTranslation } from 'react-i18next'
 import { useClub } from '../../contexts/ClubContext'
 import { useSettingsForm } from '../../hooks/useSettingsForm'
-import { Settings2, Coins, Wallet, Check, Plus, Loader2, Users, TrendingUp, MapPin, Package, UserCheck, Calendar } from 'lucide-react'
+import { Settings2, Coins, Wallet, Check, Plus, Loader2, Users, TrendingUp, MapPin, Package, UserCheck, Calendar, AlertTriangle, Store } from 'lucide-react'
 import { Card } from '../../components/ui/Card'
 import { Button } from '../../components/ui/Button'
 import { Field, inputCls } from '../../components/ui/Field'
@@ -11,6 +11,7 @@ import { ShuttleTubeWidget } from '../../components/club/ShuttleTubeWidget'
 import { CourtSlotCard } from '../../components/club/CourtSlotCard'
 import { PayOSSettings } from '../../components/club/PayOSSettings'
 import { TelegramSettings } from '../../components/club/TelegramSettings'
+import { ClubShopPanel } from '../../components/club/ClubShopPanel'
 import { UpcomingCollectionsList } from '../../components/club/UpcomingCollectionsList'
 import { MembersPanel } from './MembersPanel'
 import { Segmented } from '../../components/ui/Segmented'
@@ -203,6 +204,19 @@ export function SettingsPage({ toast }) {
                       </Field>
                     )}
                   </div>
+
+                  {/* Low-stock alert threshold (sessions) */}
+                  <Field label={t('set_low_stock_label')} icon={AlertTriangle} hint={t('set_low_stock_hint')}>
+                    <input
+                      type="number"
+                      min="0"
+                      step="1"
+                      className={cx(inputCls, 'font-mono')}
+                      value={form.shuttle_low_stock_sessions ?? 1}
+                      disabled={!canEdit}
+                      onChange={(e) => setForm((f) => ({ ...f, shuttle_low_stock_sessions: e.target.value }))}
+                    />
+                  </Field>
 
                   {/* Current stock widget */}
                   {shuttleStatus && (
@@ -546,6 +560,16 @@ export function SettingsPage({ toast }) {
           <PayOSSettings club={club} plan={plan} payosConfig={payosConfig} canEdit={canEdit} onChanged={reload} toast={toast} onUnlock={() => {}} />
 
           <TelegramSettings club={club} canEdit={canEdit} currentUserId={currentUserId} onChanged={reload} toast={toast} />
+
+          {sport.hasEquipment && (
+            <Card>
+              <div className="mb-4 flex items-center gap-2">
+                <Store className="h-4 w-4 text-slate-400" />
+                <span className="text-sm font-semibold text-slate-700">{t('shop_partner_title')}</span>
+              </div>
+              <ClubShopPanel club={club} canEdit={canEdit} toast={toast} />
+            </Card>
+          )}
         </div>
       </div>
 

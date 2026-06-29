@@ -8,6 +8,9 @@ export function useAuth() {
   const [myClubs, setMyClubs] = useState([])
   const [resolving, setResolving] = useState(false)
   const [signinBusy, setSigninBusy] = useState(false)
+  // profileType: undefined = chưa load, null = chưa chọn, 'club' | 'shop'
+  const [profileType, setProfileType] = useState(undefined)
+  const [shop, setShop] = useState(null)
 
   // ── auth session ────────────────────────────────────────────────
   useEffect(() => {
@@ -40,6 +43,44 @@ export function useAuth() {
     })
     return () => sub.subscription.unsubscribe()
   }, [])
+
+  // ── load user profile (club host vs shop owner) ─────────────────
+  const loadShop = useCallback(async (sess = session) => {
+    if (!sess) return null
+    const { data: sh } = await supabase.from('shops').select('*').eq('owner_id', sess.user.id).maybeSingle()
+    setShop(sh || null)
+    return sh || null
+  }, [session])
+
+  useEffect(() => {
+    if (!session) {
+      setProfileType(undefined)
+      setShop(null)
+      return
+    }
+    let cancelled = false
+    ;(async () => {
+      const { data: prof } = await supabase
+        .from('user_profiles')
+        .select('profile_type')
+        .eq('user_id', session.user.id)
+        .maybeSingle()
+      if (cancelled) return
+      const type = prof?.profile_type ?? null
+      setProfileType(type)
+      if (type === 'shop') await loadShop(session)
+    })()
+    return () => { cancelled = true }
+  }, [session, loadShop])
+
+  async function chooseProfile(type) {
+    if (!session) return
+    const { error } = await supabase
+      .from('user_profiles')
+      .upsert({ user_id: session.user.id, profile_type: type }, { onConflict: 'user_id' })
+    if (error) throw error
+    setProfileType(type)
+  }
 
   // ── load all clubs (owned + member) ─────────────────────────────
   const loadClubs = useCallback(async (sess, currentPath = window.location.pathname) => {
@@ -82,8 +123,10 @@ export function useAuth() {
         navigate(`/club/${all[0].id}`)
         return
       }
-      // No clubs → onboarding
-      if (all.length === 0 && currentPath !== '/new' && !currentPath.startsWith('/join/')) {
+      // No clubs: brand-new users land on ChooseProfilePage (handled in App).
+      // Existing club users (legacy, no profile row) keep working since clubs > 0.
+      // Only auto-route to /new when already a confirmed club host with no clubs.
+      if (all.length === 0 && profileType === 'club' && currentPath !== '/new' && !currentPath.startsWith('/join/')) {
         navigate('/new')
       }
     } finally {
@@ -92,15 +135,17 @@ export function useAuth() {
     return () => {
       cancelled = true
     }
-  }, [])
+  }, [profileType])
 
   useEffect(() => {
-    if (session) {
-      loadClubs(session)
-    } else {
+    if (!session) {
       setMyClubs([])
+      return
     }
-  }, [session, loadClubs])
+    // Wait for profile to resolve; skip club loading entirely for shop owners.
+    if (profileType === undefined || profileType === 'shop') return
+    loadClubs(session)
+  }, [session, profileType, loadClubs])
 
   function updateClub(updated) {
     setMyClubs((prev) => prev.map((c) => (c.id === updated.id ? updated : c)))
@@ -176,5 +221,11 @@ export function useAuth() {
     updateClub,
     addClub,
     reloadClubs: loadClubs,
+    // shop portal
+    profileType,
+    chooseProfile,
+    shop,
+    setShop,
+    reloadShop: loadShop,
   }
 }

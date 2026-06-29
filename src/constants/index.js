@@ -1,6 +1,9 @@
 export const FREE_MEMBER_LIMIT = 15
 export const BALLS_PER_BOX = 12
 export const PRO_PRICE_VND = 99000
+// Default low-stock alert threshold: warn when fewer than this many sessions of
+// shuttles remain. CLB-configurable via club_settings.shuttle_low_stock_sessions.
+export const DEFAULT_LOW_STOCK_SESSIONS = 1
 export const SPORT_CONFIGS = {
   badminton: { id: 'badminton', labelKey: 'sport_badminton', emoji: '🏸', hasEquipment: true },
   football: { id: 'football', labelKey: 'sport_football', emoji: '⚽', hasEquipment: false },
@@ -36,5 +39,6 @@ export const DEFAULT_SETTINGS = {
   session_configs: [],
   shuttle_cycle_months: 1,
   shuttle_cycle_start_month: 1,
+  shuttle_low_stock_sessions: DEFAULT_LOW_STOCK_SESSIONS,
   fixed_cycle_months: null,
 }

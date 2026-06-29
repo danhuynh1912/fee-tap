@@ -1,5 +1,5 @@
 import { num } from '../lib/utils'
-import { BALLS_PER_BOX } from '../constants'
+import { BALLS_PER_BOX, DEFAULT_LOW_STOCK_SESSIONS } from '../constants'
 import { resolveFeeContext } from './fee/resolveFeeContext'
 
 // ---------------------------------------------------------------------------
@@ -208,6 +208,15 @@ export function computeShuttleStock(shuttleTxns, slots, settings, logs, now = ne
   const rate = num(settings.estimated_shuttlecocks) || 0
   const allWeekdays = [...new Set(slots.flatMap((s) => (Array.isArray(s.weekdays) ? s.weekdays : [])))]
 
+  // CLB-configurable low-stock alert threshold (in sessions). Flag low stock when
+  // fewer than this many sessions of shuttles remain. Single source of truth for
+  // the alert ngưỡng — widgets/shop must read `isLowStock`, never recompute it.
+  const lowThreshold =
+    settings.shuttle_low_stock_sessions != null
+      ? num(settings.shuttle_low_stock_sessions)
+      : DEFAULT_LOW_STOCK_SESSIONS
+  const lowStock = (sessionsLeft) => sessionsLeft < lowThreshold
+
   // SSOT: the shuttle_transactions ledger is the only source of truth for stock.
   // currentStock = SUM(delta) over every transaction (restock, opening, session
   // log, adjustment, estimated settlement). Anything already in the ledger —
@@ -222,6 +231,7 @@ export function computeShuttleStock(shuttleTxns, slots, settings, logs, now = ne
       sessionsLeft: rate > 0 ? Math.floor(currentStock / rate) : 0,
       nextBuyDate: null,
       totalBalls: Math.max(0, currentStock),
+      isLowStock: rate > 0 ? lowStock(Math.floor(currentStock / rate)) : false,
     }
   }
 
@@ -242,6 +252,7 @@ export function computeShuttleStock(shuttleTxns, slots, settings, logs, now = ne
       sessionsLeft: currentStock > 0 && rate > 0 ? Math.floor(currentStock / rate) : 0,
       nextBuyDate: currentStock <= 0 ? localDateStr(now) : null,
       totalBalls: Math.max(0, currentStock),
+      isLowStock: lowStock(currentStock > 0 && rate > 0 ? Math.floor(currentStock / rate) : 0),
     }
   }
   const latestAnchor = anchorTxns.reduce((latest, t) => (t.created_at > latest.created_at ? t : latest))
@@ -310,6 +321,7 @@ export function computeShuttleStock(shuttleTxns, slots, settings, logs, now = ne
     sessionsLeft,
     nextBuyDate,
     totalBalls: Math.max(0, projectedStock),
+    isLowStock: lowStock(sessionsLeft),
   }
 }
 

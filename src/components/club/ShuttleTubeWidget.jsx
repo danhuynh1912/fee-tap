@@ -120,7 +120,7 @@ export function ShuttleTubeWidget({ shuttleStatus, onRestock, canEdit }) {
   const { t } = useTranslation()
   const [modalOpen, setModalOpen] = useState(false)
 
-  const { totalBalls = 0, sessionsLeft = 0, nextBuyDate = null, unloggedCount = 0, projectedStock = 0 } = shuttleStatus || {}
+  const { totalBalls = 0, sessionsLeft = 0, nextBuyDate = null, unloggedCount = 0, projectedStock = 0, isLowStock = false } = shuttleStatus || {}
 
   const totalBoxes = Math.floor(totalBalls / BALLS_PER_BOX)
   const remainder = totalBalls % BALLS_PER_BOX
@@ -132,8 +132,8 @@ export function ShuttleTubeWidget({ shuttleStatus, onRestock, canEdit }) {
     return remainder
   })
 
-  const isLow = sessionsLeft <= 3 && totalBalls > 0
   const isEmpty = totalBalls <= 0
+  const isLow = isLowStock && !isEmpty
 
   const compactMode = totalTubes > COMPACT_THRESHOLD
 

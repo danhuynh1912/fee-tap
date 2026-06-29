@@ -11,8 +11,11 @@ import { SignInPage } from './screens/SignInPage'
 import { ClubPickerPage } from './screens/ClubPickerPage'
 import { PreJoinPage } from './screens/PreJoinPage'
 import { WelcomeModal } from './screens/WelcomeModal'
+import { ChooseProfilePage } from './screens/ChooseProfilePage'
 
 const OnboardingPage = lazy(() => import('./screens/OnboardingPage').then((m) => ({ default: m.OnboardingPage })))
+const ShopOnboardingPage = lazy(() => import('./screens/shop/ShopOnboardingPage').then((m) => ({ default: m.ShopOnboardingPage })))
+const ShopLayout = lazy(() => import('./screens/shop/ShopLayout').then((m) => ({ default: m.ShopLayout })))
 const ClubLayout = lazy(() => import('./screens/club/ClubLayout').then((m) => ({ default: m.ClubLayout })))
 const PublicVotePage = lazy(() => import('./screens/club/PublicVotePage').then((m) => ({ default: m.PublicVotePage })))
 const PublicPayPage = lazy(() => import('./screens/club/PublicPayPage').then((m) => ({ default: m.PublicPayPage })))
@@ -42,7 +45,7 @@ export default function App() {
     toastTimer.current = setTimeout(() => setToastMsg(null), 2600)
   }, [])
 
-  const { session, authReady, myClubs, resolving, signinBusy, signInGoogle, signOut, joinClub, updateClub, addClub } = useAuth()
+  const { session, authReady, myClubs, resolving, signinBusy, signInGoogle, signOut, joinClub, updateClub, addClub, profileType, chooseProfile, shop, setShop, reloadShop } = useAuth()
 
   // Route parsing
   const clubMatch =
@@ -84,7 +87,18 @@ export default function App() {
       .finally(() => setJoining(false))
   }, [session, joinClubId, resolving, alreadyHost, alreadyMember])
 
-  const loading = !authReady || (session && resolving)
+  // Wait for the profile type to resolve before routing. Club loading
+  // (`resolving`) only matters for club-mode users; shop users skip it.
+  const profileResolving = !!session && profileType === undefined
+  const isShopMode = profileType === 'shop'
+  const isClubMode = profileType === 'club' || (profileType === null && myClubs.length > 0)
+  const needsProfileChoice = !!session && profileType === null && myClubs.length === 0
+  const loading = !authReady || profileResolving || (session && isClubMode && resolving)
+
+  // Shop owners only live under /shop/* — bounce them back if they wander off.
+  useEffect(() => {
+    if (isShopMode && shop && !path.startsWith('/shop')) navigate('/shop')
+  }, [isShopMode, shop, path])
 
   const tgVoteMatch = matchPath('/tg/vote/:id', path)
   // When opened via t.me/bot/spofund?startapp=<voteId>, Telegram passes start_param
@@ -133,6 +147,47 @@ export default function App() {
     ) : (
       <SignInPage onGoogle={signInGoogle} busy={signinBusy} />
     )
+  } else if (needsProfileChoice) {
+    body = (
+      <ChooseProfilePage
+        onChoose={async (type) => {
+          await chooseProfile(type)
+          navigate(type === 'shop' ? '/shop/new' : '/new')
+        }}
+      />
+    )
+  } else if (isShopMode) {
+    if (!shop) {
+      body = (
+        <Suspense fallback={<PageLoader />}>
+          <ShopOnboardingPage
+            session={session}
+            toast={toast}
+            onShopReady={(s) => {
+              setShop(s)
+              navigate('/shop')
+            }}
+          />
+        </Suspense>
+      )
+    } else if (path.startsWith('/shop')) {
+      body = (
+        <Suspense fallback={<PageLoader />}>
+          <ShopLayout
+            session={session}
+            shop={shop}
+            setShop={setShop}
+            reloadShop={reloadShop}
+            onSignOut={signOut}
+            path={path}
+            toast={toast}
+          />
+        </Suspense>
+      )
+    } else {
+      // Shop user landed on a non-shop path — redirect handled in effect below.
+      body = <PageLoader />
+    }
   } else if (joinClubId) {
     body = alreadyHost ? (
       <div className="grid flex-1 place-items-center px-4">
@@ -206,7 +261,7 @@ export default function App() {
 
   return (
     <div className="flex min-h-screen flex-col bg-slate-50/50 text-slate-900 antialiased">
-      {!isPublicVote && (
+      {!isPublicVote && !isShopMode && !needsProfileChoice && (
         <Nav
           session={session}
           myClubs={myClubs}
