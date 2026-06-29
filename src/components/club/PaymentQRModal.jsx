@@ -149,24 +149,29 @@ export function PaymentQRModal({ open, onClose, record, memberName, liveAmount, 
       ? `https://api.qrserver.com/v1/create-qr-code/?size=240x240&data=${encodeURIComponent(localRecord.payos_qr_code)}`
       : null
     if (!bank.autoFill && qrImg) {
-      // Download QR first, then redirect to bank
       try {
         const res = await fetch(qrImg)
         const blob = await res.blob()
-        const blobUrl = URL.createObjectURL(blob)
-        const a = document.createElement('a')
-        a.href = blobUrl
-        a.download = 'vietqr.png'
-        document.body.appendChild(a)
-        a.click()
-        document.body.removeChild(a)
-        URL.revokeObjectURL(blobUrl)
+        const file = new File([blob], 'vietqr.png', { type: 'image/png' })
+
+        if (navigator.canShare?.({ files: [file] })) {
+          // iOS/Android: native share sheet → user taps "Save Image" → vào Photos library
+          await navigator.share({ files: [file], title: 'VietQR' })
+        } else {
+          // Desktop fallback: download to Downloads folder
+          const blobUrl = URL.createObjectURL(blob)
+          const a = document.createElement('a')
+          a.href = blobUrl
+          a.download = 'vietqr.png'
+          document.body.appendChild(a)
+          a.click()
+          document.body.removeChild(a)
+          URL.revokeObjectURL(blobUrl)
+        }
       } catch {
-        // iOS Safari blocks blob download — open image in new tab as fallback
-        window.open(qrImg, '_blank', 'noopener,noreferrer')
+        // User cancelled share or fetch failed — still redirect
       }
-      // Small delay so download dialog appears before navigating away
-      setTimeout(openBank, 800)
+      openBank()
     } else {
       openBank()
     }
