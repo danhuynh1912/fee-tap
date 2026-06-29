@@ -120,7 +120,7 @@ serve(async (req) => {
       return new Response(JSON.stringify({ error: payosJson.desc || 'payos_error' }), { status: 502, headers: CORS })
     }
 
-    const { checkoutUrl, qrCode } = payosJson.data
+    const { checkoutUrl, qrCode, accountNumber, accountName, bin } = payosJson.data
 
     // Persist order info to DB
     await supabase.from('member_payment_records').update({
@@ -129,7 +129,11 @@ serve(async (req) => {
       payos_qr_code: qrCode,
     }).eq('id', record_id)
 
-    return new Response(JSON.stringify({ orderCode, checkoutUrl, qrCode }), {
+    return new Response(JSON.stringify({
+      orderCode, checkoutUrl, qrCode,
+      // Used by client to build dl.vietqr.io deep links per bank
+      accountNumber, accountName, bin, description,
+    }), {
       headers: { ...CORS, 'Content-Type': 'application/json' },
     })
   } catch (err) {
