@@ -70,6 +70,8 @@ export function PaymentQRModal({ open, onClose, record, memberName, liveAmount, 
   const [loadingBankId, setLoadingBankId] = useState(null)
 
   const isMobile = /android|iphone|ipad/i.test(navigator.userAgent)
+  // FBAN = Facebook App (Messenger), FB_IAB = Facebook In-App Browser
+  const isFBWebView = /FBAN|FB_IAB|FBAV|FBIOS/i.test(navigator.userAgent)
 
   useEffect(() => {
     const wasPending = localRecord?.status === 'pending'
@@ -175,7 +177,8 @@ export function PaymentQRModal({ open, onClose, record, memberName, liveAmount, 
       } finally {
         setLoadingBankId(null)
       }
-      openBank()
+      // Messenger WebView needs time to dismiss share sheet before navigation works
+      isFBWebView ? setTimeout(openBank, 300) : openBank()
     } else {
       openBank()
     }
