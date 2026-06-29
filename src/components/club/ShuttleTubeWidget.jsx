@@ -6,7 +6,7 @@ import { BALLS_PER_BOX } from '../../constants'
 import { Badge } from '../ui/Badge'
 
 // ── Single shuttlecock icon ───────────────────────────────────────────────────
-function ShuttlecockIcon({ filled }) {
+export function ShuttlecockIcon({ filled }) {
   const feather = filled ? '#a3e635' : '#e2e8f0'
   const line    = filled ? '#3f6212' : '#94a3b8'
   const cork    = filled ? '#84cc16' : '#d1d5db'
@@ -120,7 +120,7 @@ export function ShuttleTubeWidget({ shuttleStatus, onRestock, canEdit }) {
   const { t } = useTranslation()
   const [modalOpen, setModalOpen] = useState(false)
 
-  const { totalBalls = 0, sessionsLeft = 0, nextBuyDate = null, unloggedCount = 0, projectedStock = 0 } = shuttleStatus || {}
+  const { totalBalls = 0, sessionsLeft = 0, nextBuyDate = null, unloggedCount = 0, projectedStock = 0, isLowStock = false } = shuttleStatus || {}
 
   const totalBoxes = Math.floor(totalBalls / BALLS_PER_BOX)
   const remainder = totalBalls % BALLS_PER_BOX
@@ -132,8 +132,8 @@ export function ShuttleTubeWidget({ shuttleStatus, onRestock, canEdit }) {
     return remainder
   })
 
-  const isLow = sessionsLeft <= 3 && totalBalls > 0
   const isEmpty = totalBalls <= 0
+  const isLow = isLowStock && !isEmpty
 
   const compactMode = totalTubes > COMPACT_THRESHOLD
 

@@ -5,7 +5,7 @@ import { handleError } from '../lib/handleError'
 import { num } from '../lib/utils'
 import { computeSlot, projectUpcomingCollections, buildSettleInserts } from '../engine/forecast'
 import { resolveFeeContext } from '../engine/fee/resolveFeeContext'
-import { BALLS_PER_BOX } from '../constants'
+import { BALLS_PER_BOX, DEFAULT_LOW_STOCK_SESSIONS } from '../constants'
 
 export function useSettingsForm({ club, settings, initialSlots, shuttleTxns, fundTxns, logs, members, pollTally, hostName, sport, canEdit, toast, reload, setSettings, openUpsell }) {
   const { t } = useTranslation()
@@ -17,6 +17,7 @@ export function useSettingsForm({ club, settings, initialSlots, shuttleTxns, fun
     current_fund: settings.current_fund ?? 0,
     shuttle_cycle_months: settings.shuttle_cycle_months ?? 1,
     shuttle_cycle_start_month: settings.shuttle_cycle_start_month ?? 1,
+    shuttle_low_stock_sessions: settings.shuttle_low_stock_sessions ?? DEFAULT_LOW_STOCK_SESSIONS,
     fee_split_mode: settings.fee_split_mode ?? 'committed_only',
     fee_split_fixed_count: settings.fee_split_fixed_count ?? '',
     guest_fee_mode: settings.guest_fee_mode ?? 'split_all',
@@ -97,6 +98,7 @@ export function useSettingsForm({ club, settings, initialSlots, shuttleTxns, fun
         current_fund: num(form.current_fund),
         shuttle_cycle_months: Math.max(1, parseInt(form.shuttle_cycle_months, 10) || 1),
         shuttle_cycle_start_month: Math.max(1, Math.min(12, parseInt(form.shuttle_cycle_start_month, 10) || 1)),
+        shuttle_low_stock_sessions: Math.max(0, num(form.shuttle_low_stock_sessions)),
         fee_split_mode: form.fee_split_mode,
         fee_split_fixed_count: form.fee_split_mode === 'fixed_count' && num(form.fee_split_fixed_count) > 0 ? num(form.fee_split_fixed_count) : null,
         guest_fee_mode: form.guest_fee_mode,
