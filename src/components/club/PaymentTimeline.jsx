@@ -1,6 +1,6 @@
 import { useMemo, useState } from 'react'
 import { useTranslation } from 'react-i18next'
-import { MapPin, AlertTriangle, Clock, Package, Users, CheckCircle2, QrCode, PlusCircle, Loader2, UserPlus, Link } from 'lucide-react'
+import { MapPin, AlertTriangle, Clock, Feather, Users, CheckCircle2, QrCode, PlusCircle, Loader2, Link, Info } from 'lucide-react'
 import { cx, fmtVND, fmtNum } from '../../lib/utils'
 import { computePaymentTimeline, formatPeriodLabel } from '../../engine/forecast'
 import { resolveFeeContext } from '../../engine/fee/resolveFeeContext'
@@ -73,12 +73,12 @@ function UpcomingSlotCard({ result, lang, t }) {
     <div className="p-4 flex items-start justify-between gap-3 bg-white">
       <div className="min-w-0">
         <div className="flex items-center gap-2 flex-wrap">
-          <span className="font-semibold text-sm text-slate-900">{slot.name}</span>
+          <span className="flex items-center gap-1.5">
+            <MapPin className="h-3.5 w-3.5 text-slate-400 shrink-0" />
+            <span className="font-semibold text-sm text-slate-900">{slot.name}</span>
+          </span>
           {slot.venue_name && (
-            <span className="flex items-center gap-1 text-xs text-slate-400">
-              <MapPin className="h-3 w-3" />
-              {slot.venue_name}
-            </span>
+            <span className="text-xs text-slate-400">{slot.venue_name}</span>
           )}
         </div>
         <p className="text-xs text-slate-400 mt-0.5">
@@ -106,7 +106,7 @@ function ShuttleCard({ shuttle, t }) {
     return (
       <div className={cx('rounded-2xl border p-4 space-y-2', isLow ? 'border-amber-200 bg-amber-50' : 'border-slate-100 bg-white')}>
         <div className="flex items-center gap-2">
-          <Package className={cx('h-4 w-4', isLow ? 'text-amber-500' : 'text-slate-400')} />
+          <Feather className={cx('h-4 w-4', isLow ? 'text-amber-500' : 'text-slate-400')} />
           <span className="text-sm font-semibold text-slate-700">{t('shuttle_mode_inventory')}</span>
           {isLow && (
             <Badge tone="amber">
@@ -126,7 +126,7 @@ function ShuttleCard({ shuttle, t }) {
     <div className="rounded-2xl border border-slate-100 bg-white p-4 space-y-2">
       <div className="flex items-center justify-between">
         <div className="flex items-center gap-2">
-          <Package className="h-4 w-4 text-slate-400" />
+          <Feather className="h-4 w-4 text-slate-400" />
           <span className="text-sm font-semibold text-slate-700">{t('timeline_shuttle_estimate')}</span>
         </div>
         <span className="font-mono text-sm font-bold text-slate-900">{fmtVND(shuttle.cost)}</span>
@@ -224,40 +224,6 @@ function GroupSummary({
         </div>
       </div>
 
-      {guestRecruitment && (
-        <div className="border-t border-slate-700 pt-3">
-          <div className="flex items-center gap-1.5 mb-2">
-            <UserPlus className="h-3.5 w-3.5 text-slate-400" />
-            <span className="text-xs text-slate-400">{t('guest_recruit_title')}</span>
-            <span className="text-[10px] text-slate-600 ml-auto font-mono">
-              {t('guest_recruit_shortfall', { amount: fmtVND(Math.ceil(guestRecruitment.perSessionShortfall)) })}
-            </span>
-          </div>
-          {guestRecruitment.combinations.length === 0 ? (
-            <p className="text-xs text-red-400 italic">{t('guest_recruit_impossible')}</p>
-          ) : (
-            <div className="flex flex-wrap gap-1.5">
-              {guestRecruitment.combinations.map((c, i) => (
-                <span key={i} className="inline-flex items-center gap-1">
-                  <span className="bg-slate-800 border border-slate-700 text-slate-200 text-xs font-semibold px-2.5 py-1 rounded-full">
-                    {c.genderless
-                      ? t('guest_recruit_n_total', { n: c.total })
-                      : [
-                          c.males > 0 && t('guest_recruit_males', { n: c.males }),
-                          c.females > 0 && t('guest_recruit_females', { n: c.females }),
-                        ]
-                          .filter(Boolean)
-                          .join(' + ')}
-                  </span>
-                  {i < guestRecruitment.combinations.length - 1 && (
-                    <span className="text-[10px] text-slate-600">{t('guest_recruit_or')}</span>
-                  )}
-                </span>
-              ))}
-            </div>
-          )}
-        </div>
-      )}
 
       {canEdit && nextAdjustedFee > 0 && isLast && (
         <div className={cx('rounded-xl px-4 py-3 flex items-center justify-between mt-1', projectedSurplus ? 'bg-lime-900/40' : 'bg-red-900/30')}>
@@ -287,33 +253,30 @@ function GroupSummary({
         {/* Collection open: show member payment status */}
         {collection && (
           <>
-            {/* Paid member avatars */}
-            {paidPayments.length > 0 && (
+            {/* Paid member avatars + count progress + copy link + admin view button */}
+            <div className="flex flex-col sm:flex-row sm:items-center sm:justify-between gap-2">
               <div className="flex items-center gap-2 flex-wrap">
-                <span className="text-xs text-slate-400">{t('collection_paid_members_label')}</span>
-                <PaidAvatars paidPayments={paidPayments} members={members} />
-              </div>
-            )}
-
-            {/* Paid count progress + copy link + admin view button */}
-            <div className="flex items-center justify-between gap-3">
-              <div className="flex items-center gap-2">
-                <CheckCircle2 className={cx('h-4 w-4', paidCount > 0 ? 'text-lime-400' : 'text-slate-600')} />
-                <span className="text-xs text-slate-400">{t('collection_paid_count', { paid: paidCount, total: totalMembers })}</span>
+                {paidPayments.length > 0 && (
+                  <>
+                    <span className="text-xs text-slate-400">{t('collection_paid_members_label')}</span>
+                    <PaidAvatars paidPayments={paidPayments} members={members} />
+                  </>
+                )}
+                <span className="text-xs text-slate-400">{paidCount}/{totalMembers}</span>
               </div>
               <div className="flex items-center gap-1.5">
                 {onCopyLink && (
                   <button
                     onClick={onCopyLink}
                     title={t('collection_copy_link')}
-                    className="flex items-center gap-1 rounded-xl border border-slate-700 px-2 py-1.5 text-xs font-semibold text-slate-400 hover:border-slate-500 hover:text-slate-200 transition active:scale-[0.97]"
+                    className="hidden sm:flex items-center gap-1 rounded-xl border border-slate-700 px-2 py-1.5 text-xs font-semibold text-slate-400 hover:border-slate-500 hover:text-slate-200 transition active:scale-[0.97]"
                   >
                     <Link className="h-3 w-3" />
-                    {t('collection_copy_link')}
+                    <span>{t('collection_copy_link')}</span>
                   </button>
                 )}
                 {canEdit && (
-                  <Button variant="darkSubtle" size="sm" onClick={onViewCollection}>
+                  <Button variant="darkSubtle" size="sm" className="hidden sm:inline-flex" onClick={onViewCollection}>
                     {t('collection_view_btn')}
                   </Button>
                 )}
@@ -322,21 +285,44 @@ function GroupSummary({
 
             {/* Member own payment status + QR (if PayOS ready) — shown for both member and admin */}
             {currentMemberId && (
-              <div className="flex items-center justify-between gap-3">
-                {myIsPaid ? (
-                  <div className="flex items-center gap-2">
-                    <CheckCircle2 className="h-4 w-4 text-lime-400" />
-                    <span className="text-sm font-semibold text-lime-400">{t('payment_status_paid')}</span>
+              <div className="flex flex-col gap-2">
+                {/* Status row: paid/pending + icon buttons (copy + view) */}
+                <div className="flex items-center justify-between gap-3">
+                  {myIsPaid ? (
+                    <div className="flex items-center gap-2">
+                      <CheckCircle2 className="h-4 w-4 text-lime-400" />
+                      <span className="text-sm font-semibold text-lime-400">{t('payment_status_paid')}</span>
+                    </div>
+                  ) : (
+                    <div className="flex items-center gap-2">
+                      <Clock className="h-4 w-4 text-slate-500" />
+                      <span className="text-sm text-slate-400">{t('payment_status_pending')}</span>
+                    </div>
+                  )}
+                  <div className="flex items-center gap-1.5 sm:hidden">
+                    {onCopyLink && (
+                      <button
+                        onClick={onCopyLink}
+                        title={t('collection_copy_link')}
+                        className="flex items-center gap-1 rounded-xl border border-slate-700 px-2 py-1.5 text-xs font-semibold text-slate-400 hover:border-slate-500 hover:text-slate-200 transition active:scale-[0.97]"
+                      >
+                        <Link className="h-3 w-3" />
+                      </button>
+                    )}
+                    {canEdit && (
+                      <button
+                        onClick={onViewCollection}
+                        title={t('collection_view_btn')}
+                        className="flex items-center gap-1 rounded-xl border border-slate-700 px-2 py-1.5 text-xs font-semibold text-slate-400 hover:border-slate-500 hover:text-slate-200 transition active:scale-[0.97]"
+                      >
+                        <Info className="h-3 w-3" />
+                      </button>
+                    )}
                   </div>
-                ) : (
-                  <div className="flex items-center gap-2">
-                    <Clock className="h-4 w-4 text-slate-500" />
-                    <span className="text-sm text-slate-400">{t('payment_status_pending')}</span>
-                  </div>
-                )}
-                {/* QR button only when PayOS configured AND member has a record AND not yet paid */}
+                </div>
+                {/* QR button: full width on mobile, auto on desktop */}
                 {!myIsPaid && myRecord && payosConfigured && (
-                  <Button variant="volt" size="sm" onClick={() => onPayQR(perMember)}>
+                  <Button variant="volt" size="sm" className="w-full sm:w-auto" onClick={() => onPayQR(perMember)}>
                     <QrCode className="h-4 w-4" /> {t('payment_qr_btn')}
                   </Button>
                 )}
@@ -558,7 +544,7 @@ export function PaymentTimeline({
                     <div className="p-4 flex items-start justify-between gap-3 bg-white">
                       <div className="min-w-0">
                         <div className="flex items-center gap-2">
-                          <Package className="h-3.5 w-3.5 text-slate-400 shrink-0" />
+                          <Feather className="h-3.5 w-3.5 text-slate-400 shrink-0" />
                           <span className="font-semibold text-sm text-slate-900">{t('timeline_shuttle_estimate')}</span>
                         </div>
                         <p className="text-xs text-slate-400 mt-0.5">
@@ -620,9 +606,15 @@ export function PaymentTimeline({
                 />
 
                 {/* Inline cycle vote — first group only, always rendered */}
-                {gi === 0 && cycleVoteProps && (
-                  <CycleVoteInline {...cycleVoteProps} />
-                )}
+                {gi === 0 && cycleVoteProps && (() => {
+                  const total = courtCost + shuttleCost
+                  const effectiveCnt = feeCtx?.effectiveCount || memberCount
+                  const perMember = effectiveCnt > 0 ? Math.ceil(total / effectiveCnt) : 0
+                  const guestRecruitment = feeCtx?.isFixed && shuttleCost > 0 && collections[0]
+                    ? computeGuestRecruitment({ feeCtx, perMember, shuttleCost, period: group.shuttleItem?.period ?? null, slots, settings })
+                    : null
+                  return <CycleVoteInline {...cycleVoteProps} guestRecruitment={guestRecruitment} />
+                })()}
               </div>
               </div>
             )

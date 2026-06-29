@@ -83,43 +83,25 @@ export function ClubLayout({ session, club, setClub, path, toast, onSignOut }) {
     const hasEquipment = sport?.hasEquipment ?? true
     const all = computeAll(effectiveSettings, memberCount, hasEquipment, new Date(), slots)
     const sessionConfigs = getSessionConfigs(effectiveSettings)
-    const pricePerBox = hasEquipment ? num(effectiveSettings.price_per_box) : 0
-    const estRate = hasEquipment ? num(effectiveSettings.estimated_shuttlecocks) : 0
 
-    const totalActualSpent = all.venues.reduce((sum, v) => {
+    // Court costs only — shuttle purchases are already baked into fundBalance
+    // via fund_transactions (type='shuttle_purchase'). Adding per-session shuttle
+    // accrual on top would double-count every shuttle purchase.
+    const courtSpent = all.venues.reduce((sum, v) => {
       if (v.weekday === null || v.weekday === undefined) return sum
       const { start, end } = periodDateRange(v.period)
       const wd = Number(v.weekday)
       const venueLogs = (logs || []).filter(
         (l) => l.played_on >= start && l.played_on <= end && new Date(l.played_on + 'T12:00:00').getDay() === wd
       )
-      const loggedCount = venueLogs.length
-      const estimatedCount = Math.max(0, v.happened - loggedCount)
-
-      // Court cost
-      let courtCost
-      if (v.court_payment_mode === 'cycle') {
-        courtCost = v.courtCost
-      } else {
-        const sc = sessionConfigs.find((c) => c.weekday === v.weekday) || {}
-        const courtPerSession = num(sc.court_price_per_hour) * num(sc.hours_per_session)
-        const courtActual = venueLogs.reduce((s, l) => s + num(l.court_cost), 0)
-        courtCost = courtActual + estimatedCount * courtPerSession
-      }
-
-      // Shuttle consumption cost (per session, not per restock)
-      let shuttleCost = 0
-      if (pricePerBox > 0 && estRate > 0) {
-        const shuttleActual = venueLogs.reduce((s, l) => {
-          const balls = num(l.actual_shuttlecocks) || estRate
-          return s + (balls / BALLS_PER_BOX) * pricePerBox
-        }, 0)
-        shuttleCost = shuttleActual + estimatedCount * (estRate / BALLS_PER_BOX) * pricePerBox
-      }
-
-      return sum + courtCost + shuttleCost
+      const estimatedCount = Math.max(0, v.happened - venueLogs.length)
+      if (v.court_payment_mode === 'cycle') return sum + v.courtCost
+      const sc = sessionConfigs.find((c) => c.weekday === v.weekday) || {}
+      const courtPerSession = num(sc.court_price_per_hour) * num(sc.hours_per_session)
+      const courtActual = venueLogs.reduce((s, l) => s + num(l.court_cost), 0)
+      return sum + courtActual + estimatedCount * courtPerSession
     }, 0)
-    return fundBalance - totalActualSpent
+    return fundBalance - courtSpent
   }, [effectiveSettings, slots, effectiveMembers, logs, fundBalance, sport])
   const tab = activeTab(path, club.id)
 
