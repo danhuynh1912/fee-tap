@@ -1,6 +1,6 @@
-import { useState, useEffect } from 'react'
+import { useState, useEffect, useCallback } from 'react'
 import { useTranslation } from 'react-i18next'
-import { QrCode, CheckCircle2, Loader2, ExternalLink, RefreshCw } from 'lucide-react'
+import { QrCode, CheckCircle2, Loader2, ExternalLink, RefreshCw, Globe } from 'lucide-react'
 import { Modal } from '../ui/Modal'
 import { Button } from '../ui/Button'
 import { cx, fmtVND } from '../../lib/utils'
@@ -8,11 +8,61 @@ import { supabase } from '../../lib/supabase'
 import { createPaymentQR } from '../../lib/paymentService'
 import { handleError } from '../../lib/handleError'
 
+// Banks with known URI schemes use: bankScheme → napas247 → web (Option 3 priority)
+// Banks without known scheme use:           napas247 → web (Option 2)
+const BANKS = [
+  // Known URI schemes — full priority chain
+  { id: 'vcb',  label: 'VCB',      fullName: 'Vietcombank',  scheme: 'vcbdigibank',  color: '#007B40' },
+  { id: 'mb',   label: 'MB',       fullName: 'MB Bank',      scheme: 'mbmobile',     color: '#5B2D8E' },
+  { id: 'tcb',  label: 'TCB',      fullName: 'Techcombank',  scheme: 'techcombank',  color: '#EE0033' },
+  // napas247 only (scheme unknown or unverified)
+  { id: 'bidv', label: 'BIDV',     fullName: 'BIDV',         scheme: null,           color: '#005BAA' },
+  { id: 'agr',  label: 'AGR',      fullName: 'Agribank',     scheme: null,           color: '#C8102E' },
+  { id: 'vtb',  label: 'VTB',      fullName: 'VietinBank',   scheme: null,           color: '#003087' },
+  { id: 'vpb',  label: 'VPB',      fullName: 'VPBank',       scheme: null,           color: '#00A651' },
+  { id: 'acb',  label: 'ACB',      fullName: 'ACB',          scheme: null,           color: '#003087' },
+  { id: 'stb',  label: 'STB',      fullName: 'Sacombank',    scheme: null,           color: '#0066CC' },
+  { id: 'tpb',  label: 'TP',       fullName: 'TPBank',       scheme: null,           color: '#8B0000' },
+  { id: 'hdb',  label: 'HDB',      fullName: 'HDBank',       scheme: null,           color: '#003366' },
+  { id: 'shb',  label: 'SHB',      fullName: 'SHB',          scheme: null,           color: '#D4001B' },
+  { id: 'ocb',  label: 'OCB',      fullName: 'OCB',          scheme: null,           color: '#FF6600' },
+  { id: 'msb',  label: 'MSB',      fullName: 'MSB',          scheme: null,           color: '#E30613' },
+  { id: 'sea',  label: 'SeA',      fullName: 'SeABank',      scheme: null,           color: '#00AEEF' },
+  { id: 'vib',  label: 'VIB',      fullName: 'VIB',          scheme: null,           color: '#003087' },
+  { id: 'lpb',  label: 'LPB',      fullName: 'LienVietPost', scheme: null,           color: '#E30613' },
+  { id: 'nam',  label: 'NAM',      fullName: 'Nam A Bank',   scheme: null,           color: '#CC0000' },
+  { id: 'bvb',  label: 'BVB',      fullName: 'BaoViet Bank', scheme: null,           color: '#003087' },
+]
+
+function tryDeepLink(scheme, qrData, checkoutUrl, onNoApp) {
+  const url = `${scheme}://qr?data=${encodeURIComponent(qrData)}`
+
+  // Cancel fallback if user leaves the page (app opened successfully)
+  const fallback = setTimeout(() => {
+    if (checkoutUrl) {
+      window.open(checkoutUrl, '_blank', 'noopener,noreferrer')
+    } else {
+      onNoApp?.()
+    }
+  }, 1500)
+
+  document.addEventListener('visibilitychange', function handler() {
+    if (document.hidden) {
+      clearTimeout(fallback)
+      document.removeEventListener('visibilitychange', handler)
+    }
+  })
+
+  window.location.href = url
+}
+
 export function PaymentQRModal({ open, onClose, record, memberName, liveAmount, toast }) {
   const { t } = useTranslation()
   const [loading, setLoading] = useState(false)
   const [localRecord, setLocalRecord] = useState(record)
   const [justPaid, setJustPaid] = useState(false)
+
+  const isMobile = /android|iphone|ipad/i.test(navigator.userAgent)
 
   // Sync record from parent (realtime updates flow through here)
   // Detect transition to paid → trigger celebration then auto-close
@@ -70,8 +120,48 @@ export function PaymentQRModal({ open, onClose, record, memberName, liveAmount, 
     }
   }
 
+  const handleBankClick = useCallback((bank) => {
+    const qrData = localRecord?.payos_qr_code
+    const checkoutUrl = localRecord?.payos_checkout_url
+    if (!qrData && !checkoutUrl) return
+
+    if (!isMobile || !qrData) {
+      if (checkoutUrl) window.open(checkoutUrl, '_blank', 'noopener,noreferrer')
+      return
+    }
+
+    const napasUrl = `napas247://qr?data=${encodeURIComponent(qrData)}`
+    const openWeb = () => {
+      if (checkoutUrl) window.open(checkoutUrl, '_blank', 'noopener,noreferrer')
+      else toast?.(t('payment_qr_no_app'))
+    }
+
+    const withFallback = (url, onFail) => {
+      const timer = setTimeout(onFail, 1500)
+      document.addEventListener('visibilitychange', function handler() {
+        if (document.hidden) {
+          clearTimeout(timer)
+          document.removeEventListener('visibilitychange', handler)
+        }
+      })
+      window.location.href = url
+    }
+
+    if (bank.scheme) {
+      // Option 3 banks: bankScheme → napas247 → web
+      withFallback(
+        `${bank.scheme}://qr?data=${encodeURIComponent(qrData)}`,
+        () => withFallback(napasUrl, openWeb)
+      )
+    } else {
+      // Option 2 banks: napas247 → web
+      withFallback(napasUrl, openWeb)
+    }
+  }, [localRecord?.payos_qr_code, localRecord?.payos_checkout_url, isMobile, toast, t])
+
   const isPaid = localRecord?.status === 'paid' || localRecord?.status === 'manual'
-  const qrImageUrl = localRecord?.payos_qr_code
+  const hasQR = !!localRecord?.payos_qr_code
+  const qrImageUrl = hasQR
     ? `https://api.qrserver.com/v1/create-qr-code/?size=240x240&data=${encodeURIComponent(localRecord.payos_qr_code)}`
     : null
 
@@ -145,19 +235,57 @@ export function PaymentQRModal({ open, onClose, record, memberName, liveAmount, 
               )}
             </div>
 
-            {qrImageUrl && <p className="text-center text-xs text-slate-400">{t('payment_qr_scan')}</p>}
+            {/* Bank picker (mobile) or single web button (desktop) */}
+            {(hasQR || localRecord?.payos_checkout_url) && (
+              isMobile ? (
+                <div className="space-y-2">
+                  <p className="text-center text-xs font-semibold text-slate-400 uppercase tracking-wide">
+                    {t('payment_qr_pick_bank')}
+                  </p>
+                  <div className="grid grid-cols-4 gap-2 max-h-52 overflow-y-auto pr-0.5">
+                    {BANKS.map((bank) => (
+                      <button
+                        key={bank.id}
+                        onClick={() => handleBankClick(bank)}
+                        className="flex flex-col items-center gap-1.5 rounded-2xl border border-slate-100 bg-slate-50 py-3 transition active:scale-95 hover:bg-slate-100"
+                      >
+                        <span
+                          className="h-8 w-8 rounded-full grid place-items-center text-white text-[10px] font-black shrink-0"
+                          style={{ backgroundColor: bank.color }}
+                        >
+                          {bank.label}
+                        </span>
+                        <span className="text-[10px] font-semibold text-slate-500 leading-tight text-center px-0.5">
+                          {bank.label}
+                        </span>
+                      </button>
+                    ))}
+                  </div>
+                  {localRecord?.payos_checkout_url && (
+                    <button
+                      onClick={() => window.open(localRecord.payos_checkout_url, '_blank', 'noopener,noreferrer')}
+                      className="flex items-center justify-center gap-1.5 w-full text-xs text-slate-400 hover:text-slate-600 transition py-1"
+                    >
+                      <Globe className="h-3 w-3" />
+                      {t('payment_qr_open_web')}
+                    </button>
+                  )}
+                </div>
+              ) : (
+                <a
+                  href={localRecord?.payos_checkout_url}
+                  target="_blank"
+                  rel="noopener noreferrer"
+                  className="flex items-center justify-center gap-2 w-full rounded-2xl bg-slate-900 py-3 text-sm font-semibold text-lime-400 hover:bg-slate-800 transition active:scale-[0.98]"
+                >
+                  <ExternalLink className="h-4 w-4" />
+                  {t('payment_qr_open_bank')}
+                </a>
+              )
+            )}
 
-            {/* Open bank app button */}
-            {localRecord?.payos_checkout_url && (
-              <a
-                href={localRecord.payos_checkout_url}
-                target="_blank"
-                rel="noopener noreferrer"
-                className="flex items-center justify-center gap-2 w-full rounded-2xl bg-slate-900 py-3 text-sm font-semibold text-lime-400 hover:bg-slate-800 transition active:scale-[0.98]"
-              >
-                <ExternalLink className="h-4 w-4" />
-                {t('payment_qr_open_bank')}
-              </a>
+            {qrImageUrl && !isMobile && (
+              <p className="text-center text-xs text-slate-400">{t('payment_qr_scan')}</p>
             )}
           </>
         )}
