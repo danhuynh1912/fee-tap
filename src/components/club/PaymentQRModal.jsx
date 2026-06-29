@@ -10,26 +10,27 @@ import { handleError } from '../../lib/handleError'
 
 // dl.vietqr.io app IDs — confirmed: icb (VietinBank), bidv, acb. Others best-effort.
 // If app= is wrong, redirect_url brings user back to PayOS web checkout.
+const BH = 'https://img.bankhub.dev/rounded'
 const BANKS = [
-  { id: 'vcb',  label: 'VCB',  fullName: 'Vietcombank',    appId: 'vcb',   color: '#007B40' },
-  { id: 'mb',   label: 'MB',   fullName: 'MB Bank',        appId: 'mb',    color: '#5B2D8E' },
-  { id: 'tcb',  label: 'TCB',  fullName: 'Techcombank',    appId: 'tcb',   color: '#EE0033' },
-  { id: 'bidv', label: 'BIDV', fullName: 'BIDV',           appId: 'bidv',  color: '#005BAA', strictNote: true },
-  { id: 'icb',  label: 'VTB',  fullName: 'VietinBank',     appId: 'icb',   color: '#1A4F9F', strictNote: true },
-  { id: 'vpb',  label: 'VPB',  fullName: 'VPBank NEO',     appId: 'vpb',   color: '#00A651' },
-  { id: 'acb',  label: 'ACB',  fullName: 'ACB',            appId: 'acb',   color: '#1A3C8F' },
-  { id: 'agr',  label: 'AGR',  fullName: 'Agribank',       appId: 'agr',   color: '#C8102E' },
-  { id: 'stb',  label: 'STB',  fullName: 'Sacombank',      appId: 'stb',   color: '#0066CC' },
-  { id: 'tpb',  label: 'TP',   fullName: 'TPBank',         appId: 'tpb',   color: '#6B0000' },
-  { id: 'hdb',  label: 'HDB',  fullName: 'HDBank',         appId: 'hdb',   color: '#003366' },
-  { id: 'shb',  label: 'SHB',  fullName: 'SHB',            appId: 'shb',   color: '#D4001B' },
-  { id: 'ocb',  label: 'OCB',  fullName: 'OCB',            appId: 'ocb',   color: '#FF6600' },
-  { id: 'msb',  label: 'MSB',  fullName: 'MSB',            appId: 'msb',   color: '#E30613' },
-  { id: 'sea',  label: 'SeA',  fullName: 'SeABank',        appId: 'seab',  color: '#00AEEF' },
-  { id: 'vib',  label: 'VIB',  fullName: 'VIB',            appId: 'vib',   color: '#5C0F8B' },
-  { id: 'lpb',  label: 'LPB',  fullName: 'LienViet24h',    appId: 'lpb',   color: '#CC0000' },
-  { id: 'scb',  label: 'SCB',  fullName: 'SCB',            appId: 'scb',   color: '#003087' },
-  { id: 'cake', label: 'CAKE', fullName: 'CAKE by VPBank', appId: 'cake',  color: '#FF69B4' },
+  { id: 'vcb',  label: 'VCB',  fullName: 'Vietcombank',    appId: 'vcb',   color: '#007B40', logo: `${BH}/vietcombank.png` },
+  { id: 'mb',   label: 'MB',   fullName: 'MB Bank',        appId: 'mb',    color: '#5B2D8E', logo: `${BH}/mbbank.png` },
+  { id: 'tcb',  label: 'TCB',  fullName: 'Techcombank',    appId: 'tcb',   color: '#EE0033', logo: `${BH}/techcombank.png` },
+  { id: 'bidv', label: 'BIDV', fullName: 'BIDV',           appId: 'bidv',  color: '#005BAA', logo: `${BH}/bidv.png`,           strictNote: true },
+  { id: 'icb',  label: 'VTB',  fullName: 'VietinBank',     appId: 'icb',   color: '#1A4F9F', logo: `${BH}/vietinbank.png`,     strictNote: true },
+  { id: 'vpb',  label: 'VPB',  fullName: 'VPBank NEO',     appId: 'vpb',   color: '#00A651', logo: `${BH}/vpbank.png` },
+  { id: 'acb',  label: 'ACB',  fullName: 'ACB',            appId: 'acb',   color: '#1A3C8F', logo: `${BH}/acb.png` },
+  { id: 'agr',  label: 'AGR',  fullName: 'Agribank',       appId: 'agr',   color: '#C8102E', logo: `${BH}/agribank.png` },
+  { id: 'stb',  label: 'STB',  fullName: 'Sacombank',      appId: 'stb',   color: '#0066CC', logo: `${BH}/sacombank.png` },
+  { id: 'tpb',  label: 'TP',   fullName: 'TPBank',         appId: 'tpb',   color: '#6B0000', logo: `${BH}/tpbank.png` },
+  { id: 'hdb',  label: 'HDB',  fullName: 'HDBank',         appId: 'hdb',   color: '#003366', logo: `${BH}/hdbank.png` },
+  { id: 'shb',  label: 'SHB',  fullName: 'SHB',            appId: 'shb',   color: '#D4001B', logo: `${BH}/shb.png` },
+  { id: 'ocb',  label: 'OCB',  fullName: 'OCB',            appId: 'ocb',   color: '#FF6600', logo: `${BH}/ocb.png` },
+  { id: 'msb',  label: 'MSB',  fullName: 'MSB',            appId: 'msb',   color: '#E30613', logo: `${BH}/msb.png` },
+  { id: 'sea',  label: 'SeA',  fullName: 'SeABank',        appId: 'seab',  color: '#00AEEF', logo: `${BH}/seabank.png` },
+  { id: 'vib',  label: 'VIB',  fullName: 'VIB',            appId: 'vib',   color: '#5C0F8B', logo: `${BH}/vib.png` },
+  { id: 'lpb',  label: 'LPB',  fullName: 'LienViet24h',    appId: 'lpb',   color: '#CC0000', logo: `${BH}/lpbank.png` },
+  { id: 'scb',  label: 'SCB',  fullName: 'SCB',            appId: 'scb',   color: '#003087', logo: `${BH}/scb.png` },
+  { id: 'cake', label: 'CAKE', fullName: 'CAKE by VPBank', appId: 'cake',  color: '#FF69B4', logo: `${BH}/cake.png` },
 ]
 
 // Build dl.vietqr.io deep link for a specific bank app.
@@ -63,6 +64,7 @@ export function PaymentQRModal({ open, onClose, record, memberName, liveAmount, 
   const [justPaid, setJustPaid] = useState(false)
   // Extra fields from PayOS API needed for dl.vietqr.io links
   const [vietQRMeta, setVietQRMeta] = useState(null) // { accountNumber, accountName, bin, description }
+  const [showAllBanks, setShowAllBanks] = useState(false)
 
   const isMobile = /android|iphone|ipad/i.test(navigator.userAgent)
 
@@ -211,15 +213,26 @@ export function PaymentQRModal({ open, onClose, record, memberName, liveAmount, 
                   <p className="text-xs font-semibold text-slate-400 uppercase tracking-wide text-center">
                     {t('payment_qr_pick_bank')}
                   </p>
-                  <div className="grid grid-cols-4 gap-2 max-h-52 overflow-y-auto">
-                    {BANKS.map((bank) => (
+                  <div className="grid grid-cols-4 gap-2">
+                    {(showAllBanks ? BANKS : BANKS.slice(0, 7)).map((bank) => (
                       <button
                         key={bank.id}
                         onClick={() => handleBankClick(bank)}
                         className="flex flex-col items-center gap-1.5 rounded-2xl border border-slate-100 bg-slate-50 py-3 transition active:scale-95 hover:bg-slate-100"
                       >
+                        <img
+                          src={bank.logo}
+                          alt={bank.fullName}
+                          width={32}
+                          height={32}
+                          className="h-8 w-8 rounded-xl object-cover shrink-0"
+                          onError={e => {
+                            e.currentTarget.style.display = 'none'
+                            e.currentTarget.nextSibling.style.display = 'grid'
+                          }}
+                        />
                         <span
-                          className="h-8 w-8 rounded-xl grid place-items-center text-white text-[9px] font-black shrink-0"
+                          className="h-8 w-8 rounded-xl place-items-center text-white text-[9px] font-black shrink-0 hidden"
                           style={{ backgroundColor: bank.color }}
                         >
                           {bank.label}
@@ -229,6 +242,19 @@ export function PaymentQRModal({ open, onClose, record, memberName, liveAmount, 
                         </span>
                       </button>
                     ))}
+                    {!showAllBanks && (
+                      <button
+                        onClick={() => setShowAllBanks(true)}
+                        className="flex flex-col items-center gap-1.5 rounded-2xl border border-slate-100 bg-slate-50 py-3 transition active:scale-95 hover:bg-slate-100"
+                      >
+                        <span className="h-8 w-8 rounded-xl bg-slate-200 grid place-items-center shrink-0">
+                          <span className="text-slate-500 text-lg leading-none">···</span>
+                        </span>
+                        <span className="text-[10px] font-semibold text-slate-500 leading-tight text-center px-0.5">
+                          {t('see_more')}
+                        </span>
+                      </button>
+                    )}
                   </div>
                   {hasCheckout && (
                     <button onClick={openWeb} className="flex items-center justify-center gap-1.5 w-full text-xs text-slate-400 hover:text-slate-600 transition py-1">
