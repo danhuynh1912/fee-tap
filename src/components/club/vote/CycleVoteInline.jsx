@@ -1,10 +1,10 @@
 import { useState } from 'react'
-import { Check, X, Users2, Loader2, Lock } from 'lucide-react'
+import { Check, X, Users2, Loader2, Lock, UserPlus, ChevronDown } from 'lucide-react'
 import { useTranslation } from 'react-i18next'
 import { useCycleVote } from '../../../hooks/useCycleVote'
 import { useCountdown } from '../../../hooks/useCountdown'
 import { nextCyclePeriod, formatPeriodLabel, computeMembershipVoteCycle } from '../../../engine/forecast'
-import { cx } from '../../../lib/utils'
+import { cx, fmtVND } from '../../../lib/utils'
 import { supabase } from '../../../lib/supabase'
 
 // ── Compact member avatar with vote status ────────────────────────────────────
@@ -94,13 +94,14 @@ function MyVoteButtons({ vote, myResponse, userId, userName, toast, onChanged })
 }
 
 // ── Main inline component ─────────────────────────────────────────────────────
-export function CycleVoteInline({ club, members, settings, slots, canEdit, user }) {
+export function CycleVoteInline({ club, members, settings, slots, canEdit, user, guestRecruitment }) {
   const { t, i18n } = useTranslation()
   const lang = i18n.language
   const { vote, responses, loading, reload } = useCycleVote(club.id)
   const countdown = useCountdown(vote?.deadline)
   const closed = !!vote && (vote.is_closed || countdown.closed)
   const [creating, setCreating] = useState(false)
+  const [guestOpen, setGuestOpen] = useState(false)
 
   const { minMonths } = computeMembershipVoteCycle(slots, settings)
   const fixedCycleMonths = settings?.fixed_cycle_months ?? minMonths
@@ -197,6 +198,48 @@ export function CycleVoteInline({ club, members, settings, slots, canEdit, user 
         <div className="flex items-center gap-1.5 text-xs text-slate-500">
           <Lock className="h-3 w-3" />
           {t('vote_closed_label')}
+        </div>
+      )}
+
+      {/* Guest recruitment — collapsible, closed by default */}
+      {guestRecruitment && (
+        <div className="border-t border-slate-800 pt-2 -mx-5 px-5">
+          <button
+            onClick={() => setGuestOpen((v) => !v)}
+            className="flex items-center gap-1.5 w-full text-left"
+          >
+            <UserPlus className="h-3 w-3 text-slate-600 shrink-0" />
+            <span className="text-[11px] text-slate-600 flex-1">{t('guest_recruit_title')}</span>
+            <ChevronDown className={cx('h-3 w-3 text-slate-600 transition-transform', guestOpen && 'rotate-180')} />
+          </button>
+          {guestOpen && (
+            <div className="flex flex-wrap items-center gap-1.5 mt-2">
+              {guestRecruitment.combinations.length === 0 ? (
+                <span className="text-[11px] text-red-400 italic">{t('guest_recruit_impossible')}</span>
+              ) : (
+                <>
+                  {guestRecruitment.combinations.map((c, i) => (
+                    <span key={i} className="inline-flex items-center gap-1">
+                      <span className="bg-slate-800 border border-slate-700 text-slate-300 text-[11px] font-semibold px-2 py-0.5 rounded-full">
+                        {c.genderless
+                          ? t('guest_recruit_n_total', { n: c.total })
+                          : [
+                              c.males > 0 && t('guest_recruit_males', { n: c.males }),
+                              c.females > 0 && t('guest_recruit_females', { n: c.females }),
+                            ].filter(Boolean).join(' + ')}
+                      </span>
+                      {i < guestRecruitment.combinations.length - 1 && (
+                        <span className="text-[10px] text-slate-600">{t('guest_recruit_or')}</span>
+                      )}
+                    </span>
+                  ))}
+                  <span className="text-[10px] text-slate-600 font-mono ml-auto">
+                    {t('guest_recruit_shortfall', { amount: fmtVND(Math.ceil(guestRecruitment.perSessionShortfall)) })}
+                  </span>
+                </>
+              )}
+            </div>
+          )}
         </div>
       )}
     </div>

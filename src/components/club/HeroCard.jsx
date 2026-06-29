@@ -13,6 +13,7 @@ export function HeroCard({
   projectedBalance,
   projectedSurplus,
   sessionProgress,
+  negativeSpendTxns = [],
   show,
   canEdit,
   onSpentTipOpen,
@@ -78,6 +79,7 @@ export function HeroCard({
           <p className="mt-0.5 text-[10px] text-slate-500">
             {all.venues.some((v) => v.court_payment_mode === 'cycle') && <span>{t('dash_actual_includes_lump')} · </span>}
             {all.uniqueHappened} {t('dash_sessions_label')} ({all.totalHappened} {t('dash_slots_label')}) {t('dash_sessions_happened')}
+            {negativeSpendTxns.length > 0 && <span> · {t('dash_fund_deduction', { count: negativeSpendTxns.length })}</span>}
           </p>
         </div>
         {show('remaining_forecast') && (

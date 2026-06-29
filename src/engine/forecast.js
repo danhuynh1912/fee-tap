@@ -207,6 +207,11 @@ function localDateStr(d) {
 export function computeShuttleStock(shuttleTxns, slots, settings, logs, now = new Date()) {
   const rate = num(settings.estimated_shuttlecocks) || 0
   const allWeekdays = [...new Set(slots.flatMap((s) => (Array.isArray(s.weekdays) ? s.weekdays : [])))]
+
+  // SSOT: the shuttle_transactions ledger is the only source of truth for stock.
+  // currentStock = SUM(delta) over every transaction (restock, opening, session
+  // log, adjustment, estimated settlement). Anything already in the ledger —
+  // including a logged session's −actual deduction — is fully accounted here.
   const currentStock = (shuttleTxns || []).reduce((sum, t) => sum + (t.delta || 0), 0)
 
   if (!allWeekdays.length || rate === 0) {
@@ -220,56 +225,35 @@ export function computeShuttleStock(shuttleTxns, slots, settings, logs, now = ne
     }
   }
 
-  // Anchor = most recent restock or opening transaction
-  const restocks = (shuttleTxns || []).filter((t) => t.source === 'restock' || t.source === 'opening')
-  if (!restocks.length) {
-    // No restock anchor — use most recent adjustment as soft anchor.
-    // Deduct actual balls consumed in session logs after that adjustment date.
-    const adjustments = (shuttleTxns || []).filter((t) => t.source === 'adjustment' || t.source === 'estimated')
-    if (!adjustments.length) {
-      return { currentStock: 0, projectedStock: 0, unloggedCount: 0, sessionsLeft: 0, nextBuyDate: null, totalBalls: 0 }
-    }
-    const latestAdj = adjustments.reduce((a, b) => (a.created_at > b.created_at ? a : b))
-    const adjDate = new Date(latestAdj.created_at)
-    adjDate.setHours(0, 0, 0, 0)
-    const adjStr = localDateStr(adjDate)
-    const logsByDate = Object.fromEntries((logs || []).filter((l) => l.played_on >= adjStr).map((l) => [l.played_on, l]))
-    const wdSet = new Set(allWeekdays.map(Number))
-    const todayStr = localDateStr(now)
-    let used = 0
-    let unloggedCount = 0
-    const d = new Date(adjDate)
-    while (localDateStr(d) < todayStr) {
-      const ds = localDateStr(d)
-      if (wdSet.has(d.getDay())) {
-        const log = logsByDate[ds]
-        if (log) {
-          used += num(log.actual_shuttlecocks) || rate
-        } else {
-          used += rate
-          unloggedCount++
-        }
-      }
-      d.setDate(d.getDate() + 1)
-    }
-    const projectedStock = currentStock - used
+  // Anchor = most recent inventory checkpoint. Prefer a restock/opening (a true
+  // physical count); fall back to the latest adjustment/estimated settlement.
+  // The anchor bounds the look-back window so we only estimate sessions that
+  // happened AFTER the last known-true stock level.
+  const anchorTxns = (shuttleTxns || []).filter(
+    (t) => t.source === 'restock' || t.source === 'opening' || t.source === 'adjustment' || t.source === 'estimated'
+  )
+  if (!anchorTxns.length) {
+    // No checkpoint at all — every ledger entry is already-recorded consumption,
+    // so there is nothing to estimate. projectedStock == currentStock.
     return {
       currentStock,
-      projectedStock,
-      unloggedCount,
-      sessionsLeft: projectedStock > 0 && rate > 0 ? Math.floor(projectedStock / rate) : 0,
-      nextBuyDate: projectedStock <= 0 ? localDateStr(now) : null,
-      totalBalls: Math.max(0, projectedStock),
+      projectedStock: currentStock,
+      unloggedCount: 0,
+      sessionsLeft: currentStock > 0 && rate > 0 ? Math.floor(currentStock / rate) : 0,
+      nextBuyDate: currentStock <= 0 ? localDateStr(now) : null,
+      totalBalls: Math.max(0, currentStock),
     }
   }
-
-  const latestRestock = restocks.reduce((latest, t) => (t.created_at > latest.created_at ? t : latest))
-  const anchorDate = new Date(latestRestock.created_at)
+  const latestAnchor = anchorTxns.reduce((latest, t) => (t.created_at > latest.created_at ? t : latest))
+  const anchorDate = new Date(latestAnchor.created_at)
   anchorDate.setHours(0, 0, 0, 0)
 
   const todayStr = localDateStr(now)
 
-  // Dates already settled via existing transactions or logs
+  // A date is "settled" once it has a ledger entry (a shuttle_tx carrying a
+  // session_date) or a session_log. Its consumption is already in currentStock,
+  // so it must NOT receive the estimated fallback deduction — this is what
+  // prevents double-counting a session that was logged after the fact.
   const settledDates = new Set()
   for (const t of shuttleTxns || []) {
     if (t.session_date && t.source !== 'restock' && t.source !== 'opening') {
@@ -280,7 +264,9 @@ export function computeShuttleStock(shuttleTxns, slots, settings, logs, now = ne
     if (l.played_on) settledDates.add(l.played_on)
   }
 
-  // Walk from anchor to yesterday, collect unlogged scheduled sessions
+  // Walk from anchor to yesterday, collecting scheduled sessions that have NO
+  // ledger entry yet. These are the only sessions we estimate (rate × count) —
+  // a pure fallback for not-yet-logged play.
   const wdSet = new Set(allWeekdays.map(Number))
   const unloggedDates = []
   const d = new Date(anchorDate)

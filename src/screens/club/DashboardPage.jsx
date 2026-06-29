@@ -220,17 +220,20 @@ function ForecastDashboard({
     [hasEquipment, shuttleTxns, slots, settings, logs]
   )
 
-  // Shuttle purchases that hit the fund this period (for actualSpent tracking)
-  const shuttleTxnsInPeriod = useMemo(() => {
-    if (!hasEquipment || !fundTxns?.length) return 0
+  // All negative fund_transactions in the current period — shuttle purchases,
+  // manual deductions, adjustments, etc. These are real cash-out events already
+  // reflected in fundBalance, so they belong in "Đã chi (thực tế)".
+  const negativeSpendTxns = useMemo(() => {
+    if (!fundTxns?.length) return []
     const ranges = all.venues.filter((v) => v.period).map((v) => periodDateRange(v.period))
-    if (!ranges.length) return 0
+    if (!ranges.length) return []
     const periodStart = ranges.reduce((min, r) => (r.start < min ? r.start : min), ranges[0].start)
     const periodEnd = ranges.reduce((max, r) => (r.end > max ? r.end : max), ranges[0].end)
-    return fundTxns
-      .filter((tx) => tx.type === 'shuttle_purchase' && tx.created_at >= periodStart && tx.created_at <= periodEnd + 'T23:59:59')
-      .reduce((s, tx) => s + Math.abs(num(tx.amount)), 0)
-  }, [hasEquipment, fundTxns, all.venues])
+    return fundTxns.filter(
+      (tx) => num(tx.amount) < 0 && tx.created_at >= periodStart && tx.created_at <= periodEnd + 'T23:59:59'
+    )
+  }, [fundTxns, all.venues])
+  const shuttleTxnsInPeriod = negativeSpendTxns.filter((tx) => tx.type === 'shuttle_purchase').reduce((s, tx) => s + Math.abs(num(tx.amount)), 0)
 
   const { actualSpent, spentBreakdown } = useMemo(
     () =>
@@ -246,30 +249,14 @@ function ForecastDashboard({
           const estimatedCount = Math.max(0, v.happened - loggedCount)
           const venueLabel = [v.name, v.venue_name].filter(Boolean).join(' · ') || v.weekday?.toString()
 
-          // Shuttle consumption cost (per session, not per restock)
-          const pricePerBox = num(settings.price_per_box)
-          const estRate = num(settings.estimated_shuttlecocks)
-          let shuttleActual = 0
-          let shuttleEst = 0
-          if (hasEquipment && pricePerBox > 0 && estRate > 0) {
-            shuttleActual = venueLogs.reduce((s, l) => {
-              const balls = num(l.actual_shuttlecocks) || estRate
-              return s + (balls / BALLS_PER_BOX) * pricePerBox
-            }, 0)
-            shuttleEst = estimatedCount * (estRate / BALLS_PER_BOX) * pricePerBox
-          }
-
           if (v.court_payment_mode === 'cycle') {
-            const total = v.courtCost + shuttleActual + shuttleEst
-            acc.actualSpent += total
+            acc.actualSpent += v.courtCost
             acc.spentBreakdown.push({
               label: venueLabel,
               courtCost: v.courtCost,
-              shuttleActual,
-              shuttleEst,
               loggedCount,
               estimatedCount,
-              total,
+              total: v.courtCost,
               isCycle: true,
             })
           } else {
@@ -277,14 +264,12 @@ function ForecastDashboard({
             const courtPerSession = num(sc.court_price_per_hour) * num(sc.hours_per_session)
             const courtActual = venueLogs.reduce((s, l) => s + num(l.court_cost), 0)
             const courtEst = estimatedCount * courtPerSession
-            const total = courtActual + courtEst + shuttleActual + shuttleEst
+            const total = courtActual + courtEst
             acc.actualSpent += total
             acc.spentBreakdown.push({
               label: venueLabel,
               costActual: courtActual,
               costEst: courtEst,
-              shuttleActual,
-              shuttleEst,
               loggedCount,
               estimatedCount,
               total,
@@ -295,10 +280,13 @@ function ForecastDashboard({
         },
         { actualSpent: 0, spentBreakdown: [] }
       ),
-    [all.venues, logs, sessionConfigs, settings, hasEquipment]
+    [all.venues, logs, sessionConfigs]
   )
 
-  const totalActualSpent = actualSpent
+  const negativeSpendTotal = negativeSpendTxns.reduce((s, tx) => s + Math.abs(num(tx.amount)), 0)
+  // Court costs (computed) + all real cash-out fund_transactions in period.
+  // Đã thu − Đã chi = Quỹ thực tế ✓
+  const totalActualSpent = actualSpent + negativeSpendTotal
 
   const remainingForecast = useMemo(() => {
     const rate = num(settings.estimated_shuttlecocks) || 0
@@ -344,6 +332,7 @@ function ForecastDashboard({
         all={{ ...all, memberCount }}
         liveFundBalance={liveFundBalance}
         totalActualSpent={totalActualSpent}
+        negativeSpendTxns={negativeSpendTxns}
         totalCollected={totalCollected}
         txCount={txCount}
         remainingForecast={remainingForecast}
@@ -399,6 +388,7 @@ function ForecastDashboard({
         open={spentTipOpen}
         onClose={() => setSpentTipOpen(false)}
         spentBreakdown={spentBreakdown}
+        negativeSpendTxns={negativeSpendTxns}
         totalActualSpent={totalActualSpent}
       />
     </div>

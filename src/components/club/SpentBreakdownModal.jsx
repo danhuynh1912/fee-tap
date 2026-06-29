@@ -1,9 +1,9 @@
 import { useTranslation } from 'react-i18next'
 import { Receipt, X } from 'lucide-react'
 import { Modal } from '../ui/Modal'
-import { fmtVND } from '../../lib/utils'
+import { fmtVND, num } from '../../lib/utils'
 
-export function SpentBreakdownModal({ open, onClose, spentBreakdown, totalActualSpent }) {
+export function SpentBreakdownModal({ open, onClose, spentBreakdown, negativeSpendTxns = [], totalActualSpent }) {
   const { t } = useTranslation()
   return (
     <Modal open={open} onClose={onClose}>
@@ -31,44 +31,39 @@ export function SpentBreakdownModal({ open, onClose, spentBreakdown, totalActual
             <p className="font-bold text-slate-800 mb-3 text-sm">{b.label}</p>
             <div className="space-y-2">
               {b.isCycle ? (
-                <>
-                  <div className="flex justify-between text-sm">
-                    <span className="text-slate-500">{t('dash_court_lump')}</span>
-                    <span className="font-mono font-semibold text-slate-900">{fmtVND(b.courtCost)}</span>
-                  </div>
-                </>
+                <div className="flex justify-between text-sm gap-4 items-center">
+                  <span className="text-slate-500">{t('dash_court_lump')}</span>
+                  <span className="font-mono font-semibold text-slate-900 min-w-[max-content]">{fmtVND(b.courtCost)}</span>
+                </div>
               ) : (
                 <>
                   {b.loggedCount > 0 && (
-                    <div className="flex justify-between text-sm">
+                    <div className="flex justify-between text-sm gap-4 items-center">
                       <span className="text-slate-500">{t('dash_session_logged', { n: b.loggedCount })}</span>
-                      <span className="font-mono font-semibold text-slate-900">{fmtVND(b.costActual)}</span>
+                      <span className="font-mono font-semibold text-slate-900 min-w-[max-content]">{fmtVND(b.costActual)}</span>
                     </div>
                   )}
                   {b.estimatedCount > 0 && (
-                    <div className="flex justify-between text-sm">
+                    <div className="flex justify-between text-sm gap-4 items-center">
                       <span className="text-slate-500">{t('dash_session_est', { n: b.estimatedCount })}</span>
-                      <span className="font-mono font-semibold text-slate-500">{fmtVND(b.costEst)}</span>
+                      <span className="font-mono font-semibold text-slate-500 min-w-[max-content]">{fmtVND(b.costEst)}</span>
                     </div>
                   )}
                 </>
-              )}
-              {b.shuttleActual > 0 && (
-                <div className="flex justify-between text-sm">
-                  <span className="text-slate-500">{t('dash_shuttle_actual', { n: b.loggedCount })}</span>
-                  <span className="font-mono font-semibold text-slate-900">{fmtVND(b.shuttleActual)}</span>
-                </div>
-              )}
-              {b.shuttleEst > 0 && (
-                <div className="flex justify-between text-sm">
-                  <span className="text-slate-500">{t('dash_shuttle_est', { n: b.estimatedCount })}</span>
-                  <span className="font-mono font-semibold text-slate-500">{fmtVND(b.shuttleEst)}</span>
-                </div>
               )}
             </div>
             <div className="flex justify-between mt-3 pt-3 border-t border-slate-200">
               <span className="text-sm font-semibold text-slate-700">{t('subtotal')}</span>
               <span className="font-mono font-bold text-slate-900">{fmtVND(b.total)}</span>
+            </div>
+          </div>
+        ))}
+
+        {negativeSpendTxns.map((tx) => (
+          <div key={tx.id} className="rounded-2xl border border-slate-100 bg-slate-50 p-4">
+            <div className="flex justify-between text-sm gap-4 items-center">
+              <span className="text-slate-500">{tx.note || t('dash_fund_deduction')}</span>
+              <span className="font-mono font-semibold text-slate-900 min-w-[max-content]">{fmtVND(Math.abs(num(tx.amount)))}</span>
             </div>
           </div>
         ))}
