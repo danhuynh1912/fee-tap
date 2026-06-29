@@ -67,6 +67,7 @@ export function PaymentQRModal({ open, onClose, record, memberName, liveAmount, 
   // Extra fields from PayOS API needed for dl.vietqr.io links
   const [vietQRMeta, setVietQRMeta] = useState(null) // { accountNumber, accountName, bin, description }
   const [showAllBanks, setShowAllBanks] = useState(false)
+  const [loadingBankId, setLoadingBankId] = useState(null)
 
   const isMobile = /android|iphone|ipad/i.test(navigator.userAgent)
 
@@ -149,6 +150,7 @@ export function PaymentQRModal({ open, onClose, record, memberName, liveAmount, 
       ? `https://api.qrserver.com/v1/create-qr-code/?size=240x240&data=${encodeURIComponent(localRecord.payos_qr_code)}`
       : null
     if (!bank.autoFill && qrImg) {
+      setLoadingBankId(bank.id)
       try {
         const res = await fetch(qrImg)
         const blob = await res.blob()
@@ -170,6 +172,8 @@ export function PaymentQRModal({ open, onClose, record, memberName, liveAmount, 
         }
       } catch {
         // User cancelled share or fetch failed — still redirect
+      } finally {
+        setLoadingBankId(null)
       }
       openBank()
     } else {
@@ -256,23 +260,31 @@ export function PaymentQRModal({ open, onClose, record, memberName, liveAmount, 
                         className="flex flex-col items-center gap-1.5 rounded-2xl border border-slate-100 bg-slate-50 py-3 transition active:scale-95 hover:bg-slate-100"
                       >
                         <span className="relative shrink-0">
-                          <img
-                            src={bank.logo}
-                            alt={bank.fullName}
-                            width={32}
-                            height={32}
-                            className="h-8 w-8 rounded-xl object-cover"
-                            onError={e => {
-                              e.currentTarget.style.display = 'none'
-                              e.currentTarget.nextSibling.style.display = 'grid'
-                            }}
-                          />
-                          <span
-                            className="h-8 w-8 rounded-xl place-items-center text-white text-[9px] font-black hidden"
-                            style={{ backgroundColor: bank.color }}
-                          >
-                            {bank.label}
-                          </span>
+                          {loadingBankId === bank.id ? (
+                            <span className="h-8 w-8 rounded-xl bg-slate-100 grid place-items-center">
+                              <Loader2 className="h-4 w-4 animate-spin text-slate-400" />
+                            </span>
+                          ) : (
+                            <>
+                              <img
+                                src={bank.logo}
+                                alt={bank.fullName}
+                                width={32}
+                                height={32}
+                                className="h-8 w-8 rounded-xl object-cover"
+                                onError={e => {
+                                  e.currentTarget.style.display = 'none'
+                                  e.currentTarget.nextSibling.style.display = 'grid'
+                                }}
+                              />
+                              <span
+                                className="h-8 w-8 rounded-xl place-items-center text-white text-[9px] font-black hidden"
+                                style={{ backgroundColor: bank.color }}
+                              >
+                                {bank.label}
+                              </span>
+                            </>
+                          )}
                           {bank.autoFill && (
                             <span className="absolute -top-1 -right-1 h-3 w-3 rounded-full bg-emerald-400 border-2 border-white" />
                           )}
