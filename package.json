@@ -4,27 +4,34 @@
   "version": "1.0.0",
   "type": "module",
   "scripts": {
-    "dev": "vite",
-    "build": "vite build",
-    "preview": "vite preview",
-    "format": "prettier --write \"src/**/*.{js,jsx}\"",
-    "format:check": "prettier --check \"src/**/*.{js,jsx}\""
+    "dev": "next dev -p 5192",
+    "build": "next build",
+    "start": "next start -p 5192",
+    "lint": "next lint",
+    "typecheck": "tsc --noEmit",
+    "format": "prettier --write \"{src,app}/**/*.{js,jsx,ts,tsx}\"",
+    "format:check": "prettier --check \"{src,app}/**/*.{js,jsx,ts,tsx}\""
   },
   "dependencies": {
     "@supabase/supabase-js": "^2.45.4",
     "i18next": "^23.15.1",
     "lucide-react": "^0.453.0",
+    "next": "^14.2.15",
     "react": "^18.3.1",
     "react-dom": "^18.3.1",
     "react-helmet-async": "^3.0.0",
     "react-i18next": "^15.0.2"
   },
   "devDependencies": {
-    "@vitejs/plugin-react": "^4.3.2",
+    "@types/node": "^20.16.0",
+    "@types/react": "^18.3.11",
+    "@types/react-dom": "^18.3.0",
     "autoprefixer": "^10.4.20",
+    "eslint": "^8.57.1",
+    "eslint-config-next": "^14.2.15",
     "postcss": "^8.4.47",
     "prettier": "^3.8.4",
     "tailwindcss": "^3.4.13",
-    "vite": "^5.4.8"
+    "typescript": "^5.6.2"
   }
 }
