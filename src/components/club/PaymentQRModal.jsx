@@ -15,16 +15,16 @@ const BANKS = [
   { id: 'vcb',  label: 'VCB',  fullName: 'Vietcombank',    appId: 'vcb',   color: '#007B40', logo: `${BH}/vietcombank.png` },
   { id: 'mb',   label: 'MB',   fullName: 'MB Bank',        appId: 'mb',    color: '#5B2D8E', logo: `${BH}/mbbank.png` },
   { id: 'tcb',  label: 'TCB',  fullName: 'Techcombank',    appId: 'tcb',   color: '#EE0033', logo: `${BH}/techcombank.png` },
-  { id: 'bidv', label: 'BIDV', fullName: 'BIDV',           appId: 'bidv',  color: '#005BAA', logo: `${BH}/bidv.png`,           strictNote: true },
-  { id: 'icb',  label: 'VTB',  fullName: 'VietinBank',     appId: 'icb',   color: '#1A4F9F', logo: `${BH}/vietinbank.png`,     strictNote: true },
+  { id: 'bidv', label: 'BIDV', fullName: 'BIDV',           appId: 'bidv',  color: '#005BAA', logo: `${BH}/bidv.png`,       strictNote: true },
+  { id: 'icb',  label: 'VTB',  fullName: 'VietinBank',     appId: 'icb',   color: '#1A4F9F', logo: `${BH}/vietinbank.png`, strictNote: true },
   { id: 'vpb',  label: 'VPB',  fullName: 'VPBank NEO',     appId: 'vpb',   color: '#00A651', logo: `${BH}/vpbank.png` },
-  { id: 'acb',  label: 'ACB',  fullName: 'ACB',            appId: 'acb',   color: '#1A3C8F', logo: `${BH}/acb.png` },
+  { id: 'acb',  label: 'ACB',  fullName: 'ACB',            appId: 'acb',   color: '#1A3C8F', logo: `${BH}/acb.png`,        strictNote: true },
   { id: 'agr',  label: 'AGR',  fullName: 'Agribank',       appId: 'agr',   color: '#C8102E', logo: `${BH}/agribank.png` },
   { id: 'stb',  label: 'STB',  fullName: 'Sacombank',      appId: 'stb',   color: '#0066CC', logo: `${BH}/sacombank.png` },
   { id: 'tpb',  label: 'TP',   fullName: 'TPBank',         appId: 'tpb',   color: '#6B0000', logo: `${BH}/tpbank.png` },
   { id: 'hdb',  label: 'HDB',  fullName: 'HDBank',         appId: 'hdb',   color: '#003366', logo: `${BH}/hdbank.png` },
   { id: 'shb',  label: 'SHB',  fullName: 'SHB',            appId: 'shb',   color: '#D4001B', logo: `${BH}/shb.png` },
-  { id: 'ocb',  label: 'OCB',  fullName: 'OCB',            appId: 'ocb',   color: '#FF6600', logo: `${BH}/ocb.png` },
+  { id: 'ocb',  label: 'OCB',  fullName: 'OCB',            appId: 'ocb',   color: '#FF6600', logo: `${BH}/ocb.png`,        strictNote: true },
   { id: 'msb',  label: 'MSB',  fullName: 'MSB',            appId: 'msb',   color: '#E30613', logo: `${BH}/msb.png` },
   { id: 'sea',  label: 'SeA',  fullName: 'SeABank',        appId: 'seab',  color: '#00AEEF', logo: `${BH}/seabank.png` },
   { id: 'vib',  label: 'VIB',  fullName: 'VIB',            appId: 'vib',   color: '#5C0F8B', logo: `${BH}/vib.png` },
@@ -37,7 +37,7 @@ const BANKS = [
 // ba = accountNumber@bin (e.g. VQRQAJVHC9722@mb) — same virtual account, only app= changes.
 function buildVietQRLink({ appId, accountNumber, bin, accountName, amount, description, checkoutUrl, strictNote }) {
   const ba = `${accountNumber}@${bin.toLowerCase()}`
-  const tn = strictNote ? description.replace(/\s+/g, '') : description
+  const tn = strictNote ? description.toUpperCase().replace(/[^A-Z0-9]/g, '') : description
   const p = new URLSearchParams({
     app: appId,
     ba,
