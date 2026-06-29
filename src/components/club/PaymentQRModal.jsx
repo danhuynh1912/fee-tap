@@ -14,8 +14,8 @@ const BANKS = [
   { id: 'vcb',  label: 'VCB',  fullName: 'Vietcombank',    appId: 'vcb',   color: '#007B40' },
   { id: 'mb',   label: 'MB',   fullName: 'MB Bank',        appId: 'mb',    color: '#5B2D8E' },
   { id: 'tcb',  label: 'TCB',  fullName: 'Techcombank',    appId: 'tcb',   color: '#EE0033' },
-  { id: 'bidv', label: 'BIDV', fullName: 'BIDV',           appId: 'bidv',  color: '#005BAA' },
-  { id: 'icb',  label: 'VTB',  fullName: 'VietinBank',     appId: 'icb',   color: '#1A4F9F' },
+  { id: 'bidv', label: 'BIDV', fullName: 'BIDV',           appId: 'bidv',  color: '#005BAA', strictNote: true },
+  { id: 'icb',  label: 'VTB',  fullName: 'VietinBank',     appId: 'icb',   color: '#1A4F9F', strictNote: true },
   { id: 'vpb',  label: 'VPB',  fullName: 'VPBank NEO',     appId: 'vpb',   color: '#00A651' },
   { id: 'acb',  label: 'ACB',  fullName: 'ACB',            appId: 'acb',   color: '#1A3C8F' },
   { id: 'agr',  label: 'AGR',  fullName: 'Agribank',       appId: 'agr',   color: '#C8102E' },
@@ -34,14 +34,15 @@ const BANKS = [
 
 // Build dl.vietqr.io deep link for a specific bank app.
 // ba = accountNumber@bin (e.g. VQRQAJVHC9722@mb) — same virtual account, only app= changes.
-function buildVietQRLink({ appId, accountNumber, bin, accountName, amount, description, checkoutUrl }) {
+function buildVietQRLink({ appId, accountNumber, bin, accountName, amount, description, checkoutUrl, strictNote }) {
   const ba = `${accountNumber}@${bin.toLowerCase()}`
+  const tn = strictNote ? description.replace(/\s+/g, '') : description
   const p = new URLSearchParams({
     app: appId,
     ba,
     bn: accountName,
     am: String(amount),
-    tn: description,
+    tn,
     redirect_url: checkoutUrl,
   })
   return `https://dl.vietqr.io/pay?${p.toString()}`
@@ -132,6 +133,7 @@ export function PaymentQRModal({ open, onClose, record, memberName, liveAmount, 
         amount: liveAmount ?? localRecord?.amount,
         description: vietQRMeta.description,
         checkoutUrl,
+        strictNote: bank.strictNote,
       }))
     } else {
       openUrl(checkoutUrl)
