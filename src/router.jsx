@@ -1,15 +1,25 @@
+'use client'
+import { usePathname } from 'next/navigation'
 import { useState, useEffect } from 'react'
 
+// usePath: SSR-safe version of the old window.location.pathname approach.
+// Seeds the initial value from usePathname() (works on server), then listens
+// for popstate so fake SPA navigation (pushState) still triggers re-renders
+// without remounting the App component tree.
 export function usePath() {
-  const [path, setPath] = useState(() => window.location.pathname)
+  const serverPath = usePathname()
+  const [path, setPath] = useState(serverPath)
+
   useEffect(() => {
     const handler = () => setPath(window.location.pathname)
     window.addEventListener('popstate', handler)
     return () => window.removeEventListener('popstate', handler)
   }, [])
+
   return path
 }
 
+// Imperative navigation — keeps the SPA pattern (no Next.js page remount).
 export function navigate(to) {
   window.history.pushState(null, '', to)
   window.dispatchEvent(new PopStateEvent('popstate'))

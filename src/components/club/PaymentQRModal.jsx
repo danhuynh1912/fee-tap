@@ -7,6 +7,7 @@ import { cx, fmtVND } from '../../lib/utils'
 import { supabase } from '../../lib/supabase'
 import { createPaymentQR } from '../../lib/paymentService'
 import { handleError } from '../../lib/handleError'
+import { getTg } from '../../lib/telegram'
 
 // dl.vietqr.io app IDs — confirmed: icb (VietinBank), bidv, acb. Others best-effort.
 // If app= is wrong, redirect_url brings user back to PayOS web checkout.
@@ -52,8 +53,9 @@ function buildVietQRLink({ appId, accountNumber, bin, accountName, amount, descr
 }
 
 function openUrl(url) {
-  if (window.Telegram?.WebApp?.openLink) {
-    window.Telegram.WebApp.openLink(url)
+  const tg = getTg()
+  if (tg?.openLink) {
+    tg.openLink(url)
   } else {
     window.location.href = url
   }

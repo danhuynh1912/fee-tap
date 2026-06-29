@@ -4,7 +4,8 @@ import { supabase } from '../../lib/supabase'
 import { cx } from '../../lib/utils'
 
 // ─── Telegram WebApp SDK helper ──────────────────────────────────────────────
-const tg = window.Telegram?.WebApp
+import { getTg } from '../../lib/telegram'
+const tg = getTg()
 const tgUser = tg?.initDataUnsafe?.user   // { id, first_name, last_name, username }
 
 function getTgAnonId(voteId) {

@@ -6,6 +6,7 @@ import { Toast } from './components/ui/Toast'
 import { useAuth } from './hooks/useAuth'
 import { usePath, matchPath, navigate } from './router'
 import { isConfigured } from './lib/supabase'
+import { getTg } from './lib/telegram'
 
 import { SignInPage } from './screens/SignInPage'
 import { ClubPickerPage } from './screens/ClubPickerPage'
@@ -92,8 +93,8 @@ export default function App() {
   const profileResolving = !!session && profileType === undefined
   const isShopMode = profileType === 'shop'
   const isClubMode = profileType === 'club' || (profileType === null && myClubs.length > 0)
-  const needsProfileChoice = !!session && profileType === null && myClubs.length === 0
-  const loading = !authReady || profileResolving || (session && isClubMode && resolving)
+  const needsProfileChoice = !!session && profileType === null && myClubs.length === 0 && !resolving
+  const loading = !authReady || profileResolving || (session && (isClubMode || profileType === null) && resolving)
 
   // Shop owners only live under /shop/* — bounce them back if they wander off.
   useEffect(() => {
@@ -102,7 +103,7 @@ export default function App() {
 
   const tgVoteMatch = matchPath('/tg/vote/:id', path)
   // When opened via t.me/bot/spofund?startapp=<voteId>, Telegram passes start_param
-  const tgStartParam = window.Telegram?.WebApp?.initDataUnsafe?.start_param
+  const tgStartParam = getTg()?.initDataUnsafe?.start_param
   const isPublicVote = !session && !!matchPath('/club/:id/vote', path)
   const publicPayMatch = matchPath('/club/:id/pay/:collectionId', path)
   const isPublicPay = !!publicPayMatch
