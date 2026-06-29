@@ -5,18 +5,18 @@ import { cx } from '../../lib/utils'
 import { navigate } from '../../router'
 import { Modal } from '../ui/Modal'
 
-function Logo({ onClick }) {
+function Logo({ onClick, light = false }) {
   return (
     <button onClick={onClick} className="group flex items-center gap-2.5">
       <span className="relative transition group-hover:scale-105">
         <svg viewBox="0 0 32 32" className="h-9 w-9" aria-hidden>
-          <rect width="32" height="32" rx="8" fill="#0f172a" />
+          <rect width="32" height="32" rx="8" fill={light ? '#1e293b' : '#0f172a'} />
           <path d="M9 22V10h7M9 16h6" fill="none" stroke="#ccff00" strokeWidth="2.6" strokeLinecap="round" strokeLinejoin="round" />
           <circle cx="23" cy="11" r="2" fill="#ccff00" />
         </svg>
       </span>
-      <span className="hidden sm:inline text-lg font-extrabold tracking-tight text-slate-900">
-        SPO<span className="text-lime-500">FUND</span>
+      <span className={cx('hidden sm:inline text-lg font-extrabold tracking-tight', light ? 'text-white' : 'text-slate-900')}>
+        SPO<span className="text-lime-400">FUND</span>
       </span>
     </button>
   )

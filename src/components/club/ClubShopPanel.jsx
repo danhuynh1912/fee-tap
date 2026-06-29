@@ -1,6 +1,6 @@
 import { useState, useEffect, useCallback } from 'react'
 import { useTranslation } from 'react-i18next'
-import { Store, Search, Loader2, Check, X, Unlink, Send } from 'lucide-react'
+import { Store, Loader2, Check, X, Unlink, Link2 } from 'lucide-react'
 import { Button } from '../ui/Button'
 import { Badge } from '../ui/Badge'
 import { inputCls } from '../ui/Field'
@@ -19,10 +19,9 @@ export function ClubShopPanel({ club, canEdit, toast }) {
   const [loading, setLoading] = useState(true)
   const [busy, setBusy] = useState(false)
 
-  // search state
-  const [query, setQuery] = useState('')
-  const [results, setResults] = useState([])
-  const [searching, setSearching] = useState(false)
+  // link-by-code state
+  const [code, setCode] = useState('')
+  const [linking, setLinking] = useState(false)
 
   const load = useCallback(async () => {
     setLoading(true)
@@ -52,17 +51,27 @@ export function ClubShopPanel({ club, canEdit, toast }) {
     load()
   }, [load])
 
-  async function runSearch() {
-    if (query.trim().length < 2 || searching) return
-    setSearching(true)
+  async function linkByCode() {
+    const shopId = code.trim()
+    if (!shopId || linking) return
+    setLinking(true)
     try {
-      const { data, error } = await supabase.rpc('search_shops', { p_query: query.trim() })
+      // SECURITY DEFINER RPC: club chưa link không đọc được shops qua RLS
+      const { data: rows, error } = await supabase.rpc('get_shop_by_code', { p_shop_id: shopId })
       if (error) throw error
-      setResults(data || [])
+      const shopRow = rows?.[0]
+      if (!shopRow) {
+        toast(t('shop_partner_not_found'))
+        return
+      }
+      await createLink({ shopId: shopRow.id, clubId: club.id, initiatedBy: 'club' })
+      toast(t('shop_link_sent'))
+      setCode('')
+      await load()
     } catch (e) {
       handleError(e, toast, t)
     } finally {
-      setSearching(false)
+      setLinking(false)
     }
   }
 
@@ -145,41 +154,23 @@ export function ClubShopPanel({ club, canEdit, toast }) {
         </div>
       )}
 
-      {/* No link → search & invite */}
+      {/* No link → link by partner code */}
       {!link && canEdit && (
         <div className="space-y-2">
           <p className="text-sm text-slate-500">{t('shop_partner_none')}</p>
           <div className="flex gap-2">
             <input
-              className={inputCls}
-              value={query}
-              onChange={(e) => setQuery(e.target.value)}
-              onKeyDown={(e) => e.key === 'Enter' && runSearch()}
+              className={cx(inputCls, 'font-mono text-sm')}
+              value={code}
+              onChange={(e) => setCode(e.target.value)}
+              onKeyDown={(e) => e.key === 'Enter' && linkByCode()}
               placeholder={t('shop_partner_search_ph')}
+              spellCheck={false}
             />
-            <Button variant="ghost" onClick={runSearch} disabled={query.trim().length < 2 || searching}>
-              {searching ? <Loader2 className="h-4 w-4 animate-spin" /> : <Search className="h-4 w-4" />}
+            <Button variant="ghost" onClick={linkByCode} disabled={!code.trim() || linking}>
+              {linking ? <Loader2 className="h-4 w-4 animate-spin" /> : <Link2 className="h-4 w-4" />}
             </Button>
           </div>
-          {results.length > 0 && (
-            <ul className="space-y-1.5">
-              {results.map((s) => (
-                <li key={s.id} className="flex items-center gap-3 rounded-2xl border border-slate-100 bg-white px-4 py-2.5">
-                  <div className="min-w-0 flex-1">
-                    <p className="truncate text-sm font-bold text-slate-900">{s.name}</p>
-                    {s.phone && <p className="text-xs text-slate-400">{s.phone}</p>}
-                  </div>
-                  <button
-                    onClick={() => act(() => createLink({ shopId: s.id, clubId: club.id, initiatedBy: 'club' }).then(() => toast(t('shop_link_sent'))))}
-                    disabled={busy}
-                    className={cx('inline-flex items-center gap-1 rounded-full bg-slate-900 px-3 py-1.5 text-xs font-semibold text-white transition active:scale-95', busy && 'opacity-50')}
-                  >
-                    <Send className="h-3.5 w-3.5" /> {t('shop_link_send')}
-                  </button>
-                </li>
-              ))}
-            </ul>
-          )}
         </div>
       )}
 

@@ -6,7 +6,7 @@ import { BALLS_PER_BOX } from '../../constants'
 import { Badge } from '../ui/Badge'
 
 // ── Single shuttlecock icon ───────────────────────────────────────────────────
-function ShuttlecockIcon({ filled }) {
+export function ShuttlecockIcon({ filled }) {
   const feather = filled ? '#a3e635' : '#e2e8f0'
   const line    = filled ? '#3f6212' : '#94a3b8'
   const cork    = filled ? '#84cc16' : '#d1d5db'

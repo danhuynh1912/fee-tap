@@ -77,16 +77,8 @@ create policy shops_owner_all on public.shops for all
   using (owner_id = auth.uid())
   with check (owner_id = auth.uid());
 
--- CLB host được đọc tên shop đối tác (shop có link với CLB của họ).
-drop policy if exists shops_linked_club_read on public.shops;
-create policy shops_linked_club_read on public.shops for select
-  using (
-    exists (
-      select 1 from public.shop_club_links lnk
-      join public.clubs c on c.id = lnk.club_id
-      where lnk.shop_id = shops.id and c.owner_id = auth.uid()
-    )
-  );
+-- NOTE: policy "shops_linked_club_read" (CLB host đọc shop đối tác) được tạo
+-- ở SAU phần 3, vì nó tham chiếu bảng shop_club_links chưa tồn tại tại đây.
 
 -- ---------------------------------------------------------------------
 -- 3. shop_club_links — liên kết CLB ↔ Shop (1 CLB : 1 Shop)
@@ -111,35 +103,61 @@ create unique index if not exists shop_club_links_one_active_per_club
   on public.shop_club_links(club_id)
   where status in ('pending','active');
 
+-- Helper: kiểm tra ownership shop mà KHÔNG qua RLS (security definer).
+-- Dùng trong các policy của shop_club_links để phá vòng lặp đệ quy:
+--   shops RLS → shop_club_links → shops RLS → ∞
+create or replace function public.auth_uid_owns_shop(p_shop_id uuid)
+returns boolean
+language sql
+security definer
+stable
+set search_path = public
+as $$
+  select exists(select 1 from public.shops where id = p_shop_id and owner_id = auth.uid());
+$$;
+
 alter table public.shop_club_links enable row level security;
 
 -- Cả shop owner lẫn club host của link đều thấy/sửa được.
+-- Dùng auth_uid_owns_shop() thay vì subquery trực tiếp vào shops để tránh circular RLS.
 drop policy if exists shop_club_links_party_select on public.shop_club_links;
 create policy shop_club_links_party_select on public.shop_club_links for select
   using (
-    shop_id in (select id from public.shops where owner_id = auth.uid())
+    public.auth_uid_owns_shop(shop_id)
     or club_id in (select id from public.clubs where owner_id = auth.uid())
   );
 
 drop policy if exists shop_club_links_party_insert on public.shop_club_links;
 create policy shop_club_links_party_insert on public.shop_club_links for insert
   with check (
-    shop_id in (select id from public.shops where owner_id = auth.uid())
+    public.auth_uid_owns_shop(shop_id)
     or club_id in (select id from public.clubs where owner_id = auth.uid())
   );
 
 drop policy if exists shop_club_links_party_update on public.shop_club_links;
 create policy shop_club_links_party_update on public.shop_club_links for update
   using (
-    shop_id in (select id from public.shops where owner_id = auth.uid())
+    public.auth_uid_owns_shop(shop_id)
     or club_id in (select id from public.clubs where owner_id = auth.uid())
   );
 
 drop policy if exists shop_club_links_party_delete on public.shop_club_links;
 create policy shop_club_links_party_delete on public.shop_club_links for delete
   using (
-    shop_id in (select id from public.shops where owner_id = auth.uid())
+    public.auth_uid_owns_shop(shop_id)
     or club_id in (select id from public.clubs where owner_id = auth.uid())
+  );
+
+-- CLB host được đọc tên shop đối tác (shop có link với CLB của họ).
+-- Đặt ở đây vì tham chiếu shop_club_links vừa tạo xong.
+drop policy if exists shops_linked_club_read on public.shops;
+create policy shops_linked_club_read on public.shops for select
+  using (
+    exists (
+      select 1 from public.shop_club_links lnk
+      join public.clubs c on c.id = lnk.club_id
+      where lnk.shop_id = shops.id and c.owner_id = auth.uid()
+    )
   );
 
 -- ---------------------------------------------------------------------
@@ -298,6 +316,24 @@ begin
 
   return result;
 end;
+$$;
+
+-- ---------------------------------------------------------------------
+-- 7a. RPC: get_shop_by_code — CLB tra cứu shop theo partner code (UUID).
+--      SECURITY DEFINER để bypass RLS (CLB chưa link không đọc được shops).
+--      Chỉ trả id + name (không có thông tin tài chính / nhạy cảm).
+-- ---------------------------------------------------------------------
+create or replace function public.get_shop_by_code(p_shop_id uuid)
+returns table (id uuid, name text, phone text)
+language sql
+security definer
+stable
+set search_path = public
+as $$
+  select s.id, s.name, s.phone
+  from public.shops s
+  where s.id = p_shop_id
+  limit 1;
 $$;
 
 -- ---------------------------------------------------------------------
