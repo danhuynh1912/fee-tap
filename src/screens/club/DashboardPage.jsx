@@ -23,7 +23,7 @@ import { BALLS_PER_BOX, SPORT_CONFIGS } from '../../constants'
 import { useClub } from '../../contexts/ClubContext'
 
 // ─── restock modal ────────────────────────────────────────────────────────────
-function RestockModal({ club, settings, liveFundBalance, onClose, onDone, toast }) {
+function RestockModal({ club, settings, liveFundBalance, shuttleStatus, onClose, onDone, toast }) {
   const { t } = useTranslation()
   const [unit, setUnit] = useState('boxes') // 'boxes' | 'balls'
   const [qty, setQty] = useState('')
@@ -38,21 +38,35 @@ function RestockModal({ club, settings, liveFundBalance, onClose, onDone, toast 
   const fundInsufficient = useFund && !isBalls && qtyNum > 0 && totalCost > liveFundBalance
 
   async function submit() {
-    if (!qtyNum || qtyNum < 1 || busy) return
+    if (!qtyNum || (isBalls ? qtyNum === 0 : qtyNum < 1) || busy) return
     setBusy(true)
     try {
       const delta = isBalls ? qtyNum : qtyNum * BALLS_PER_BOX
       const noteStr = note.trim() || (isBalls ? `Thêm ${qtyNum} quả cầu` : `Nhập ${qtyNum} hộp cầu`)
+
+      // If projected stock is negative, those unlogged sessions consumed balls that were never
+      // formally recorded. Insert a settlement adjustment so currentStock reflects reality
+      // before the new restock — otherwise the new anchor resets the look-back window and
+      // the prior consumption debt disappears.
+      const projectedStock = shuttleStatus?.projectedStock ?? 0
+      const currentStock = shuttleStatus?.currentStock ?? 0
+      const debt = currentStock - projectedStock  // balls consumed but not yet in DB
+      if (!isBalls && debt > 0) {
+        await supabase.from('shuttle_transactions').insert({
+          club_id: club.id,
+          delta: -debt,
+          source: 'estimated',
+          note: 'Quyết toán cầu ước tính trước khi nhập kho',
+          rate_used: num(settings.estimated_shuttlecocks),
+        })
+      }
+
       if (isBalls || !useFund) {
         await supabase.from('shuttle_transactions').insert({
           club_id: club.id, delta, source: isBalls ? 'adjustment' : 'restock', note: noteStr,
           rate_used: num(settings.estimated_shuttlecocks),
         })
-        if (!isBalls) {
-          await supabase.from('club_settings').update({ price_per_box: num(price) }).eq('club_id', club.id)
-        }
       } else {
-        const newFund = liveFundBalance - totalCost
         await Promise.all([
           supabase.from('shuttle_transactions').insert({
             club_id: club.id, delta, source: 'restock', note: noteStr,
@@ -61,7 +75,6 @@ function RestockModal({ club, settings, liveFundBalance, onClose, onDone, toast 
           supabase.from('fund_transactions').insert({
             club_id: club.id, amount: -totalCost, note: noteStr, type: 'shuttle_purchase',
           }),
-          supabase.from('club_settings').update({ current_fund: newFund, price_per_box: num(price) }).eq('club_id', club.id),
         ])
       }
       toast(t('shuttle_restock_submit'))
@@ -511,6 +524,7 @@ export function DashboardPage({ toast }) {
           club={club}
           settings={settings}
           liveFundBalance={liveFundBalance}
+          shuttleStatus={shuttleStatus}
           toast={toast}
           onClose={() => setRestockOpen(false)}
           onDone={reload}

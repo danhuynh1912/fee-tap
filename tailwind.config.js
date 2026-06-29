@@ -2,7 +2,7 @@
 // Shared design DNA with POLLTAP — same Volt-green / Deep-slate system,
 // plus a couple of finance-flavoured animations (count-up, sheen, rise).
 export default {
-  content: ['./index.html', './src/**/*.{js,jsx}'],
+  content: ['./app/**/*.{js,jsx,ts,tsx}', './src/**/*.{js,jsx,ts,tsx}'],
   theme: {
     extend: {
       fontFamily: {

@@ -7,16 +7,16 @@ import { useAuth } from './hooks/useAuth'
 import { usePath, matchPath, navigate } from './router'
 import { isConfigured } from './lib/supabase'
 
-import { SignInPage } from './pages/SignInPage'
-import { ClubPickerPage } from './pages/ClubPickerPage'
-import { PreJoinPage } from './pages/PreJoinPage'
-import { WelcomeModal } from './pages/WelcomeModal'
+import { SignInPage } from './screens/SignInPage'
+import { ClubPickerPage } from './screens/ClubPickerPage'
+import { PreJoinPage } from './screens/PreJoinPage'
+import { WelcomeModal } from './screens/WelcomeModal'
 
-const OnboardingPage = lazy(() => import('./pages/OnboardingPage').then((m) => ({ default: m.OnboardingPage })))
-const ClubLayout = lazy(() => import('./pages/club/ClubLayout').then((m) => ({ default: m.ClubLayout })))
-const PublicVotePage = lazy(() => import('./pages/club/PublicVotePage').then((m) => ({ default: m.PublicVotePage })))
-const PublicPayPage = lazy(() => import('./pages/club/PublicPayPage').then((m) => ({ default: m.PublicPayPage })))
-const TgVotePage = lazy(() => import('./pages/tg/TgVotePage').then((m) => ({ default: m.TgVotePage })))
+const OnboardingPage = lazy(() => import('./screens/OnboardingPage').then((m) => ({ default: m.OnboardingPage })))
+const ClubLayout = lazy(() => import('./screens/club/ClubLayout').then((m) => ({ default: m.ClubLayout })))
+const PublicVotePage = lazy(() => import('./screens/club/PublicVotePage').then((m) => ({ default: m.PublicVotePage })))
+const PublicPayPage = lazy(() => import('./screens/club/PublicPayPage').then((m) => ({ default: m.PublicPayPage })))
+const TgVotePage = lazy(() => import('./screens/tg/TgVotePage').then((m) => ({ default: m.TgVotePage })))
 
 function PageLoader() {
   const { t } = useTranslation()

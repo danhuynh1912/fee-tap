@@ -8,7 +8,7 @@ A standalone, production-grade React app that runs on its own domain but shares
 billing cycle, watches the club fund, and splits any shortfall fairly across the
 live roster pulled from PollTap's membership poll.
 
-Built with **React + Vite + Tailwind + Lucide**, **Supabase (Auth + Postgres +
+Built with **Next.js 14 (App Router) + React + Tailwind + Lucide**, **Supabase (Auth + Postgres +
 Realtime)**, and **i18n (English / Tiếng Việt)**.
 
 ---
@@ -48,18 +48,19 @@ your OAuth client ID/secret. Add this app's URL to the **Redirect URLs**
 cp .env.example .env   # fill with the SAME Supabase project as PollTap
 ```
 ```
-VITE_SUPABASE_URL=https://xxxx.supabase.co
-VITE_SUPABASE_ANON_KEY=eyJhbGci...
+NEXT_PUBLIC_SUPABASE_URL=https://xxxx.supabase.co
+NEXT_PUBLIC_SUPABASE_ANON_KEY=eyJhbGci...
 ```
 
 ### 4. Run
 ```bash
+nvm use          # Node >= 20 required by Next 14 (.nvmrc pins 20)
 npm install
 npm run dev      # → http://localhost:5192
 ```
 
-Build for production: `npm run build` (output in `dist/`). Deploys to Vercel
-(`vercel.json` handles the SPA rewrite); Netlify fallback in `public/_redirects`.
+Build for production: `npm run build` (output in `.next/`). Deploys to Vercel
+(Next.js framework auto-detected — no `vercel.json` needed).
 
 ---
 

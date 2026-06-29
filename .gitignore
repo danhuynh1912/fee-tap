@@ -6,5 +6,8 @@ dist-ssr
 *.local
 .DS_Store
 .vite
+.next
+next-env.d.ts
+*.tsbuildinfo
 supabase/.temp/
 .claude/
