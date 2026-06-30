@@ -74,8 +74,14 @@ export function PaymentQRModal({ open, onClose, record, memberName, liveAmount, 
 
   const isMobile = /android|iphone|ipad/i.test(navigator.userAgent)
 
-  const isGroupMode = !!proxyRecords?.length
-  const totalAmount = (liveAmount ?? localRecord?.amount ?? 0) * (1 + (proxyRecords?.length ?? 0))
+  // Freeze proxy selection at mount — parent recomputes proxyRecords after payment
+  // (paid records drop out of proxyOptions), causing totalAmount to reset before
+  // the success screen renders. The key prop on the modal already forces remount
+  // whenever proxy selection changes, so this snapshot is always fresh at open time.
+  const [frozenProxyRecords] = useState(() => proxyRecords ?? [])
+
+  const isGroupMode = !!frozenProxyRecords.length
+  const totalAmount = (liveAmount ?? localRecord?.amount ?? 0) * (1 + frozenProxyRecords.length)
 
   useEffect(() => {
     const wasPending = localRecord?.status === 'pending'
@@ -108,7 +114,7 @@ export function PaymentQRModal({ open, onClose, record, memberName, liveAmount, 
 
       if (isGroupMode) {
         // Group path: one QR covers primary + proxy records
-        const allRecordIds = [localRecord.id, ...(proxyRecords?.map((r) => r.id) ?? [])]
+        const allRecordIds = [localRecord.id, ...frozenProxyRecords.map((r) => r.id)]
         const json = await createGroupPaymentQR(allRecordIds, amountPerRecord, session?.access_token)
         setGroupQR({ groupId: json.groupId, orderCode: json.orderCode, checkoutUrl: json.checkoutUrl, qrCode: json.qrCode })
         if (json.accountNumber && json.bin) {
@@ -205,7 +211,7 @@ export function PaymentQRModal({ open, onClose, record, memberName, liveAmount, 
             <p className="font-black text-slate-900">{t('payment_qr_title')}</p>
             <p className="text-xs text-slate-500">
               {isGroupMode
-                ? t('proxy_pay_total', { amount: fmtVND(totalAmount), n: 1 + (proxyRecords?.length ?? 0) })
+                ? t('proxy_pay_total', { amount: fmtVND(totalAmount), n: 1 + frozenProxyRecords.length })
                 : memberName}
             </p>
           </div>
@@ -230,7 +236,7 @@ export function PaymentQRModal({ open, onClose, record, memberName, liveAmount, 
               <p className="font-mono text-3xl font-black text-slate-900">{fmtVND(totalAmount)}</p>
               {isGroupMode && (
                 <p className="text-xs text-slate-400 mt-0.5">
-                  {fmtVND(liveAmount ?? localRecord?.amount ?? 0)} × {1 + (proxyRecords?.length ?? 0)}
+                  {fmtVND(liveAmount ?? localRecord?.amount ?? 0)} × {1 + frozenProxyRecords.length}
                 </p>
               )}
             </div>
