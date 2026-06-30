@@ -27,32 +27,51 @@ serve(async (req) => {
       Deno.env.get('SUPABASE_SERVICE_ROLE_KEY')!,
     )
 
-    // Find payment record + club to get the per-club checksum key
-    // Cast to text to handle both integer and text storage of orderCode
-    const { data: rec } = await supabase
-      .from('member_payment_records')
-      .select('id, status, club_id')
+    // ── Resolve: group payment (new) OR single-record payment (legacy) ───────
+    // Group takes priority — if the order_code lives in payment_groups, all linked
+    // records are confirmed atomically via confirm_payment_group. Otherwise fall
+    // back to the original member_payment_records lookup for orders created before
+    // the group feature was introduced.
+    type Resolution =
+      | { kind: 'group'; groupId: string; clubId: string }
+      | { kind: 'single'; recordId: string; clubId: string }
+      | null
+
+    const { data: group } = await supabase
+      .from('payment_groups')
+      .select('id, club_id, status')
       .eq('payos_order_code', String(orderCode))
       .maybeSingle()
 
-    if (!rec) {
+    let resolution: Resolution = null
+    if (group) {
+      resolution = { kind: 'group', groupId: group.id, clubId: group.club_id }
+    } else {
+      const { data: rec } = await supabase
+        .from('member_payment_records')
+        .select('id, status, club_id')
+        .eq('payos_order_code', String(orderCode))
+        .maybeSingle()
+      if (rec) resolution = { kind: 'single', recordId: rec.id, clubId: rec.club_id }
+    }
+
+    if (!resolution) {
       console.warn('Unknown PayOS order code:', orderCode)
       return new Response('unknown_order', { status: 200 })
     }
 
-    // Get the club's own checksum key for signature verification
+    // ── Verify signature with per-club checksum key ──────────────────────────
     const { data: config } = await supabase
       .from('club_payment_config')
       .select('payos_checksum_key')
-      .eq('club_id', rec.club_id)
+      .eq('club_id', resolution.clubId)
       .single()
 
     if (!config) {
-      console.warn('No PayOS config for club:', rec.club_id)
+      console.warn('No PayOS config for club:', resolution.clubId)
       return new Response('no_config', { status: 200 })
     }
 
-    // Verify signature: all fields in data object sorted alphabetically
     const sigStr = Object.keys(d)
       .sort()
       .filter((k) => d[k] !== undefined && d[k] !== null)
@@ -61,7 +80,7 @@ serve(async (req) => {
 
     const expectedSig = await hmacSha256(config.payos_checksum_key, sigStr)
     if (expectedSig !== receivedSig) {
-      console.warn('PayOS signature mismatch', { expected: expectedSig, received: receivedSig, sigStr })
+      console.warn('PayOS signature mismatch', { expected: expectedSig, received: receivedSig })
       // TODO: re-enable after debugging
       // return new Response('signature_invalid', { status: 401 })
     }
@@ -71,20 +90,28 @@ serve(async (req) => {
       return new Response('ignored', { status: 200 })
     }
 
-    // Update record with actual paid amount from PayOS before confirming
-    await supabase
-      .from('member_payment_records')
-      .update({ amount: d.amount })
-      .eq('id', rec.id)
+    // ── Confirm ──────────────────────────────────────────────────────────────
+    if (resolution.kind === 'group') {
+      const { error } = await supabase.rpc('confirm_payment_group', {
+        p_group_id: resolution.groupId,
+        p_confirmed_by: 'payos',
+      })
+      if (error) console.error('confirm_payment_group error:', error)
+      else console.log('confirm_payment_group ok, group:', resolution.groupId)
+    } else {
+      // Legacy single-record path
+      await supabase
+        .from('member_payment_records')
+        .update({ amount: d.amount })
+        .eq('id', resolution.recordId)
 
-    // Atomic confirm via RPC
-    const { data: result, error: rpcErr } = await supabase.rpc('confirm_member_payment', {
-      p_record_id: rec.id,
-      p_confirmed_by: 'payos',
-    })
-
-    if (rpcErr) console.error('confirm_member_payment error:', rpcErr)
-    else console.log('confirm_member_payment result:', result)
+      const { error } = await supabase.rpc('confirm_member_payment', {
+        p_record_id: resolution.recordId,
+        p_confirmed_by: 'payos',
+      })
+      if (error) console.error('confirm_member_payment error:', error)
+      else console.log('confirm_member_payment ok, record:', resolution.recordId)
+    }
 
     return new Response(JSON.stringify({ ok: true }), {
       headers: { 'Content-Type': 'application/json' },

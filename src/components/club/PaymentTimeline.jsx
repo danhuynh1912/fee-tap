@@ -1,6 +1,6 @@
 import { useMemo, useState } from 'react'
 import { useTranslation } from 'react-i18next'
-import { MapPin, AlertTriangle, Clock, Feather, Users, CheckCircle2, QrCode, PlusCircle, Loader2, Link, Info } from 'lucide-react'
+import { MapPin, AlertTriangle, Clock, Feather, Users, CheckCircle2, QrCode, PlusCircle, Loader2, Link, Info, ChevronDown, ChevronUp } from 'lucide-react'
 import { cx, fmtVND, fmtNum } from '../../lib/utils'
 import { computePaymentTimeline, formatPeriodLabel } from '../../engine/forecast'
 import { resolveFeeContext } from '../../engine/fee/resolveFeeContext'
@@ -195,6 +195,32 @@ function GroupSummary({
   const isFixedCount = feeCtx?.isFixed ?? false
   const total = courtCost + (shuttleCost ?? 0)
   const perMember = effectiveCount > 0 ? Math.ceil(total / effectiveCount) : 0
+  // All hooks before early return (Rules of Hooks)
+  const [proxyOpen, setProxyOpen] = useState(false)
+  const [proxyRecordIds, setProxyRecordIds] = useState(new Set())
+
+  const proxyOptions = useMemo(
+    () =>
+      groupPayments
+        .filter((r) => r.member_id !== currentMemberId && r.status === 'pending')
+        .map((r) => ({ record: r, member: members.find((m) => m.id === r.member_id) }))
+        .filter(({ member }) => !!member),
+    [groupPayments, currentMemberId, members]
+  )
+
+  const proxyRecords = useMemo(
+    () => proxyOptions.filter(({ record: r }) => proxyRecordIds.has(r.id)).map(({ record: r }) => r),
+    [proxyOptions, proxyRecordIds]
+  )
+
+  function toggleProxy(recordId) {
+    setProxyRecordIds((prev) => {
+      const next = new Set(prev)
+      next.has(recordId) ? next.delete(recordId) : next.add(recordId)
+      return next
+    })
+  }
+
   if (total === 0) return null
 
   const paidPayments = groupPayments.filter((p) => p.status === 'paid' || p.status === 'manual')
@@ -320,11 +346,58 @@ function GroupSummary({
                     )}
                   </div>
                 </div>
-                {/* QR button: full width on mobile, auto on desktop */}
+                {/* Proxy picker + QR button — side by side */}
                 {!myIsPaid && myRecord && payosConfigured && (
-                  <Button variant="volt" size="sm" className="w-full sm:w-auto" onClick={() => onPayQR(perMember)}>
-                    <QrCode className="h-4 w-4" /> {t('payment_qr_btn')}
-                  </Button>
+                  <div className="flex flex-col sm:flex-row items-stretch gap-2">
+                    {proxyOptions.length > 0 && (
+                      <div className="relative flex-1 rounded-xl border border-slate-700 overflow-visible">
+                        <button
+                          onClick={() => setProxyOpen((v) => !v)}
+                          className="flex w-full items-center gap-2 px-3 py-2 text-left transition hover:bg-slate-800 rounded-xl"
+                        >
+                          <span className="flex-1 text-xs font-semibold uppercase tracking-wide text-slate-400">
+                            {t('proxy_pay_section')}
+                          </span>
+                          {proxyRecordIds.size > 0 && (
+                            <span className="rounded-full bg-lime-900/60 px-2 py-0.5 text-xs font-bold text-lime-400">
+                              +{proxyRecordIds.size}
+                            </span>
+                          )}
+                          {proxyOpen
+                            ? <ChevronUp className="h-3.5 w-3.5 text-slate-500" />
+                            : <ChevronDown className="h-3.5 w-3.5 text-slate-500" />}
+                        </button>
+                        {proxyOpen && (
+                          <ul className="absolute left-0 right-0 top-full z-10 mt-1 divide-y divide-slate-800 rounded-xl border border-slate-700 bg-slate-900 shadow-xl">
+                            {proxyOptions.map(({ record: r, member: m }) => (
+                              <li key={r.id}>
+                                <label className="flex cursor-pointer items-center gap-3 px-3 py-2.5 transition hover:bg-slate-800 first:rounded-t-xl last:rounded-b-xl">
+                                  <input
+                                    type="checkbox"
+                                    checked={proxyRecordIds.has(r.id)}
+                                    onChange={() => toggleProxy(r.id)}
+                                    className="h-4 w-4 accent-lime-400 cursor-pointer"
+                                  />
+                                  <span className="text-sm font-medium text-slate-300">{m.name}</span>
+                                </label>
+                              </li>
+                            ))}
+                          </ul>
+                        )}
+                      </div>
+                    )}
+                    <Button
+                      variant="volt"
+                      size="sm"
+                      className="shrink-0"
+                      onClick={() => onPayQR(perMember, proxyRecords)}
+                    >
+                      <QrCode className="h-4 w-4" />
+                      {proxyRecords.length > 0
+                        ? t('proxy_pay_total', { amount: fmtVND(perMember * (1 + proxyRecords.length)), n: 1 + proxyRecords.length })
+                        : t('payment_qr_btn')}
+                    </Button>
+                  </div>
                 )}
               </div>
             )}
@@ -597,9 +670,9 @@ export function PaymentTimeline({
                     const url = `${window.location.origin}/club/${clubId}/pay/${collection.id}`
                     navigator.clipboard.writeText(url).then(() => toast?.(t('public_pay_link_copied')))
                   } : undefined}
-                  onPayQR={(liveAmount) => {
+                  onPayQR={(liveAmount, proxyRecords) => {
                     const m = members.find((m) => m.id === currentMemberId)
-                    setQrModal({ record: myRecord, memberName: m?.name || '', liveAmount })
+                    setQrModal({ record: myRecord, memberName: m?.name || '', liveAmount, proxyRecords: proxyRecords ?? [] })
                   }}
                   isPro={plan === 'pro'}
                   payosConfigured={payosConfigured}
@@ -624,11 +697,13 @@ export function PaymentTimeline({
 
       {/* QR payment modal (member) */}
       <PaymentQRModal
+        key={`${qrModal?.record?.id}-${(qrModal?.proxyRecords ?? []).map((r) => r.id).sort().join(',')}`}
         open={!!qrModal}
         onClose={() => setQrModal(null)}
         record={qrModal?.record}
         memberName={qrModal?.memberName}
         liveAmount={qrModal?.liveAmount}
+        proxyRecords={qrModal?.proxyRecords}
         toast={toast}
       />
 

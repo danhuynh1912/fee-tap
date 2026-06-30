@@ -15,62 +15,111 @@ async function hmacSha256(key: string, data: string): Promise<string> {
   return Array.from(new Uint8Array(sig)).map((b) => b.toString(16).padStart(2, '0')).join('')
 }
 
+function buildDescription(memberNames: string[], periodStr: string): string {
+  const shorts = memberNames.map((n) => n.split(' ').pop() || n)
+  const joined = shorts.join('+')
+  return `SPOFUND ${periodStr} ${joined}`.replace(/\s+/g, ' ').trim().slice(0, 25)
+}
+
 serve(async (req) => {
   if (req.method === 'OPTIONS') return new Response('ok', { headers: CORS })
 
   try {
-    const { record_id, amount: passedAmount } = await req.json()
-    if (!record_id) return new Response(JSON.stringify({ error: 'record_id required' }), { status: 400, headers: CORS })
+    const body = await req.json()
 
-    // Service role: bypasses RLS to read club_payment_config + member info
+    // Normalize: accept record_ids[] (group) or legacy record_id (single)
+    const recordIds: string[] = body.record_ids
+      ? body.record_ids
+      : body.record_id
+      ? [body.record_id]
+      : []
+
+    if (!recordIds.length) {
+      return new Response(JSON.stringify({ error: 'record_ids required' }), { status: 400, headers: CORS })
+    }
+
+    const isGroup = recordIds.length > 1
+    const passedAmountPerRecord: number | undefined = body.amount_per_record ?? body.amount
+
     const supabase = createClient(
       Deno.env.get('SUPABASE_URL')!,
       Deno.env.get('SUPABASE_SERVICE_ROLE_KEY')!,
     )
 
-    // Load payment record + member name
-    const { data: rec, error: recErr } = await supabase
+    // ── Load all records ─────────────────────────────────────────────────────
+    const { data: records, error: recErr } = await supabase
       .from('member_payment_records')
       .select('*, club_members(name), payment_collections(title, period_start)')
-      .eq('id', record_id)
-      .single()
+      .in('id', recordIds)
 
-    if (recErr || !rec) {
-      return new Response(JSON.stringify({ error: 'record_not_found' }), { status: 404, headers: CORS })
+    if (recErr || !records?.length) {
+      return new Response(JSON.stringify({ error: 'records_not_found' }), { status: 404, headers: CORS })
     }
 
-    const amount = passedAmount ?? rec.amount
-
-    // Idempotency: return cached order only if amount hasn't changed
-    if (rec.payos_order_code && rec.payos_checkout_url && amount === rec.amount) {
-      return new Response(JSON.stringify({
-        orderCode: rec.payos_order_code,
-        checkoutUrl: rec.payos_checkout_url,
-        qrCode: rec.payos_qr_code,
-      }), { headers: { ...CORS, 'Content-Type': 'application/json' } })
+    // All records must belong to the same club + collection
+    const clubId: string = records[0].club_id
+    const collectionId: string = records[0].collection_id
+    const allSameClub = records.every((r) => r.club_id === clubId)
+    const allSameCollection = records.every((r) => r.collection_id === collectionId)
+    if (!allSameClub || !allSameCollection) {
+      return new Response(JSON.stringify({ error: 'records_must_share_club_and_collection' }), { status: 400, headers: CORS })
     }
 
-    // Load the club's PayOS config (per-club keys for multi-tenant)
-    const { data: payosConfig, error: configErr } = await supabase
-      .from('club_payment_config')
-      .select('payos_client_id, payos_api_key, payos_checksum_key')
-      .eq('club_id', rec.club_id)
-      .single()
+    const amountPerRecord = passedAmountPerRecord ?? records[0].amount
+    const totalAmount = amountPerRecord * records.length
 
-    if (configErr || !payosConfig) {
+    // ── Single-record idempotency (original path, no group) ──────────────────
+    // For single payments that already have a cached QR on the record itself,
+    // return the cached data if amount is unchanged. This preserves the existing
+    // behaviour for non-group payments.
+    if (!isGroup) {
+      const rec = records[0]
+      if (rec.payos_order_code && rec.payos_checkout_url && amountPerRecord === rec.amount) {
+        return new Response(JSON.stringify({
+          orderCode: rec.payos_order_code,
+          checkoutUrl: rec.payos_checkout_url,
+          qrCode: rec.payos_qr_code,
+        }), { headers: { ...CORS, 'Content-Type': 'application/json' } })
+      }
+    }
+
+    // ── Group idempotency: reuse an existing open group for these exact records ─
+    // Only checked for multi-record groups (single still uses the record-level cache above).
+    if (isGroup) {
+      const { data: existingGroups } = await supabase
+        .from('payment_groups')
+        .select('id, total_amount, payos_order_code, payos_checkout_url, payos_qr_code, payment_group_members(record_id)')
+        .eq('collection_id', collectionId)
+        .eq('status', 'pending')
+
+      const sortedNew = [...recordIds].sort()
+      const existing = (existingGroups ?? []).find((g) => {
+        if (g.total_amount !== totalAmount) return false
+        const members = (g.payment_group_members as { record_id: string }[]).map((m) => m.record_id).sort()
+        return JSON.stringify(members) === JSON.stringify(sortedNew)
+      })
+      if (existing?.payos_order_code && existing.payos_checkout_url) {
+        return new Response(JSON.stringify({
+          groupId: existing.id,
+          orderCode: existing.payos_order_code,
+          checkoutUrl: existing.payos_checkout_url,
+          qrCode: existing.payos_qr_code,
+        }), { headers: { ...CORS, 'Content-Type': 'application/json' } })
+      }
+    }
+
+    // ── Load PayOS config + verify Pro plan ──────────────────────────────────
+    const [{ data: payosConfig }, { data: clubRow }] = await Promise.all([
+      supabase.from('club_payment_config').select('payos_client_id, payos_api_key, payos_checksum_key').eq('club_id', clubId).single(),
+      supabase.from('clubs').select('plan').eq('id', clubId).single(),
+    ])
+
+    if (!payosConfig) {
       return new Response(
         JSON.stringify({ error: 'payos_not_configured', message: 'Club host chưa kết nối PayOS' }),
         { status: 422, headers: CORS }
       )
     }
-
-    // Check club is Pro (only Pro can use payments)
-    const { data: clubRow } = await supabase
-      .from('clubs')
-      .select('plan')
-      .eq('id', rec.club_id)
-      .single()
-
     if (clubRow?.plan !== 'pro') {
       return new Response(
         JSON.stringify({ error: 'pro_required', message: 'Tính năng chỉ dành cho Pro plan' }),
@@ -81,38 +130,28 @@ serve(async (req) => {
     const { payos_client_id: clientId, payos_api_key: apiKey, payos_checksum_key: checksumKey } = payosConfig
     const appUrl = Deno.env.get('APP_URL') || 'https://spofund.vercel.app'
 
-    // Get next unique order code from DB sequence
-    const { data: seqData } = await supabase.rpc('next_payos_order_code')
-    const orderCode: number = seqData as number
-
-    // Description max 25 chars (visible in bank transfer note)
-    const memberName: string = (rec.club_members as { name: string })?.name || 'Member'
-    const shortName = memberName.split(' ').pop() || memberName
-    const periodStart: string = (rec.payment_collections as { period_start: string })?.period_start || ''
+    // ── Build description ────────────────────────────────────────────────────
+    const memberNames = records.map((r) => (r.club_members as { name: string })?.name || 'Member')
+    const periodStart: string = (records[0].payment_collections as { period_start: string })?.period_start || ''
     const periodStr = periodStart
       ? (() => { const d = new Date(periodStart); return `T${d.getMonth() + 1}/${String(d.getFullYear()).slice(2)}` })()
       : ''
-    const description = `SPOFUND ${periodStr} ${shortName}`.replace(/\s+/g, ' ').trim().slice(0, 25)
+    const description = buildDescription(memberNames, periodStr)
 
-    const cancelUrl = `${appUrl}/club/${rec.club_id}`
-    const returnUrl = `${appUrl}/club/${rec.club_id}`
+    // ── Create PayOS order ───────────────────────────────────────────────────
+    const { data: seqData } = await supabase.rpc('next_payos_order_code')
+    const orderCode: number = seqData as number
 
-    // PayOS signature: sorted key=value pairs joined by &
-    const sigData = `amount=${amount}&cancelUrl=${cancelUrl}&description=${description}&orderCode=${orderCode}&returnUrl=${returnUrl}`
+    const cancelUrl = `${appUrl}/club/${clubId}`
+    const returnUrl = `${appUrl}/club/${clubId}`
+    const sigData = `amount=${totalAmount}&cancelUrl=${cancelUrl}&description=${description}&orderCode=${orderCode}&returnUrl=${returnUrl}`
     const signature = await hmacSha256(checksumKey, sigData)
-
-    const payload = { orderCode, amount, description, cancelUrl, returnUrl, signature }
 
     const payosRes = await fetch('https://api-merchant.payos.vn/v2/payment-requests', {
       method: 'POST',
-      headers: {
-        'x-client-id': clientId,
-        'x-api-key': apiKey,
-        'Content-Type': 'application/json',
-      },
-      body: JSON.stringify(payload),
+      headers: { 'x-client-id': clientId, 'x-api-key': apiKey, 'Content-Type': 'application/json' },
+      body: JSON.stringify({ orderCode, amount: totalAmount, description, cancelUrl, returnUrl, signature }),
     })
-
     const payosJson = await payosRes.json()
 
     if (payosJson.code !== '00') {
@@ -122,20 +161,35 @@ serve(async (req) => {
 
     const { checkoutUrl, qrCode, accountNumber, accountName, bin } = payosJson.data
 
-    // Persist order info to DB
-    await supabase.from('member_payment_records').update({
-      payos_order_code: orderCode,
-      payos_checkout_url: checkoutUrl,
-      payos_qr_code: qrCode,
-    }).eq('id', record_id)
+    // ── Persist ──────────────────────────────────────────────────────────────
+    if (isGroup) {
+      // Group path: store on payment_groups + junction table
+      const { data: group, error: groupErr } = await supabase
+        .from('payment_groups')
+        .insert({ club_id: clubId, collection_id: collectionId, payos_order_code: orderCode, payos_checkout_url: checkoutUrl, payos_qr_code: qrCode, total_amount: totalAmount })
+        .select('id')
+        .single()
 
-    return new Response(JSON.stringify({
-      orderCode, checkoutUrl, qrCode,
-      // Used by client to build dl.vietqr.io deep links per bank
-      accountNumber, accountName, bin, description,
-    }), {
-      headers: { ...CORS, 'Content-Type': 'application/json' },
-    })
+      if (groupErr || !group) throw new Error('Failed to create payment_group')
+
+      await supabase.from('payment_group_members').insert(
+        recordIds.map((record_id) => ({ group_id: group.id, record_id }))
+      )
+
+      return new Response(JSON.stringify({ groupId: group.id, orderCode, checkoutUrl, qrCode, accountNumber, accountName, bin, description }), {
+        headers: { ...CORS, 'Content-Type': 'application/json' },
+      })
+    } else {
+      // Single path (legacy): store directly on member_payment_records
+      if (amountPerRecord !== records[0].amount) {
+        await supabase.from('member_payment_records').update({ amount: amountPerRecord, payos_order_code: null, payos_checkout_url: null, payos_qr_code: null }).eq('id', recordIds[0])
+      }
+      await supabase.from('member_payment_records').update({ payos_order_code: orderCode, payos_checkout_url: checkoutUrl, payos_qr_code: qrCode }).eq('id', recordIds[0])
+
+      return new Response(JSON.stringify({ orderCode, checkoutUrl, qrCode, accountNumber, accountName, bin, description }), {
+        headers: { ...CORS, 'Content-Type': 'application/json' },
+      })
+    }
   } catch (err) {
     console.error(err)
     return new Response(JSON.stringify({ error: String(err) }), { status: 500, headers: CORS })

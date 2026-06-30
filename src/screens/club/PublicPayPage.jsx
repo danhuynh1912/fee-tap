@@ -1,7 +1,7 @@
 'use client'
 import { useState, useEffect, useCallback, useMemo } from 'react'
 import { useTranslation } from 'react-i18next'
-import { Loader2, QrCode, Clock, CheckCircle2 } from 'lucide-react'
+import { Loader2, QrCode, Clock, CheckCircle2, ChevronDown, ChevronUp } from 'lucide-react'
 import { supabase } from '../../lib/supabase'
 import { fmtVND } from '../../lib/utils'
 import { computePaymentTimeline } from '../../engine/forecast'
@@ -193,13 +193,24 @@ export function PublicPayPage({ clubId, collectionId, initialData }) {
   const [selectedId, setSelectedId] = useState(() => {
     try { return localStorage.getItem(STORAGE_KEY(collectionId)) ?? '' } catch { return '' }
   })
-
+  // Set of record IDs the user chose to pay on behalf of
+  const [proxyRecordIds, setProxyRecordIds] = useState(new Set())
+  const [proxyOpen, setProxyOpen] = useState(false)
   const [qrOpen, setQrOpen] = useState(false)
 
   function handleSelect(memberId) {
     setSelectedId(memberId)
-    setQrOpen(false) // reset modal so it re-mounts with the new member's record
+    setProxyRecordIds(new Set()) // reset proxy when identity changes
+    setQrOpen(false)
     try { localStorage.setItem(STORAGE_KEY(collectionId), memberId) } catch { /* ignore */ }
+  }
+
+  function toggleProxy(recordId) {
+    setProxyRecordIds((prev) => {
+      const next = new Set(prev)
+      next.has(recordId) ? next.delete(recordId) : next.add(recordId)
+      return next
+    })
   }
 
   const selectedMember = members.find((m) => m.id === selectedId) ?? null
@@ -207,6 +218,22 @@ export function PublicPayPage({ clubId, collectionId, initialData }) {
   const myIsPaid = myRecord && (myRecord.status === 'paid' || myRecord.status === 'manual')
 
   const paidCount = payments.filter((p) => p.status === 'paid' || p.status === 'manual').length
+
+  // Other pending members available for proxy selection
+  const proxyOptions = useMemo(
+    () =>
+      payments
+        .filter((r) => r.member_id !== selectedMember?.id && r.status === 'pending')
+        .map((r) => ({ record: r, member: members.find((m) => m.id === r.member_id) }))
+        .filter(({ member }) => !!member),
+    [payments, selectedMember?.id, members]
+  )
+
+  // Pre-resolved proxy records passed directly to modal (no picker inside modal)
+  const proxyRecords = useMemo(
+    () => proxyOptions.filter(({ record: r }) => proxyRecordIds.has(r.id)).map(({ record: r }) => r),
+    [proxyOptions, proxyRecordIds]
+  )
 
   // Live fee — same computation as dashboard GroupSummary
   const sport = club ? (SPORT_CONFIGS[club.sport_type] ?? null) : null
@@ -337,13 +364,56 @@ export function PublicPayPage({ clubId, collectionId, initialData }) {
                     <span className="text-sm text-slate-500">{t('payment_status_pending')}</span>
                   </div>
                 )}
+              </div>
+            )}
 
-                {!myIsPaid && myRecord && (
-                  <Button variant="volt" size="sm" onClick={() => setQrOpen(true)}>
-                    <QrCode className="h-4 w-4" /> {t('payment_qr_btn')}
-                  </Button>
+            {/* Proxy picker — collapsible, shown when identity selected and not yet paid */}
+            {selectedMember && !myIsPaid && proxyOptions.length > 0 && (
+              <div className="rounded-2xl border border-slate-100 overflow-hidden">
+                <button
+                  onClick={() => setProxyOpen((v) => !v)}
+                  className="flex w-full items-center gap-2 bg-slate-50 px-4 py-3 text-left transition hover:bg-slate-100"
+                >
+                  <span className="flex-1 text-xs font-semibold uppercase tracking-wide text-slate-400">
+                    {t('proxy_pay_section')}
+                  </span>
+                  {proxyRecordIds.size > 0 && (
+                    <span className="rounded-full bg-lime-100 px-2 py-0.5 text-xs font-bold text-lime-700">
+                      +{proxyRecordIds.size}
+                    </span>
+                  )}
+                  {proxyOpen
+                    ? <ChevronUp className="h-4 w-4 text-slate-400" />
+                    : <ChevronDown className="h-4 w-4 text-slate-400" />}
+                </button>
+                {proxyOpen && (
+                  <ul className="divide-y divide-slate-50 bg-white">
+                    {proxyOptions.map(({ record: r, member: m }) => (
+                      <li key={r.id}>
+                        <label className="flex cursor-pointer items-center gap-3 px-4 py-3 transition hover:bg-slate-50">
+                          <input
+                            type="checkbox"
+                            checked={proxyRecordIds.has(r.id)}
+                            onChange={() => toggleProxy(r.id)}
+                            className="h-4 w-4 accent-lime-500 cursor-pointer"
+                          />
+                          <span className="text-sm font-medium text-slate-700">{m.name}</span>
+                        </label>
+                      </li>
+                    ))}
+                  </ul>
                 )}
               </div>
+            )}
+
+            {/* QR button */}
+            {selectedMember && !myIsPaid && myRecord && (
+              <Button variant="volt" className="w-full" onClick={() => setQrOpen(true)}>
+                <QrCode className="h-4 w-4" />
+                {proxyRecordIds.size > 0
+                  ? t('proxy_pay_total', { amount: fmtVND((livePerMember ?? myRecord.amount) * (1 + proxyRecordIds.size)), n: 1 + proxyRecordIds.size })
+                  : t('payment_qr_btn')}
+              </Button>
             )}
 
             {/* No record for member — edge case fallback */}
@@ -357,12 +427,13 @@ export function PublicPayPage({ clubId, collectionId, initialData }) {
       {/* QR Modal — key=myRecord.id forces remount on member change, resetting internal localRecord state */}
       {myRecord && (
         <PaymentQRModal
-          key={myRecord.id}
+          key={`${myRecord.id}-${[...proxyRecordIds].sort().join(',')}`}
           open={qrOpen}
           onClose={() => setQrOpen(false)}
           record={myRecord}
           memberName={selectedMember?.name ?? ''}
           liveAmount={livePerMember ?? myRecord.amount}
+          proxyRecords={proxyRecords}
           toast={toast}
         />
       )}

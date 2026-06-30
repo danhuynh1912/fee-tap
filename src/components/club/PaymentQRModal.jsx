@@ -1,11 +1,11 @@
 import { useState, useEffect, useCallback } from 'react'
 import { useTranslation } from 'react-i18next'
-import { QrCode, CheckCircle2, Loader2, ExternalLink, RefreshCw, Globe, Download } from 'lucide-react'
+import { QrCode, CheckCircle2, Loader2, ExternalLink, RefreshCw, Globe, Download, Users } from 'lucide-react'
 import { Modal } from '../ui/Modal'
 import { Button } from '../ui/Button'
 import { cx, fmtVND } from '../../lib/utils'
 import { supabase } from '../../lib/supabase'
-import { createPaymentQR } from '../../lib/paymentService'
+import { createPaymentQR, createGroupPaymentQR } from '../../lib/paymentService'
 import { handleError } from '../../lib/handleError'
 import { getTg } from '../../lib/telegram'
 
@@ -61,16 +61,21 @@ function openUrl(url) {
   }
 }
 
-export function PaymentQRModal({ open, onClose, record, memberName, liveAmount, toast }) {
+// proxyRecords: record[] — already-selected records to pay on behalf of (resolved by parent).
+// Selection UI lives on the page; modal only generates QR for the final set.
+export function PaymentQRModal({ open, onClose, record, memberName, liveAmount, proxyRecords, toast }) {
   const { t } = useTranslation()
   const [loading, setLoading] = useState(false)
   const [localRecord, setLocalRecord] = useState(record)
   const [justPaid, setJustPaid] = useState(false)
-  // Extra fields from PayOS API needed for dl.vietqr.io links
-  const [vietQRMeta, setVietQRMeta] = useState(null) // { accountNumber, accountName, bin, description }
+  const [vietQRMeta, setVietQRMeta] = useState(null)
   const [showAllBanks, setShowAllBanks] = useState(false)
+  const [groupQR, setGroupQR] = useState(null) // { groupId, orderCode, checkoutUrl, qrCode }
 
   const isMobile = /android|iphone|ipad/i.test(navigator.userAgent)
+
+  const isGroupMode = !!proxyRecords?.length
+  const totalAmount = (liveAmount ?? localRecord?.amount ?? 0) * (1 + (proxyRecords?.length ?? 0))
 
   useEffect(() => {
     const wasPending = localRecord?.status === 'pending'
@@ -85,39 +90,45 @@ export function PaymentQRModal({ open, onClose, record, memberName, liveAmount, 
 
   useEffect(() => {
     if (!open || !localRecord || localRecord.status !== 'pending') return
-    const amountChanged = liveAmount && liveAmount !== localRecord.amount
-    if (!localRecord.payos_order_code || amountChanged) generateQR()
-  }, [open, localRecord?.id, liveAmount]) // eslint-disable-line
+    if (isGroupMode) {
+      // Group mode: generate if we don't have a cached group QR yet
+      if (!groupQR) generateQR()
+    } else {
+      const amountChanged = liveAmount && liveAmount !== localRecord.amount
+      if (!localRecord.payos_order_code || amountChanged) generateQR()
+    }
+  }, [open, localRecord?.id, liveAmount, isGroupMode, groupQR]) // eslint-disable-line
 
   async function generateQR() {
     if (!localRecord || loading) return
     setLoading(true)
     try {
-      if (liveAmount && liveAmount !== localRecord.amount) {
-        await supabase
-          .from('member_payment_records')
-          .update({ amount: liveAmount, payos_order_code: null, payos_checkout_url: null, payos_qr_code: null })
-          .eq('id', localRecord.id)
-        setLocalRecord(r => ({ ...r, amount: liveAmount, payos_order_code: null, payos_checkout_url: null, payos_qr_code: null }))
-        setVietQRMeta(null)
-      }
       const { data: { session } } = await supabase.auth.getSession()
-      const json = await createPaymentQR(localRecord.id, liveAmount ?? localRecord.amount, session?.access_token)
+      const amountPerRecord = liveAmount ?? localRecord.amount
 
-      setLocalRecord(r => ({
-        ...r,
-        payos_order_code: json.orderCode,
-        payos_checkout_url: json.checkoutUrl,
-        payos_qr_code: json.qrCode,
-      }))
-      // Store extra fields for building bank deep links
-      if (json.accountNumber && json.bin) {
-        setVietQRMeta({
-          accountNumber: json.accountNumber,
-          accountName: json.accountName,
-          bin: json.bin,
-          description: json.description,
-        })
+      if (isGroupMode) {
+        // Group path: one QR covers primary + proxy records
+        const allRecordIds = [localRecord.id, ...(proxyRecords?.map((r) => r.id) ?? [])]
+        const json = await createGroupPaymentQR(allRecordIds, amountPerRecord, session?.access_token)
+        setGroupQR({ groupId: json.groupId, orderCode: json.orderCode, checkoutUrl: json.checkoutUrl, qrCode: json.qrCode })
+        if (json.accountNumber && json.bin) {
+          setVietQRMeta({ accountNumber: json.accountNumber, accountName: json.accountName, bin: json.bin, description: json.description })
+        }
+      } else {
+        // Single path (original behaviour)
+        if (liveAmount && liveAmount !== localRecord.amount) {
+          await supabase
+            .from('member_payment_records')
+            .update({ amount: liveAmount, payos_order_code: null, payos_checkout_url: null, payos_qr_code: null })
+            .eq('id', localRecord.id)
+          setLocalRecord(r => ({ ...r, amount: liveAmount, payos_order_code: null, payos_checkout_url: null, payos_qr_code: null }))
+          setVietQRMeta(null)
+        }
+        const json = await createPaymentQR(localRecord.id, amountPerRecord, session?.access_token)
+        setLocalRecord(r => ({ ...r, payos_order_code: json.orderCode, payos_checkout_url: json.checkoutUrl, payos_qr_code: json.qrCode }))
+        if (json.accountNumber && json.bin) {
+          setVietQRMeta({ accountNumber: json.accountNumber, accountName: json.accountName, bin: json.bin, description: json.description })
+        }
       }
     } catch (e) {
       handleError(e, toast, t)
@@ -127,7 +138,7 @@ export function PaymentQRModal({ open, onClose, record, memberName, liveAmount, 
   }
 
   const handleBankClick = useCallback((bank) => {
-    const checkoutUrl = localRecord?.payos_checkout_url
+    const checkoutUrl = isGroupMode ? groupQR?.checkoutUrl : localRecord?.payos_checkout_url
     if (!checkoutUrl) return
     if (isMobile && vietQRMeta) {
       openUrl(buildVietQRLink({
@@ -135,7 +146,7 @@ export function PaymentQRModal({ open, onClose, record, memberName, liveAmount, 
         accountNumber: vietQRMeta.accountNumber,
         bin: vietQRMeta.bin,
         accountName: vietQRMeta.accountName,
-        amount: liveAmount ?? localRecord?.amount,
+        amount: totalAmount,
         description: vietQRMeta.description,
         checkoutUrl,
         strictNote: bank.strictNote,
@@ -143,12 +154,11 @@ export function PaymentQRModal({ open, onClose, record, memberName, liveAmount, 
     } else {
       openUrl(checkoutUrl)
     }
-  }, [vietQRMeta, localRecord?.payos_checkout_url, localRecord?.amount, liveAmount, isMobile])
+  }, [vietQRMeta, groupQR, localRecord?.payos_checkout_url, totalAmount, isGroupMode, isMobile])
 
   const handleDownloadQR = useCallback(async () => {
-    const qrImg = localRecord?.payos_qr_code
-      ? `https://api.qrserver.com/v1/create-qr-code/?size=240x240&data=${encodeURIComponent(localRecord.payos_qr_code)}`
-      : null
+    const rawQR = isGroupMode ? groupQR?.qrCode : localRecord?.payos_qr_code
+    const qrImg = rawQR ? `https://api.qrserver.com/v1/create-qr-code/?size=240x240&data=${encodeURIComponent(rawQR)}` : null
     if (!qrImg) return
     try {
       const res = await fetch(qrImg)
@@ -170,14 +180,17 @@ export function PaymentQRModal({ open, onClose, record, memberName, liveAmount, 
   }, [localRecord?.payos_qr_code])
 
   const openWeb = useCallback(() => {
-    if (localRecord?.payos_checkout_url) openUrl(localRecord.payos_checkout_url)
-  }, [localRecord?.payos_checkout_url])
+    const url = isGroupMode ? groupQR?.checkoutUrl : localRecord?.payos_checkout_url
+    if (url) openUrl(url)
+  }, [isGroupMode, groupQR, localRecord?.payos_checkout_url])
 
   const isPaid = localRecord?.status === 'paid' || localRecord?.status === 'manual'
-  const hasQR = !!localRecord?.payos_qr_code
-  const hasCheckout = !!localRecord?.payos_checkout_url
+  const activeQRCode = isGroupMode ? groupQR?.qrCode : localRecord?.payos_qr_code
+  const activeCheckoutUrl = isGroupMode ? groupQR?.checkoutUrl : localRecord?.payos_checkout_url
+  const hasQR = !!activeQRCode
+  const hasCheckout = !!activeCheckoutUrl
   const qrImageUrl = hasQR
-    ? `https://api.qrserver.com/v1/create-qr-code/?size=240x240&data=${encodeURIComponent(localRecord.payos_qr_code)}`
+    ? `https://api.qrserver.com/v1/create-qr-code/?size=240x240&data=${encodeURIComponent(activeQRCode)}`
     : null
 
   return (
@@ -186,20 +199,25 @@ export function PaymentQRModal({ open, onClose, record, memberName, liveAmount, 
         {/* Header */}
         <div className="flex items-center gap-3">
           <span className={cx('grid h-10 w-10 shrink-0 place-items-center rounded-2xl', isPaid ? 'bg-lime-400 text-slate-900' : 'bg-slate-900 text-lime-400')}>
-            {isPaid ? <CheckCircle2 className="h-5 w-5" /> : <QrCode className="h-5 w-5" />}
+            {isPaid ? <CheckCircle2 className="h-5 w-5" /> : isGroupMode ? <Users className="h-5 w-5" /> : <QrCode className="h-5 w-5" />}
           </span>
           <div>
             <p className="font-black text-slate-900">{t('payment_qr_title')}</p>
-            <p className="text-xs text-slate-500">{memberName}</p>
+            <p className="text-xs text-slate-500">
+              {isGroupMode
+                ? t('proxy_pay_total', { amount: fmtVND(totalAmount), n: 1 + (proxyRecords?.length ?? 0) })
+                : memberName}
+            </p>
           </div>
         </div>
+
 
         {/* Paid state */}
         {isPaid && (
           <div className={cx('rounded-3xl border p-8 text-center space-y-3 transition-all duration-500', justPaid ? 'bg-lime-400 border-lime-400 scale-[1.02]' : 'bg-lime-50 border-lime-200')}>
             <CheckCircle2 className={cx('mx-auto transition-all duration-500', justPaid ? 'h-16 w-16 text-slate-900 animate-bounce' : 'h-12 w-12 text-lime-500')} />
             <p className="font-black text-xl text-slate-900">{justPaid ? t('payment_qr_just_paid') : t('payment_qr_success')}</p>
-            <p className={cx('font-mono text-3xl font-black', justPaid ? 'text-slate-900' : 'text-lime-600')}>{fmtVND(liveAmount ?? localRecord?.amount ?? 0)}</p>
+            <p className={cx('font-mono text-3xl font-black', justPaid ? 'text-slate-900' : 'text-lime-600')}>{fmtVND(totalAmount)}</p>
             {justPaid && <p className="text-sm text-slate-700">{t('payment_qr_closing')}</p>}
           </div>
         )}
@@ -209,7 +227,12 @@ export function PaymentQRModal({ open, onClose, record, memberName, liveAmount, 
           <>
             <div className="text-center">
               <p className="text-xs text-slate-500 mb-1">{t('payment_qr_amount')}</p>
-              <p className="font-mono text-3xl font-black text-slate-900">{fmtVND(liveAmount ?? localRecord?.amount ?? 0)}</p>
+              <p className="font-mono text-3xl font-black text-slate-900">{fmtVND(totalAmount)}</p>
+              {isGroupMode && (
+                <p className="text-xs text-slate-400 mt-0.5">
+                  {fmtVND(liveAmount ?? localRecord?.amount ?? 0)} × {1 + (proxyRecords?.length ?? 0)}
+                </p>
+              )}
             </div>
 
             <div className="flex justify-center">
@@ -309,7 +332,7 @@ export function PaymentQRModal({ open, onClose, record, memberName, liveAmount, 
                 <>
                   {qrImageUrl && <p className="text-center text-xs text-slate-400">{t('payment_qr_scan')}</p>}
                   {hasCheckout && (
-                    <a href={localRecord.payos_checkout_url} target="_blank" rel="noopener noreferrer"
+                    <a href={activeCheckoutUrl} target="_blank" rel="noopener noreferrer"
                       className="flex items-center justify-center gap-2 w-full rounded-2xl bg-slate-900 py-3 text-sm font-semibold text-lime-400 hover:bg-slate-800 transition active:scale-[0.98]"
                     >
                       <ExternalLink className="h-4 w-4" />
