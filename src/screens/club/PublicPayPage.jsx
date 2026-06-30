@@ -162,8 +162,12 @@ function usePublicPayData(clubId, collectionId, initialData) {
         event: 'UPDATE',
         schema: 'public',
         table: 'member_payment_records',
+        // collection_id filter requires REPLICA IDENTITY FULL on the table.
+        // We also guard in the callback so it works even without FULL replica identity.
         filter: `collection_id=eq.${collectionId}`,
       }, (payload) => {
+        // Guard: ignore events from other collections (in case filter is bypassed)
+        if (payload.new.collection_id && payload.new.collection_id !== collectionId) return
         setPayments((prev) => {
           const idx = prev.findIndex((p) => p.id === payload.new.id)
           if (idx === -1) return prev

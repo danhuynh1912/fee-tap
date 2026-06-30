@@ -95,6 +95,7 @@ serve(async (req) => {
       const { error } = await supabase.rpc('confirm_payment_group', {
         p_group_id: resolution.groupId,
         p_confirmed_by: 'payos',
+        p_actual_total: d.amount,
       })
       if (error) console.error('confirm_payment_group error:', error)
       else console.log('confirm_payment_group ok, group:', resolution.groupId)
