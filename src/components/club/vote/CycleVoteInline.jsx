@@ -177,7 +177,7 @@ export function CycleVoteInline({ club, members, settings, slots, canEdit, user,
       {members.length > 0 && (
         <div className="flex flex-wrap gap-1.5">
           {members.map((m) => {
-            const r = m.user_id ? responseMap[m.user_id] : null
+            const r = responseMap[m.user_id] ?? responseMap[m.id] ?? null
             return <MemberDot key={m.id} member={m} attending={r ? r.attending : null} />
           })}
         </div>

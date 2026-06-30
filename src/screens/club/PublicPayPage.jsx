@@ -148,9 +148,10 @@ function usePublicPayData(clubId, collectionId, initialData) {
   }, [clubId, collectionId])
 
   useEffect(() => {
-    if (initialData) return
+    // Always refresh from DB after mount — SSR initialData may be stale if members
+    // were added/deleted after the page was server-rendered.
     load()
-  }, [load, initialData])
+  }, [load])
 
   // Realtime: watch payment status changes on this collection
   useEffect(() => {
