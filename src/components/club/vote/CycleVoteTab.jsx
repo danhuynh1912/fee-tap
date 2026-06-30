@@ -9,6 +9,7 @@ import { Badge } from '../../ui/Badge'
 import { AdminCycleVoteForm } from './AdminCycleVoteForm'
 import { VotePanel } from './VotePanel'
 import { CycleResultsPanel } from './CycleResultsPanel'
+import { ProxyVotePanel } from './ProxyVotePanel'
 
 export function CycleVoteTab({ club, members, settings, slots, canEdit, user, toast, upcomingFeeInfo, pickerProps }) {
   const { t, i18n } = useTranslation()
@@ -109,6 +110,18 @@ export function CycleVoteTab({ club, members, settings, slots, canEdit, user, to
               onChanged={reload}
               hideSlots
               pickerProps={pickerProps}
+            />
+          )}
+
+          {vote && !closed && user?.id && (
+            <ProxyVotePanel
+              vote={vote}
+              members={members}
+              responses={responses}
+              userId={user?.id}
+              canEdit={canEdit}
+              toast={toast}
+              onChanged={reload}
             />
           )}
 

@@ -158,6 +158,7 @@ export function NextSessionVoteTab({ club, settings, members, canEdit, user, toa
               members={members}
               responses={responses}
               userId={user?.id}
+              canEdit={canEdit}
               toast={toast}
               onChanged={reload}
             />

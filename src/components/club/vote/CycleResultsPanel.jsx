@@ -48,7 +48,7 @@ export function CycleResultsPanel({ responses, members, meId }) {
     const noAnswer = []
 
     for (const m of members) {
-      const r = m.user_id ? responseMap[m.user_id] : null
+      const r = responseMap[m.user_id] ?? responseMap[m.id] ?? null
       if (r?.attending === true) committed.push({ member: m, attending: true })
       else if (r?.attending === false) declined.push({ member: m, attending: false })
       else noAnswer.push({ member: m, attending: null })

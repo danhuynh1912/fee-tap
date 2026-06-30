@@ -56,6 +56,97 @@ function FundCard({ className = '' }) {
   )
 }
 
+// QR auto-generate + bank auto-detect card
+function QRStatusCard({ className = '' }) {
+  const qrGrid = [
+    [1,1,1,0,0,1,1,1,1],
+    [1,0,1,0,1,0,0,0,1],
+    [1,1,1,0,0,1,0,1,1],
+    [0,0,0,1,0,0,1,0,0],
+    [1,0,1,0,1,1,0,1,0],
+    [0,1,0,1,0,0,0,0,1],
+    [1,1,1,0,1,0,0,1,1],
+    [1,0,0,0,0,1,1,0,0],
+    [1,1,0,1,0,0,1,1,1],
+  ]
+  const members = [
+    { name: 'A. Tuấn',  done: true },
+    { name: 'M. Khôi',  done: true },
+    { name: 'T. Linh',  done: false },
+  ]
+  return (
+    <div className={cx('rounded-3xl flex flex-col justify-between border border-white/15 bg-black/30 p-3.5 shadow-2xl shadow-black/40 backdrop-blur-2xl', className)}>
+      <div className=" ">
+        {/* QR code visual */}
+        <div className="relative shrink-0">
+          <div className="rounded-xl bg-white p-1.5 w-fit mx-auto">
+            <svg viewBox="0 0 36 36" className="h-[90px] w-50 mx-auto" fill="#0f172a" aria-hidden>
+              {qrGrid.map((row, ri) =>
+                row.map((cell, ci) =>
+                  cell ? <rect key={`${ri}-${ci}`} x={ci * 4} y={ri * 4} width="3.5" height="3.5" /> : null
+                )
+              )}
+            </svg>
+          </div>
+        </div>
+        {/* Payment status list */}
+        <div className="flex-1 pt-0.5">
+          {members.map((m) => (
+            <div key={m.name} className="flex items-center justify-between py-[3px]">
+              <span className="text-[11px] font-medium text-white/70">{m.name}</span>
+              {m.done ? (
+                <span className="flex items-center gap-0.5 font-mono text-[11px] font-semibold text-lime-300">
+                  <Check className="h-3 w-3" strokeWidth={3} /> 150k
+                </span>
+              ) : (
+                <span className="flex items-center gap-1 text-[11px] text-white/30">
+                  <span className="h-1.5 w-1.5 animate-pulse rounded-full bg-amber-400" />
+                  pending
+                </span>
+              )}
+            </div>
+          ))}
+        </div>
+      </div>
+      <div className="mt-auto flex items-center gap-1.5 border-t border-white/10 pt-2">
+        <span className="h-1.5 w-1.5 animate-pulse rounded-full bg-lime-400 shadow-[0_0_6px_#ccff00]" />
+        <span className="text-[10px] font-medium text-white/40">Auto QR · Auto-detect Banking</span>
+      </div>
+    </div>
+  )
+}
+
+// Shop view: fund status of each club customer
+function ShopFundCard({ className = '' }) {
+  const clubs = [
+    { name: 'CLB A', pct: 64, amount: '4 hộp' },
+    { name: 'CLB B',  pct: 35, amount: '3 hộp' },
+    { name: 'CLB C', pct: 18, amount: '1 hộp' },
+  ]
+  return (
+    <div className={cx('rounded-3xl border border-white/15 bg-black/30 p-3.5 shadow-2xl shadow-black/40 backdrop-blur-2xl', className)}>
+      <div className="mb-1.5 flex items-center gap-1.5">
+        <ShoppingBag className="h-3.5 w-3.5 text-lime-300" />
+        <span className="text-[10px] font-bold uppercase tracking-wider text-white/50">Quỹ khách hàng</span>
+      </div>
+      <p className="mb-2.5 text-[10px] leading-relaxed text-white/40">Shop cầu lông có thể check được hộp cầu tồn kho của nhiều câu lạc bộ</p>
+      <div className="space-y-2">
+        {clubs.map((c) => (
+          <div key={c.name}>
+            <div className="mb-1 flex items-center justify-between">
+              <span className="text-[11px] font-medium text-white/75">{c.name}</span>
+              <span className="font-mono text-[11px] text-white/50">{c.amount}</span>
+            </div>
+            <div className="h-1.5 overflow-hidden rounded-full bg-white/10">
+              <div className="h-full rounded-full bg-lime-400" style={{ width: `${c.pct}%` }} />
+            </div>
+          </div>
+        ))}
+      </div>
+    </div>
+  )
+}
+
 export function SignInPage({ onGoogle, busy }) {
   const { t } = useTranslation()
 
@@ -92,13 +183,13 @@ export function SignInPage({ onGoogle, busy }) {
         <div className="relative hidden overflow-hidden lg:block lg:min-h-[calc(100svh-4rem)]">
           {/* Raw photo — no dark overlay */}
           <img
-            src="/spofund-banner.png"
+            src="/spofund-banner.webp"
             alt="SpoFund"
             className="absolute inset-0 h-full w-full object-cover object-[55%_25%]"
           />
 
           {/* Frosted glass bar — horizontal strip, bottom-left */}
-          <div className="absolute bottom-10 right-10 space-y-7 max-w-[80vw] animate-fade-in items-center gap-7 rounded-[1.75rem] border border-white/20 bg-black/35 px-6 py-5 shadow-2xl shadow-black/40 backdrop-blur-2xl">
+          <div className="absolute bottom-10 left-10 space-y-7 max-w-[80vw] animate-fade-in items-center gap-7 rounded-[1.75rem] border border-white/20 bg-black/35 px-6 py-5 shadow-2xl shadow-black/40 backdrop-blur-2xl">
             {/* Left: badge + headline */}
             <div className="min-w-0 flex-1 max-w-[500px]">
               <span className="inline-flex items-center gap-1.5 rounded-full border border-white/20 bg-white/10 px-3 py-1 text-[11px] font-semibold text-white">
@@ -126,15 +217,19 @@ export function SignInPage({ onGoogle, busy }) {
             </div>
           </div>
 
-          {/* Fund card — top right */}
-          <FundCard className="absolute right-10 top-6 w-60 animate-rise [animation-delay:300ms]" />
+          {/* Card stack — top right */}
+          <div className="absolute right-10 top-6 grid w-[300px] grid-rows-3 gap-2 h-[calc(100vh-200px)] min-h-[660px]">
+            <FundCard className="animate-rise [animation-delay:200ms]" />
+            <QRStatusCard className="animate-rise [animation-delay:350ms]" />
+            <ShopFundCard className="animate-rise [animation-delay:500ms]" />
+          </div>
         </div>
 
         {/* ── MOBILE: photo stacked above text, fully separate ── */}
         <div className="lg:hidden">
           {/* Photo block — full width, fixed aspect */}
           <img
-            src="/spofund-banner.png"
+            src="/spofund-banner.webp"
             alt="SpoFund"
             className="aspect-[4/3] w-full object-cover object-[50%_22%]"
           />

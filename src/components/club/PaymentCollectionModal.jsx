@@ -180,7 +180,7 @@ export function PaymentCollectionModal({ open, onClose, collection, memberPaymen
           {members.map((m) => {
             const record = memberPayments.find((p) => p.member_id === m.id) || null
             const hasVoteData = committedUserIds !== undefined
-            const isCommitted = committedUserIds?.has(m.user_id)
+            const isCommitted = committedUserIds?.has(m.user_id) || committedUserIds?.has(m.id)
             const cycleStatus = !hasVoteData ? undefined : isCommitted ? 'committed' : 'not_committed'
             return <MemberRow key={m.id} member={m} paymentRecord={record} onConfirmManual={confirmManual} confirmingId={confirmingId} cycleStatus={cycleStatus} />
           })}
