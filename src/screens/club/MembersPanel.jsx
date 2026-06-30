@@ -145,6 +145,23 @@ export function MembersPanel({ club, members, plan, hostName, hostAvatar, curren
           )
         })}
       </ul>
+
+      {canEdit && (
+        <form onSubmit={add} className="mt-4 flex gap-2">
+          <input
+            type="text"
+            value={name}
+            onChange={(e) => setName(e.target.value)}
+            placeholder={t('mem_add_ph')}
+            className={cx(inputCls, 'flex-1')}
+            disabled={busy}
+          />
+          <Button type="submit" variant="volt" disabled={!name.trim() || busy}>
+            <Plus className="h-4 w-4" />
+            {t('mem_add_btn')}
+          </Button>
+        </form>
+      )}
     </Card>
   )
 }
