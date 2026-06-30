@@ -47,20 +47,44 @@ const en = {
   shop_weekly_day: 'Every {{day}}',
 
   // ── auth / landing ───────────────────────────────────────
-  hero_badge: 'FinTech for clubs',
-  hero_title_1: 'Manage your',
-  hero_title_hl: 'club costs',
-  hero_title_2: ', smart and transparent.',
+  hero_badge: 'Fund management for sports clubs',
+  hero_title_1: 'Court fees, shuttles, fund, attendance —',
+  hero_title_hl: 'all in one',
+  hero_title_2: '',
   hero_sub:
-    'FeeTap forecasts your court & shuttlecock spend, watches the club fund, and splits any shortfall fairly across the exact roster — pulled live from your PollTap registrations.',
+    'SpoFund forecasts your court and shuttle spend for the whole month or quarter, shows exactly how much is left in the fund, and splits any shortfall evenly across your roster. Collect with a QR code — who has paid shows up instantly.',
+  hero_chip_free: 'Free up to 15 members',
+  hero_chip_card: 'No credit card needed',
   signin_google: 'Continue with Google',
   signin_note: 'Secure OAuth 2.0 · We only read your name & email',
-  feat_forecast_t: 'Forecasting engine',
-  feat_forecast_d: 'Project court and shuttlecock costs for the whole billing cycle from a few simple inputs.',
-  feat_roster_t: 'Live roster sync',
-  feat_roster_d: 'The fixed member count comes straight from your PollTap membership poll — no double entry.',
-  feat_runway_t: 'Fund runway alerts',
-  feat_runway_d: 'See a deficit before it happens, with the exact top-up each member owes to clear it.',
+  hero_card_label: 'Projected fund at end of cycle',
+  hero_card_members: 'Roster synced from PollTap',
+  hero_stat_paid: 'Collected 9/12',
+  hero_scroll: 'Scroll to explore',
+
+  feat_forecast_t: 'Court & shuttle forecasting',
+  feat_forecast_d:
+    'Set your court price, play days and shuttle usage once — SpoFund builds the calendar and projects the cost for the whole cycle. No more adding it up by hand.',
+  feat_collect_t: 'Split & collect by QR',
+  feat_collect_d:
+    'When the fund runs short, the bill is split evenly across the exact roster and turned into a QR code for each member. Paid members get ticked off automatically.',
+  feat_transparent_t: 'A fund everyone can see',
+  feat_transparent_d:
+    'Every top-up and expense is logged and public. Members open the app to see how much is left and whether they have paid — no need to ask the treasurer.',
+  feat_shop_t: 'For badminton shops',
+  feat_shop_d:
+    'Shops can list products, handle orders from club customers and manage their own sales — all in the same platform as the clubs they serve.',
+
+  how_title: 'Up and running in three steps',
+  how_sub: 'No spreadsheets, no setup fee. Sign in and you\'re good to go.',
+  how_1_t: 'Create your club',
+  how_1_d: 'Sign in with Google and name your club. You become the host with full control of the fund.',
+  how_2_t: 'Set up courts & shuttles',
+  how_2_d: 'Add your court price, play days and shuttle usage. SpoFund builds the schedule and forecasts the cost.',
+  how_3_t: 'Collect & track',
+  how_3_d: 'Split the bill and share the QR code with your group. Payments tick off and the fund updates on its own.',
+  cta_title: 'Run your club fund the easy way',
+  cta_sub: 'Free for groups up to 15 members. No card, no commitment.',
 
   // ── onboarding ───────────────────────────────────────────
   onb_title: 'Create your club',
@@ -777,20 +801,44 @@ const vi = {
   wd_full_6: 'Thứ 7',
   shop_weekly_day: '{{day}} hàng tuần',
 
-  hero_badge: 'FinTech cho câu lạc bộ',
-  hero_title_1: 'Quản lý',
-  hero_title_hl: 'chi phí câu lạc bộ',
-  hero_title_2: ' thông minh, minh bạch.',
+  hero_badge: 'Quản lý quỹ cho hội nhóm thể thao',
+  hero_title_1: 'Tiền sân, tiền cầu, quỹ đội, điểm danh —',
+  hero_title_hl: 'tất cả trong một',
+  hero_title_2: '',
   hero_sub:
-    'SPOFUND dự báo chi phí sân & cầu, theo dõi quỹ câu lạc bộ, và chia phần thiếu hụt công bằng cho đúng danh sách thành viên — lấy trực tiếp từ đăng ký PollTap của bạn.',
+    'SpoFund tính trước tiền sân và tiền cầu cho cả tháng hay cả quý, cho biết quỹ còn lại bao nhiêu rồi tự chia đều phần thiếu cho đúng số người trong nhóm. Thu tiền bằng mã QR, ai đóng rồi hiện ngay.',
+  hero_chip_free: 'Miễn phí tới 15 thành viên',
+  hero_chip_card: 'Không cần thẻ ngân hàng',
   signin_google: 'Tiếp tục với Google',
   signin_note: 'OAuth 2.0 bảo mật · Chỉ đọc tên & email của bạn',
-  feat_forecast_t: 'Bộ máy dự báo',
-  feat_forecast_d: 'Dự tính chi phí sân và cầu cho cả chu kỳ chỉ từ vài thông số đơn giản.',
-  feat_roster_t: 'Đồng bộ danh sách',
-  feat_roster_d: 'Số thành viên cố định lấy thẳng từ poll đăng ký PollTap — không nhập trùng.',
-  feat_runway_t: 'Cảnh báo quỹ',
-  feat_runway_d: 'Thấy trước thâm hụt, kèm số tiền mỗi thành viên cần đóng để bù.',
+  hero_card_label: 'Quỹ dự kiến cuối kỳ',
+  hero_card_members: 'Sĩ số đồng bộ từ PollTap',
+  hero_stat_paid: 'Đã thu 9/12',
+  hero_scroll: 'Cuộn để xem thêm',
+
+  feat_forecast_t: 'Dự báo tiền sân & tiền cầu',
+  feat_forecast_d:
+    'Nhập giá sân, ngày chơi và số cầu một lần duy nhất — SpoFund tự dựng lịch và tính ra chi phí cho cả chu kỳ. Bạn không cần ngồi cộng tay từng buổi.',
+  feat_collect_t: 'Chia tiền & thu qua QR',
+  feat_collect_d:
+    'Ứng dụng tự động tạo mã QR cho từng người chuyển khoản. Đóng tiền xong tự động được chuyển trạng thái thành công.',
+  feat_transparent_t: 'Quỹ ai cũng xem được',
+  feat_transparent_d:
+    'Mọi khoản nạp và chi đều được ghi lại, công khai. Thành viên mở app là thấy quỹ còn bao nhiêu, mình đã đóng chưa — không cần hỏi thủ quỹ.',
+  feat_shop_t: 'Dành cho shop cầu lông',
+  feat_shop_d:
+    'Shop niêm yết sản phẩm, nhận đơn từ các câu lạc bộ khách hàng và quản lý doanh thu — tất cả trong cùng một nền tảng.',
+
+  how_title: 'Chỉ với ba bước, bạn có thể để hệ thống tự quản lý quỹ cho cả nhóm.',
+  how_sub: 'Dựng lịch, tính chi phí, chia tiền và thu tiền tự động — không cần quản lý thủ công qua tin nhắn.',
+  how_1_t: 'Tạo câu lạc bộ',
+  how_1_d: 'Đăng nhập bằng Google rồi đặt tên nhóm. Bạn là host đội, toàn quyền quản lý.',
+  how_2_t: 'Nhập thông tin sân & cầu',
+  how_2_d: 'Nhập giá sân, ngày chơi và số cầu hao ước tính mỗi buổi. SpoFund tự dựng lịch và tính chi phí.',
+  how_3_t: 'Thu tiền & theo dõi',
+  how_3_d: 'Chia tiền rồi gửi mã QR cho cả nhóm. Ai đóng tự đánh dấu, quỹ tự cập nhật.',
+  cta_title: 'Quản quỹ cho cả nhóm, nhẹ nhàng cho các câu lạc bộ',
+  cta_sub: 'Miễn phí cho nhóm tới 15 người. Member không cần đăng nhập',
 
   onb_title: 'Tạo câu lạc bộ của bạn',
   onb_sub: 'Bạn sẽ là chủ câu lạc bộ, toàn quyền với cài đặt và quỹ.',
