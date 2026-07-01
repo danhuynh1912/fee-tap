@@ -2,7 +2,7 @@ import { useMemo, useState } from 'react'
 import { useTranslation } from 'react-i18next'
 import { MapPin, AlertTriangle, Clock, Feather, Users, CheckCircle2, QrCode, PlusCircle, Loader2, Link, Info, ChevronDown, ChevronUp } from 'lucide-react'
 import { cx, fmtVND, fmtNum } from '../../lib/utils'
-import { computePaymentTimeline, formatPeriodLabel } from '../../engine/forecast'
+import { computePaymentTimeline, formatPeriodLabel, computeShuttleForPeriodStart, periodStart, buildBasePaymentGroups } from '../../engine/forecast'
 import { resolveFeeContext } from '../../engine/fee/resolveFeeContext'
 import { computeGuestRecruitment } from '../../engine/fee/computeGuestRecruitment'
 import { Badge } from '../ui/Badge'
@@ -191,6 +191,7 @@ function GroupSummary({
   onPayQR,
   openingCollection,
   payosConfigured,
+  collectionSize,
 }) {
   const isFixedCount = feeCtx?.isFixed ?? false
   const total = courtCost + (shuttleCost ?? 0)
@@ -225,7 +226,7 @@ function GroupSummary({
 
   const paidPayments = groupPayments.filter((p) => p.status === 'paid' || p.status === 'manual')
   const paidCount = paidPayments.length
-  const totalMembers = isFixedCount && feeCtx?.committedCount > 0 ? feeCtx.committedCount : effectiveCount || members.length
+  const totalMembers = collectionSize ?? feeCtx?.totalMembers ?? members.length
   const myIsPaid = myRecord && (myRecord.status === 'paid' || myRecord.status === 'manual')
 
   const guestRecruitment = isFixedCount && shuttleCost > 0 && collection
@@ -408,13 +409,6 @@ function GroupSummary({
   )
 }
 
-// ── Derive period_start string from a forecast period object ──────────────────
-function periodStart(period) {
-  if (!period?.months?.length) return null
-  const m = period.months[0]
-  return `${m.year}-${String(m.month0 + 1).padStart(2, '0')}-01`
-}
-
 // ── Main PaymentTimeline ──────────────────────────────────────────────────────
 export function PaymentTimeline({
   slots,
@@ -459,36 +453,35 @@ export function PaymentTimeline({
     resolveFeeContext({ settings, memberCount, committedCount, pollTally, periodStart: ps })
 
   const paymentGroups = useMemo(() => {
-    const monthKey = (d) => (d ? `${d.getFullYear()}-${d.getMonth()}` : 'no-deadline')
-    const groups = new Map()
-    const getOrCreate = (deadline, daysUntil) => {
-      const key = monthKey(deadline)
-      if (!groups.has(key)) {
-        groups.set(key, { deadline, daysUntil, courtItems: [], shuttleItem: null })
-      } else {
-        const g = groups.get(key)
-        if (deadline && (!g.deadline || deadline < g.deadline)) {
-          g.deadline = deadline
-          g.daysUntil = daysUntil
-        }
-      }
-      return groups.get(key)
+    const groups = buildBasePaymentGroups(timeline)
+
+    // Collect period_starts already covered by upcoming groups
+    const coveredPeriodStarts = new Set(
+      [...groups.values()].map((g) => {
+        if (g.courtItems[0]?.nextPeriod) return periodStart(g.courtItems[0].nextPeriod)
+        if (g.shuttleItem?.period) return periodStart(g.shuttleItem.period)
+        return null
+      }).filter(Boolean)
+    )
+
+    // Inject open collections that are past their period but still have pending members
+    for (const col of (collections || [])) {
+      if (col.status !== 'open') continue
+      if (coveredPeriodStarts.has(col.period_start)) continue
+      const hasPending = (memberPayments || []).some((p) => p.collection_id === col.id && p.status === 'pending')
+      if (!hasPending) continue
+      const deadline = col.deadline ? new Date(col.deadline) : null
+      const daysUntil = deadline ? Math.ceil((deadline - new Date()) / 86400000) : null
+      const key = col.period_start ?? `orphan-${col.id}`
+      groups.set(key, { deadline, daysUntil, courtItems: [], shuttleItem: null, _orphanCollection: col })
     }
-    for (const r of timeline.upcoming) {
-      const g = getOrCreate(r.nextDeadline, r.daysUntilNext)
-      g.courtItems.push(r)
-    }
-    // Merge each shuttle item into the matching deadline-month group, or create its own group
-    for (const si of (timeline.upcomingShuttleItems || [])) {
-      const g = getOrCreate(si.deadline, si.daysUntil)
-      g.shuttleItem = si
-    }
+
     return [...groups.values()].sort((a, b) => {
       if (!a.deadline) return 1
       if (!b.deadline) return -1
       return a.deadline - b.deadline
     })
-  }, [timeline])
+  }, [timeline, collections, memberPayments])
 
   async function openCollection(group, courtCost) {
     const ps = group.courtItems[0]?.nextPeriod ? periodStart(group.courtItems[0].nextPeriod) : null
@@ -576,22 +569,31 @@ export function PaymentTimeline({
         <div className="space-y-4">
           <p className="text-sm font-bold uppercase tracking-widest text-slate-700">{t('timeline_upcoming_title')}</p>
           {paymentGroups.map((group, gi) => {
-            const courtCost = group.courtItems.reduce((s, r) => s + r.nextCourtCost, 0)
-            const shuttleCost = group.shuttleItem?.cost ?? 0
             const isLastGroup = gi === paymentGroups.length - 1
 
             // Match this group to a payment_collection by period_start
             // Fall back to shuttle period when there are no court items in this group
-            const ps = group.courtItems[0]?.nextPeriod
+            const psFromSlots = group.courtItems[0]?.nextPeriod
               ? periodStart(group.courtItems[0].nextPeriod)
               : group.shuttleItem?.period
               ? periodStart(group.shuttleItem.period)
               : null
-            const collection = ps ? collections.find((c) => c.period_start === ps) : null
+            // Orphan groups carry their collection directly (past period, still pending)
+            const collection = group._orphanCollection ?? (psFromSlots ? collections.find((c) => c.period_start === psFromSlots) : null)
+            // For orphan groups psFromSlots is null; fall back to collection.period_start so vote binding works
+            const ps = psFromSlots ?? collection?.period_start ?? null
             const groupPayments = collection ? memberPayments.filter((p) => p.collection_id === collection.id) : []
+
             const myRecord = currentMemberId ? groupPayments.find((p) => p.member_id === currentMemberId) : null
             const feeCtx = effectiveCountFor(ps)
             const { hasCommitted, effectiveCount } = feeCtx
+            const orphanShuttleData = group._orphanCollection && group.courtItems.length === 0 && !group.shuttleItem
+              ? computeShuttleForPeriodStart(collection?.period_start, slots, settings)
+              : null
+            const courtCost = group._orphanCollection
+              ? 0
+              : group.courtItems.reduce((s, r) => s + r.nextCourtCost, 0)
+            const shuttleCost = orphanShuttleData?.cost ?? group.shuttleItem?.cost ?? 0
             const openSpots =
               feeCtx.votePeriodMatch && settings.fee_split_mode === 'total_members' && committedCount !== null
                 ? Math.max(0, memberCount - committedCount)
@@ -610,6 +612,27 @@ export function PaymentTimeline({
                 )}
 
                 <div className="divide-y divide-slate-100">
+                  {orphanShuttleData && (() => {
+                    const shuttleData = orphanShuttleData
+                    return (
+                      <div className="p-4 flex items-start justify-between gap-3 bg-white">
+                        <div className="min-w-0">
+                          <div className="flex items-center gap-2">
+                            <Feather className="h-3.5 w-3.5 text-slate-400 shrink-0" />
+                            <span className="font-semibold text-sm text-slate-900">{collection.title || t('timeline_shuttle_estimate')}</span>
+                          </div>
+                          <p className="text-xs text-slate-400 mt-0.5">
+                            {formatPeriodLabel(shuttleData.period, lang)}
+                            {shuttleData.totalSessions > 0 && <> · {fmtNum(shuttleData.totalSessions)} {t('dash_sessions')}</>}
+                          </p>
+                        </div>
+                        <div className="text-right shrink-0">
+                          <p className="font-mono text-sm font-bold text-slate-900">{fmtVND(shuttleData.cost)}</p>
+                          <p className="text-[11px] text-slate-400">{fmtNum(shuttleData.boxes)} {t('shuttle_box_unit')}</p>
+                        </div>
+                      </div>
+                    )
+                  })()}
                   {group.courtItems.map((r, i) => (
                     <UpcomingSlotCard key={r.slot.id || i} result={r} lang={lang} memberCount={effectiveCount} t={t} />
                   ))}
@@ -633,7 +656,7 @@ export function PaymentTimeline({
                   )}
                 </div>
 
-                {isLastGroup && openSpots > 0 && (
+                {openSpots > 0 && (
                   <div className="border-t border-amber-200 bg-amber-50 px-4 py-3 flex items-start gap-3">
                     <AlertTriangle className="h-4 w-4 text-amber-500 shrink-0 mt-0.5" />
                     <div className="text-sm">
@@ -676,17 +699,18 @@ export function PaymentTimeline({
                   }}
                   isPro={plan === 'pro'}
                   payosConfigured={payosConfigured}
+                  collectionSize={group._orphanCollection ? (feeCtx.committedCount > 0 ? feeCtx.committedCount : groupPayments.length || undefined) : undefined}
                 />
 
-                {/* Inline cycle vote — first group only, always rendered */}
-                {gi === 0 && cycleVoteProps && (() => {
+                {/* Inline cycle vote — shown per collection, 1:1 bound by period_start */}
+                {cycleVoteProps && collection && ps && (() => {
                   const total = courtCost + shuttleCost
                   const effectiveCnt = feeCtx?.effectiveCount || memberCount
                   const perMember = effectiveCnt > 0 ? Math.ceil(total / effectiveCnt) : 0
-                  const guestRecruitment = feeCtx?.isFixed && shuttleCost > 0 && collections[0]
-                    ? computeGuestRecruitment({ feeCtx, perMember, shuttleCost, period: group.shuttleItem?.period ?? null, slots, settings })
+                  const guestRecruitment = feeCtx?.isFixed && shuttleCost > 0 && collection
+                    ? computeGuestRecruitment({ feeCtx, perMember, shuttleCost, period: group.shuttleItem?.period ?? orphanShuttleData?.period ?? null, slots, settings })
                     : null
-                  return <CycleVoteInline {...cycleVoteProps} guestRecruitment={guestRecruitment} />
+                  return <CycleVoteInline {...cycleVoteProps} periodStart={ps} guestRecruitment={guestRecruitment} />
                 })()}
               </div>
               </div>

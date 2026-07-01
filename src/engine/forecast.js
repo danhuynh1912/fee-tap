@@ -432,6 +432,83 @@ function buildUpcomingShuttleItems(slots, settings, courtDeadlines, now = new Da
 }
 
 // ---------------------------------------------------------------------------
+// periodStart — derive YYYY-MM-01 string from a forecast period object.
+// Shared by PaymentTimeline and PublicPayPage.
+// ---------------------------------------------------------------------------
+
+export function periodStart(period) {
+  if (!period?.months?.length) return null
+  const m = period.months[0]
+  return `${m.year}-${String(m.month0 + 1).padStart(2, '0')}-01`
+}
+
+// ---------------------------------------------------------------------------
+// buildBasePaymentGroups — groups upcoming court + shuttle items by deadline
+// month. Pure: only needs timeline, no collections or memberPayments.
+// Callers that need orphan injection (PaymentTimeline) do it themselves after
+// calling this; callers that only need fee lookup (PublicPayPage) use the
+// returned Map directly.
+// Returns a Map keyed by monthKey so callers can sort / inject as needed.
+// ---------------------------------------------------------------------------
+
+export function buildBasePaymentGroups(timeline) {
+  const monthKey = (d) => (d ? `${d.getFullYear()}-${d.getMonth()}` : 'no-deadline')
+  const groups = new Map()
+  const getOrCreate = (deadline, daysUntil) => {
+    const key = monthKey(deadline)
+    if (!groups.has(key)) {
+      groups.set(key, { deadline, daysUntil, courtItems: [], shuttleItem: null })
+    } else {
+      const g = groups.get(key)
+      if (deadline && (!g.deadline || deadline < g.deadline)) {
+        g.deadline = deadline
+        g.daysUntil = daysUntil
+      }
+    }
+    return groups.get(key)
+  }
+  for (const r of timeline.upcoming) {
+    const g = getOrCreate(r.nextDeadline, r.daysUntilNext)
+    g.courtItems.push(r)
+  }
+  for (const si of (timeline.upcomingShuttleItems || [])) {
+    const g = getOrCreate(si.deadline, si.daysUntil)
+    g.shuttleItem = si
+  }
+  return groups
+}
+
+// ---------------------------------------------------------------------------
+// computeShuttleForPeriodStart — compute shuttle sessions/boxes/cost for a
+// given period_start string (YYYY-MM-DD). Used to reconstruct shuttle info
+// for past/orphan payment collections.
+// ---------------------------------------------------------------------------
+
+export function computeShuttleForPeriodStart(periodStart, slots, settings) {
+  if (!periodStart || !slots?.length) return null
+  if (!num(settings?.price_per_box) || !num(settings?.estimated_shuttlecocks)) return null
+
+  const [year, month1] = periodStart.split('-').map(Number)
+  if (!year || !month1) return null
+  const month0 = month1 - 1
+
+  const n = Math.max(1, Math.round(num(settings.shuttle_cycle_months)) || 1)
+  const startIdx = mIdx(year, month0)
+  const period = makePeriod(n === 1 ? 'month' : 'cycle', startIdx, n)
+
+  const allWeekdays = [...new Set(slots.flatMap((s) => Array.isArray(s.weekdays) ? s.weekdays : []))]
+  const totalSessions = allWeekdays.length ? sessionsForPeriod(allWeekdays, period).total : 0
+  if (!totalSessions) return null
+
+  const rate = num(settings.estimated_shuttlecocks)
+  const pricePerBox = num(settings.price_per_box)
+  const boxes = Math.ceil((totalSessions * rate) / BALLS_PER_BOX)
+  const cost = boxes * pricePerBox
+
+  return { period, totalSessions, boxes, cost }
+}
+
+// ---------------------------------------------------------------------------
 // computePaymentTimeline — aggregates all slots into running + upcoming
 // ---------------------------------------------------------------------------
 
@@ -604,6 +681,13 @@ export function computeMembershipVoteCycle(slots, settings) {
  * Compute the start/end ISO dates for the NEXT cycle period.
  * Starts on the first day of next month, spans fixedMonths months.
  */
+export function periodStartToPeriod(periodStart, fixedMonths) {
+  const [year, month1] = periodStart.split('-').map(Number)
+  const n = Math.max(1, Math.round(fixedMonths) || 1)
+  const startIdx = mIdx(year, month1 - 1)
+  return makePeriod(n === 1 ? 'month' : 'cycle', startIdx, n)
+}
+
 export function nextCyclePeriod(fixedMonths, now = new Date()) {
   const n = Math.max(1, Math.round(fixedMonths) || 1)
   const nextIdx = mIdx(now.getFullYear(), now.getMonth()) + 1

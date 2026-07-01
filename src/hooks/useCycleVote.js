@@ -1,7 +1,7 @@
 import { useState, useEffect, useCallback, useRef } from 'react'
 import { supabase } from '../lib/supabase'
 
-export function useCycleVote(clubId) {
+export function useCycleVote(clubId, periodStart) {
   const [vote, setVote] = useState(undefined) // undefined = loading, null = no vote
   const [responses, setResponses] = useState([])
   const [loading, setLoading] = useState(true)
@@ -14,7 +14,7 @@ export function useCycleVote(clubId) {
       return
     }
 
-    const { data: votes } = await supabase
+    let query = supabase
       .from('votes')
       .select('*')
       .eq('club_id', clubId)
@@ -22,6 +22,11 @@ export function useCycleVote(clubId) {
       .order('created_at', { ascending: false })
       .limit(1)
 
+    if (periodStart) {
+      query = query.eq('cycle_period_start', periodStart)
+    }
+
+    const { data: votes } = await query
     const latestVote = votes?.[0] ?? null
     setVote(latestVote)
 
@@ -37,7 +42,7 @@ export function useCycleVote(clubId) {
     }
 
     setLoading(false)
-  }, [clubId])
+  }, [clubId, periodStart])
 
   useEffect(() => {
     if (!clubId) return

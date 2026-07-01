@@ -11,7 +11,10 @@
  *   — periodStart omitted               → preview: committed_only uses committedCount directly
  *
  * Return shape:
- *   effectiveCount   — divisor to use when splitting costs
+ *   effectiveCount   — divisor used when splitting costs across members
+ *   totalMembers     — denominator for "X/Y paid" display; may differ from effectiveCount
+ *                      (e.g. fixed_count: cost splits across fixedCount slots but display
+ *                      shows only how many actually committed)
  *   hasCommitted     — true when committed_only mode and vote applies to this period
  *   isFixed          — true when fixed_count mode
  *   fixedCount       — the fixed number (only when isFixed)
@@ -35,12 +38,15 @@ export function resolveFeeContext({ settings, memberCount, committedCount, pollT
   )
 
   if (settings.fee_split_mode === 'fixed_count' && (settings.fee_split_fixed_count ?? 0) > 0) {
+    const resolved = committedCount ?? 0
     return {
       effectiveCount: settings.fee_split_fixed_count,
+      // Display denominator: how many actually committed (not the slot cap)
+      totalMembers: resolved > 0 ? resolved : settings.fee_split_fixed_count,
       hasCommitted: false,
       isFixed: true,
       fixedCount: settings.fee_split_fixed_count,
-      committedCount: committedCount ?? 0,
+      committedCount: resolved,
       votePeriodMatch,
     }
   }
@@ -52,6 +58,7 @@ export function resolveFeeContext({ settings, memberCount, committedCount, pollT
     if (applies) {
       return {
         effectiveCount: committedCount,
+        totalMembers: committedCount,
         hasCommitted: true,
         isFixed: false,
         fixedCount: null,
@@ -63,6 +70,7 @@ export function resolveFeeContext({ settings, memberCount, committedCount, pollT
 
   return {
     effectiveCount: memberCount,
+    totalMembers: memberCount,
     hasCommitted: false,
     isFixed: false,
     fixedCount: null,

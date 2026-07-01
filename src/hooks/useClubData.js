@@ -1,12 +1,14 @@
-import { useState, useEffect, useCallback } from 'react'
+import { useState, useEffect, useCallback, useRef } from 'react'
 import { supabase, isConfigured } from '../lib/supabase'
 import { DEFAULT_SETTINGS } from '../constants'
 import { synthesizeSlotsFromLegacy } from '../engine/forecast'
+import { buildPollTally } from '../lib/pollTally'
 
 export function useClubData(clubId) {
   const [settings, setSettings] = useState(null)
   const [slots, setSlots] = useState([])
   const [members, setMembers] = useState([])
+  const membersRef = useRef([])
   const [logs, setLogs] = useState([])
   const [fundTxns, setFundTxns] = useState([])
   const [shuttleTxns, setShuttleTxns] = useState([])
@@ -15,6 +17,9 @@ export function useClubData(clubId) {
   const [payosConfig, setPayosConfig] = useState(null)
   const [pollTally, setPollTally] = useState(null)
   const [loading, setLoading] = useState(true)
+
+  // Keep a ref so fetchPollTally (useCallback) can access latest members without re-creating
+  useEffect(() => { membersRef.current = members }, [members])
 
   // ── granular fetchers (used by realtime subscriptions) ───────────────────────
   // Each one only queries and updates its own slice of state.
@@ -76,17 +81,8 @@ export function useClubData(clubId) {
         .from('responses')
         .select('attending, guests, anonymous_user_id')
         .eq('vote_id', v[0].id)
-      const attendingRs = (rs || []).filter((r) => r.attending)
-      const count = attendingRs.length
-      const committedUserIds = new Set(attendingRs.map((r) => r.anonymous_user_id))
-      setPollTally({
-        count,
-        source: 'poll',
-        committedUserIds,
-        voteId: v[0].id,
-        cyclePeriodStart: v[0].cycle_period_start,
-        cyclePeriodEnd: v[0].cycle_period_end,
-      })
+        .order('created_at', { ascending: true })
+      setPollTally(buildPollTally(v[0], rs, membersRef.current))
     } else {
       setPollTally(null)
     }
@@ -160,17 +156,8 @@ export function useClubData(clubId) {
         .from('responses')
         .select('attending, guests, anonymous_user_id')
         .eq('vote_id', v[0].id)
-      const attendingRs = (rs || []).filter((r) => r.attending)
-      const count = attendingRs.length
-      const committedUserIds = new Set(attendingRs.map((r) => r.anonymous_user_id))
-      setPollTally({
-        count,
-        source: 'poll',
-        committedUserIds,
-        voteId: v[0].id,
-        cyclePeriodStart: v[0].cycle_period_start,
-        cyclePeriodEnd: v[0].cycle_period_end,
-      })
+        .order('created_at', { ascending: true })
+      setPollTally(buildPollTally(v[0], rs, m || []))
     } else {
       setPollTally(null)
     }

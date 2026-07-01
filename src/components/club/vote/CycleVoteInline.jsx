@@ -3,7 +3,7 @@ import { Check, X, Users2, Loader2, Lock, UserPlus, ChevronDown } from 'lucide-r
 import { useTranslation } from 'react-i18next'
 import { useCycleVote } from '../../../hooks/useCycleVote'
 import { useCountdown } from '../../../hooks/useCountdown'
-import { nextCyclePeriod, formatPeriodLabel, computeMembershipVoteCycle } from '../../../engine/forecast'
+import { nextCyclePeriod, formatPeriodLabel, computeMembershipVoteCycle, periodStartToPeriod } from '../../../engine/forecast'
 import { cx, fmtVND } from '../../../lib/utils'
 import { supabase } from '../../../lib/supabase'
 
@@ -94,10 +94,10 @@ function MyVoteButtons({ vote, myResponse, userId, userName, toast, onChanged })
 }
 
 // ── Main inline component ─────────────────────────────────────────────────────
-export function CycleVoteInline({ club, members, settings, slots, canEdit, user, guestRecruitment }) {
+export function CycleVoteInline({ club, members, settings, slots, canEdit, user, guestRecruitment, periodStart }) {
   const { t, i18n } = useTranslation()
   const lang = i18n.language
-  const { vote, responses, loading, reload } = useCycleVote(club.id)
+  const { vote, responses, loading, reload } = useCycleVote(club.id, periodStart)
   const countdown = useCountdown(vote?.deadline)
   const closed = !!vote && (vote.is_closed || countdown.closed)
   const [creating, setCreating] = useState(false)
@@ -110,14 +110,27 @@ export function CycleVoteInline({ club, members, settings, slots, canEdit, user,
   const userName = user?.user_metadata?.full_name || user?.email || ''
 
   const responseMap = Object.fromEntries(responses.map((r) => [r.anonymous_user_id, r]))
-  const committedCount = responses.filter((r) => r.attending).length
+  // Count green checkmarks: members whose latest response is attending=true
+  const committedCount = members.filter((m) => {
+    const r = responseMap[m.user_id] ?? responseMap[m.id] ?? null
+    return r?.attending === true
+  }).length
 
   async function createVote() {
     if (creating) return
     setCreating(true)
     try {
-      const cyclePeriod = nextCyclePeriod(fixedCycleMonths)
+      // Use the collection's period_start when available; fall back to nextCyclePeriod()
+      const cyclePeriod = periodStart
+        ? { start: periodStart, period: periodStartToPeriod(periodStart, fixedCycleMonths) }
+        : nextCyclePeriod(fixedCycleMonths)
+      const cyclePeriodStart = cyclePeriod.start
       const periodLabel = formatPeriodLabel(cyclePeriod.period, lang)
+      // Derive end from the last month of the period
+      const lastMonth = cyclePeriod.period.months[cyclePeriod.period.months.length - 1]
+      const daysInLast = new Date(lastMonth.year, lastMonth.month0 + 1, 0).getDate()
+      const cyclePeriodEnd = `${lastMonth.year}-${String(lastMonth.month0 + 1).padStart(2, '0')}-${String(daysInLast).padStart(2, '0')}`
+
       const now = new Date()
       const deadline = new Date(now.getFullYear(), now.getMonth() + 1, 0, 23, 59, 0)
       const { error } = await supabase.from('votes').insert({
@@ -127,8 +140,8 @@ export function CycleVoteInline({ club, members, settings, slots, canEdit, user,
         deadline: deadline.toISOString(),
         max_slots: members.length,
         is_closed: false,
-        cycle_period_start: cyclePeriod.start,
-        cycle_period_end: cyclePeriod.end,
+        cycle_period_start: cyclePeriodStart,
+        cycle_period_end: cyclePeriodEnd,
       })
       if (error) throw error
       reload()

@@ -4,7 +4,8 @@ import { useTranslation } from 'react-i18next'
 import { Loader2, QrCode, Clock, CheckCircle2, ChevronDown, ChevronUp } from 'lucide-react'
 import { supabase } from '../../lib/supabase'
 import { fmtVND } from '../../lib/utils'
-import { computePaymentTimeline } from '../../engine/forecast'
+import { computePaymentTimeline, computeShuttleForPeriodStart, periodStart, buildBasePaymentGroups } from '../../engine/forecast'
+import { buildPollTally } from '../../lib/pollTally'
 import { resolveFeeContext } from '../../engine/fee/resolveFeeContext'
 import { SPORT_CONFIGS } from '../../constants/index.js'
 import { PaymentQRModal } from '../../components/club/PaymentQRModal'
@@ -14,47 +15,11 @@ import { Toast } from '../../components/ui/Toast'
 
 const STORAGE_KEY = (collectionId) => `pay-identity-${collectionId}`
 
-// Same helper as PaymentTimeline.jsx
-function periodStart(period) {
-  if (!period?.months?.length) return null
-  const m = period.months[0]
-  return `${m.year}-${String(m.month0 + 1).padStart(2, '0')}-01`
-}
-
-// Mirrors the payment-group building logic in PaymentTimeline.jsx
-function buildPaymentGroups(timeline) {
-  const monthKey = (d) => (d ? `${d.getFullYear()}-${d.getMonth()}` : 'no-deadline')
-  const groups = new Map()
-  const getOrCreate = (deadline, daysUntil) => {
-    const key = monthKey(deadline)
-    if (!groups.has(key)) {
-      groups.set(key, { deadline, daysUntil, courtItems: [], shuttleItem: null })
-    } else {
-      const g = groups.get(key)
-      if (deadline && (!g.deadline || deadline < g.deadline)) {
-        g.deadline = deadline
-        g.daysUntil = daysUntil
-      }
-    }
-    return groups.get(key)
-  }
-  for (const r of timeline.upcoming) {
-    const g = getOrCreate(r.nextDeadline, r.daysUntilNext)
-    g.courtItems.push(r)
-  }
-  for (const si of (timeline.upcomingShuttleItems || [])) {
-    const g = getOrCreate(si.deadline, si.daysUntil)
-    g.shuttleItem = si
-  }
-  return [...groups.values()]
-}
-
-// Compute live perMember + totalMembers for the given collection — same formula as GroupSummary in PaymentTimeline
 function computeLiveFee({ collection, slots, settings, memberCount, committedCount, pollTally, sport }) {
   if (!slots?.length || !settings || !collection) return null
   const settingsWithEquip = { ...settings, _hasEquipment: sport?.hasEquipment ?? true }
   const timeline = computePaymentTimeline(slots, settingsWithEquip, memberCount, committedCount ?? null)
-  const groups = buildPaymentGroups(timeline)
+  const groups = [...buildBasePaymentGroups(timeline).values()]
 
   for (const group of groups) {
     const ps = group.courtItems[0]?.nextPeriod
@@ -67,13 +32,22 @@ function computeLiveFee({ collection, slots, settings, memberCount, committedCou
     const courtCost = group.courtItems.reduce((s, r) => s + r.nextCourtCost, 0)
     const shuttleCost = group.shuttleItem?.cost ?? 0
     const feeCtx = resolveFeeContext({ settings, memberCount, committedCount, pollTally, periodStart: ps })
-    const { effectiveCount, isFixed, committedCount: feeCommitted } = feeCtx
-    if (effectiveCount <= 0) return null
-    const perMember = Math.ceil((courtCost + shuttleCost) / effectiveCount)
-    // Mirror GroupSummary: in fixed mode use committedCount as display total, else effectiveCount
-    const totalMembers = isFixed && feeCommitted > 0 ? feeCommitted : effectiveCount
-    return { perMember, totalMembers }
+    if (feeCtx.effectiveCount <= 0) return null
+    return { perMember: Math.ceil((courtCost + shuttleCost) / feeCtx.effectiveCount), totalMembers: feeCtx.totalMembers }
   }
+
+  // Orphan fallback: intentionally NOT in buildBasePaymentGroups.
+  // buildBasePaymentGroups is pure (timeline only); orphan injection needs
+  // collections + memberPayments which this function doesn't own.
+  // When the collection's period is past, recompute shuttle cost directly.
+  const shuttleData = computeShuttleForPeriodStart(collection.period_start, slots, settingsWithEquip)
+  if (shuttleData) {
+    const feeCtx = resolveFeeContext({ settings, memberCount, committedCount, pollTally, periodStart: collection.period_start })
+    if (feeCtx.effectiveCount > 0) {
+      return { perMember: Math.ceil(shuttleData.cost / feeCtx.effectiveCount), totalMembers: feeCtx.totalMembers }
+    }
+  }
+
   return null
 }
 
@@ -118,28 +92,27 @@ function usePublicPayData(clubId, collectionId, initialData) {
       setCollection(colRow)
     }
 
-    const { data: voteRows } = await supabase
+    let voteQuery = supabase
       .from('votes')
       .select('id, cycle_period_start, cycle_period_end')
       .eq('club_id', clubId)
       .eq('vote_type', 'membership_cycle')
       .order('created_at', { ascending: false })
       .limit(1)
+    // Bind vote 1:1 to this collection's period — prevents a newer period's
+    // vote from leaking into an overdue collection's public pay page.
+    if (colRow?.period_start) {
+      voteQuery = voteQuery.eq('cycle_period_start', colRow.period_start)
+    }
+    const { data: voteRows } = await voteQuery
 
     if (voteRows?.length) {
       const { data: responses } = await supabase
         .from('responses')
         .select('attending, anonymous_user_id')
         .eq('vote_id', voteRows[0].id)
-      const attending = (responses ?? []).filter((r) => r.attending)
-      setPollTally({
-        count: attending.length,
-        source: 'poll',
-        committedUserIds: new Set(attending.map((r) => r.anonymous_user_id)),
-        voteId: voteRows[0].id,
-        cyclePeriodStart: voteRows[0].cycle_period_start,
-        cyclePeriodEnd: voteRows[0].cycle_period_end,
-      })
+        .order('created_at', { ascending: true })
+      setPollTally(buildPollTally(voteRows[0], responses, memberRows))
     } else {
       setPollTally(null)
     }
@@ -224,14 +197,20 @@ export function PublicPayPage({ clubId, collectionId, initialData }) {
 
   const paidCount = payments.filter((p) => p.status === 'paid' || p.status === 'manual').length
 
-  // Other pending members available for proxy selection
+  // Other pending members available for proxy selection — filtered to committed members if vote exists
   const proxyOptions = useMemo(
     () =>
       payments
         .filter((r) => r.member_id !== selectedMember?.id && r.status === 'pending')
         .map((r) => ({ record: r, member: members.find((m) => m.id === r.member_id) }))
-        .filter(({ member }) => !!member),
-    [payments, selectedMember?.id, members]
+        .filter(({ member }) => {
+          if (!member) return false
+          if (pollTally?.committedUserIds) {
+            return pollTally.committedUserIds.has(member.user_id) || pollTally.committedUserIds.has(member.id)
+          }
+          return true
+        }),
+    [payments, selectedMember?.id, members, pollTally]
   )
 
   // Pre-resolved proxy records passed directly to modal (no picker inside modal)
@@ -342,10 +321,14 @@ export function PublicPayPage({ clubId, collectionId, initialData }) {
               className="w-full rounded-2xl border border-slate-200 bg-white px-4 py-3 text-sm font-semibold text-slate-900 focus:border-slate-400 focus:outline-none"
             >
               <option value="">{t('public_pay_select_placeholder')}</option>
-              {/* Only show members who have a payment record in this collection */}
               {payments.map((rec) => {
                 const m = members.find((m) => m.id === rec.member_id)
                 if (!m) return null
+                // If a cycle vote exists for this collection, only show committed members
+                if (pollTally?.committedUserIds) {
+                  const committed = pollTally.committedUserIds.has(m.user_id) || pollTally.committedUserIds.has(m.id)
+                  if (!committed) return null
+                }
                 const paid = rec.status === 'paid' || rec.status === 'manual'
                 return (
                   <option key={m.id} value={m.id}>
