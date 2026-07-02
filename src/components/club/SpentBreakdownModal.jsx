@@ -1,5 +1,5 @@
 import { useTranslation } from 'react-i18next'
-import { Receipt, X } from 'lucide-react'
+import { Receipt } from 'lucide-react'
 import { Modal } from '../ui/Modal'
 import { fmtVND, num } from '../../lib/utils'
 
@@ -7,22 +7,14 @@ export function SpentBreakdownModal({ open, onClose, spentBreakdown, negativeSpe
   const { t } = useTranslation()
   return (
     <Modal open={open} onClose={onClose}>
-      <div className="flex items-center justify-between mb-5">
-        <div className="flex items-center gap-2.5">
-          <span className="grid h-9 w-9 place-items-center rounded-xl bg-slate-900">
-            <Receipt className="h-4 w-4 text-lime-400" />
-          </span>
-          <div>
-            <p className="font-black text-slate-900 text-base leading-tight">{t('dash_actual_spent')}</p>
-            <p className="text-xs text-slate-400">{t('dash_breakdown')}</p>
-          </div>
+      <div className="flex items-center gap-2.5 mb-5">
+        <span className="grid h-9 w-9 place-items-center rounded-xl bg-slate-900">
+          <Receipt className="h-4 w-4 text-lime-400" />
+        </span>
+        <div>
+          <p className="font-black text-slate-900 text-base leading-tight">{t('dash_actual_spent')}</p>
+          <p className="text-xs text-slate-400">{t('dash_breakdown')}</p>
         </div>
-        <button
-          onClick={onClose}
-          className="grid h-8 w-8 place-items-center rounded-xl text-slate-400 hover:bg-slate-100 hover:text-slate-600 transition"
-        >
-          <X className="h-4 w-4" />
-        </button>
       </div>
 
       <div className="space-y-4">

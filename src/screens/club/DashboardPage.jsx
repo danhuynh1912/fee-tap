@@ -3,7 +3,7 @@ import { useTranslation } from 'react-i18next'
 import { SlidersHorizontal, Plus, Loader2, X } from 'lucide-react'
 import { supabase } from '../../lib/supabase'
 import { handleError } from '../../lib/handleError'
-import { cx, fmtInputNum, parseInputNum } from '../../lib/utils'
+import { cx, fmtInputNum, parseInputNum, sumCollected } from '../../lib/utils'
 import { inputCls } from '../../components/ui/Field'
 import { Button } from '../../components/ui/Button'
 import { Modal } from '../../components/ui/Modal'
@@ -318,7 +318,7 @@ function ForecastDashboard({
     const periodEnd = ranges.reduce((max, r) => (r.end > max ? r.end : max), ranges[0].end)
     const inPeriod = (fundTxns || []).filter((tx) => num(tx.amount) > 0 && tx.created_at >= periodStart && tx.created_at <= periodEnd + 'T23:59:59')
     return {
-      totalCollected: inPeriod.reduce((s, tx) => s + num(tx.amount), 0),
+      totalCollected: sumCollected(fundTxns, { start: periodStart, end: periodEnd }),
       txCount: inPeriod.length,
     }
   }, [fundTxns, all.venues])

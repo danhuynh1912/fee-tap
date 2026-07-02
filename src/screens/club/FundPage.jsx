@@ -5,7 +5,7 @@ import { handleError } from '../../lib/handleError'
 import { Plus, Wallet, TrendingUp, TrendingDown, Loader2 } from 'lucide-react'
 import { Button } from '../../components/ui/Button'
 import { inputCls } from '../../components/ui/Field'
-import { cx, num, fmtVND, fmtDate } from '../../lib/utils'
+import { cx, num, fmtVND, fmtDate, sumCollected } from '../../lib/utils'
 import { supabase } from '../../lib/supabase'
 
 export function FundPage({ toast }) {
@@ -43,8 +43,7 @@ export function FundPage({ toast }) {
     }
   }
 
-  // Balance always derived from ledger — single source of truth
-  const total = fundTxns.reduce((s, tx) => s + num(tx.amount), 0)
+  const total = sumCollected(fundTxns)
 
   // Build member name lookup for attributed transactions
   const memberMap = Object.fromEntries((members || []).map((m) => [m.id, m]))

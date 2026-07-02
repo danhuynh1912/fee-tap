@@ -1,6 +1,6 @@
 import { useState, useMemo } from 'react'
 import { useTranslation } from 'react-i18next'
-import { LayoutDashboard, Settings2, ClipboardList, History, Vote, Building2, Crown, Zap, Eye, Menu, Link as LinkIcon, Loader2, LogOut } from 'lucide-react'
+import { LayoutDashboard, Settings2, ClipboardList, History, Vote, Building2, Crown, Zap, Eye, Menu, Link as LinkIcon, LogOut } from 'lucide-react'
 import { Badge } from '../../components/ui/Badge'
 import { Button } from '../../components/ui/Button'
 import { UpsellModal } from '../../components/monetize/UpsellModal'
@@ -9,6 +9,8 @@ import { SettingsPage } from './SettingsPage'
 import { SessionLogPage } from './SessionLogPage'
 import { FundPage } from './FundPage'
 import { VotePage } from './VotePage'
+import { TabContentSkeleton } from '../../components/club/ContentSkeleton'
+import { activeTab } from './tabRoute'
 import { useClubData } from '../../hooks/useClubData'
 import { cx } from '../../lib/utils'
 import { navigate } from '../../router'
@@ -19,15 +21,6 @@ import { ClubContext } from '../../contexts/ClubContext'
 import { computeAll, getSessionConfigs, periodDateRange } from '../../engine/forecast'
 import { num } from '../../lib/utils'
 import { BALLS_PER_BOX } from '../../constants'
-
-// Routes: /club/:id → dashboard, /club/:id/settings, /club/:id/vote, /club/:id/log, /club/:id/fund
-function activeTab(path, clubId) {
-  if (path === `/club/${clubId}/settings`) return 'settings'
-  if (path === `/club/${clubId}/vote`) return 'vote'
-  if (path === `/club/${clubId}/log`) return 'log'
-  if (path === `/club/${clubId}/fund`) return 'fund'
-  return 'dashboard'
-}
 
 export function ClubLayout({ session, club, setClub, path, toast, onSignOut }) {
   const { t } = useTranslation()
@@ -154,15 +147,7 @@ export function ClubLayout({ session, club, setClub, path, toast, onSignOut }) {
     closeSidebar: () => setSidebarOpen(false),
   }
 
-  if (loading || !effectiveSettings) {
-    return (
-      <div className="grid min-h-[70vh] place-items-center">
-        <div className="flex items-center gap-3 text-slate-400">
-          <Loader2 className="h-5 w-5 animate-spin" /> {t('loading')}
-        </div>
-      </div>
-    )
-  }
+  const dataReady = !loading && !!effectiveSettings
 
   return (
     <div className="flex flex-1 bg-grid relative">
@@ -291,13 +276,17 @@ export function ClubLayout({ session, club, setClub, path, toast, onSignOut }) {
             </h1>
           </div>
 
-          <ClubContext.Provider value={ctxValue}>
-            {tab === 'dashboard' && <DashboardPage toast={toast} />}
-            {tab === 'settings' && <SettingsPage toast={toast} />}
-            {tab === 'vote' && <VotePage toast={toast} />}
-            {tab === 'log' && <SessionLogPage toast={toast} />}
-            {tab === 'fund' && <FundPage toast={toast} />}
-          </ClubContext.Provider>
+          {dataReady ? (
+            <ClubContext.Provider value={ctxValue}>
+              {tab === 'dashboard' && <DashboardPage toast={toast} />}
+              {tab === 'settings' && <SettingsPage toast={toast} />}
+              {tab === 'vote' && <VotePage toast={toast} />}
+              {tab === 'log' && <SessionLogPage toast={toast} />}
+              {tab === 'fund' && <FundPage toast={toast} />}
+            </ClubContext.Provider>
+          ) : (
+            <TabContentSkeleton tab={tab} />
+          )}
         </div>
       </main>
 

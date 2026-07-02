@@ -124,7 +124,7 @@ export function Nav({ session, myClubs, activeClub, onSignOut, onSelectClub }) {
 
   return (
     <header className="sticky top-0 z-40 border-b border-slate-100 bg-white/70 backdrop-blur-xl">
-      <div className={`mx-auto flex h-16 items-center gap-3 px-5 ${session ? '' : 'max-w-[1350px]'}`}>
+      <div className={`mx-auto flex h-16 items-center gap-3 px-5`}>
         <Logo onClick={() => navigate('/')} />
 
         {activeClub && myClubs?.length > 0 ? (
@@ -207,7 +207,7 @@ export function Footer() {
   const { t } = useTranslation()
   return (
     <footer className="border-t border-slate-100 bg-white/50 backdrop-blur">
-      <div className="mx-auto flex max-w-[1350px] flex-col items-center justify-between gap-4 px-5 py-6 sm:flex-row">
+      <div className="mx-auto flex flex-col items-center justify-between gap-4 px-5 py-6 sm:flex-row">
         <Logo onClick={() => navigate('/')} />
         <p className="hidden text-sm text-slate-400 sm:block">Spo + Fund · {t('brand_tag')}</p>
         <span className="text-xs text-slate-300">© {new Date().getFullYear()} SPOFUND</span>

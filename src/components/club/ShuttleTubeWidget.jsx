@@ -1,7 +1,7 @@
 import { useState } from 'react'
 import { useTranslation } from 'react-i18next'
 import { Package, Plus, AlertTriangle, ChevronRight, X } from 'lucide-react'
-import { cx, fmtDate } from '../../lib/utils'
+import { cx, fmtDate, shuttleStockSummary } from '../../lib/utils'
 import { BALLS_PER_BOX } from '../../constants'
 import { Badge } from '../ui/Badge'
 
@@ -60,9 +60,9 @@ function ShuttleTube({ filledCount, totalSlots = BALLS_PER_BOX, label, compact =
 
   return (
     <div className="flex flex-col items-center gap-1">
-      <div className="flex flex-col-reverse gap-1.5 rounded-2xl border-2 border-slate-200 bg-slate-50 p-2 w-10">
+      <div className="flex flex-row flex-wrap gap-1.5 rounded-2xl border-2 border-slate-200 bg-slate-50 p-2 w-fit">
         {slots.map((filled, i) => (
-          <div key={i} className="flex justify-center">
+          <div key={i} className="flex items-center">
             <ShuttlecockIcon filled={filled} />
           </div>
         ))}
@@ -166,10 +166,13 @@ export function ShuttleTubeWidget({ shuttleStatus, onRestock, canEdit }) {
           </button>
         ) : (
           // Inline tubes
-          <div className="flex flex-wrap gap-2">
-            {tubes.map((filled, i) => (
-              <ShuttleTube key={i} filledCount={filled} />
-            ))}
+          <div className="space-y-1.5">
+            <div className="flex flex-wrap gap-2">
+              {tubes.map((filled, i) => (
+                <ShuttleTube key={i} filledCount={filled} />
+              ))}
+            </div>
+            <p className="font-mono text-xs font-semibold text-slate-500">{shuttleStockSummary(totalBalls, t, BALLS_PER_BOX)}</p>
           </div>
         )}
 

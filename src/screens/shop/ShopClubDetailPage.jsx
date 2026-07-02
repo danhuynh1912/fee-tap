@@ -5,7 +5,7 @@ import { DeliveryHistory } from '../../components/shop/DeliveryHistory'
 import { DeliveryModal } from '../../components/shop/DeliveryModal'
 import { ShuttlecockIcon } from '../../components/club/ShuttleTubeWidget'
 import { navigate } from '../../router'
-import { fmtDate, cx } from '../../lib/utils'
+import { fmtDate, cx, shuttleStockSummary } from '../../lib/utils'
 import { BALLS_PER_BOX } from '../../constants'
 
 // Horizontal tube — one row of 12 shuttlecocks per box
@@ -33,14 +33,6 @@ function HorizontalTubes({ totalBalls }) {
   )
 }
 
-function stockSummary(totalBalls, t) {
-  const boxes = Math.floor(totalBalls / BALLS_PER_BOX)
-  const balls = totalBalls % BALLS_PER_BOX
-  if (boxes > 0 && balls > 0) return t('shop_stock_summary_mixed', { boxes, balls })
-  if (boxes > 0) return t('shop_stock_summary_full', { boxes })
-  return t('shop_stock_summary_balls', { balls: totalBalls })
-}
-
 function InventoryBlock({ stats, t }) {
   const { totalBalls, sessionsLeft, isLowStock, nextBuyDate } = stats || {}
   const isEmpty = (totalBalls ?? 0) <= 0
@@ -57,7 +49,7 @@ function InventoryBlock({ stats, t }) {
         <>
           <HorizontalTubes totalBalls={totalBalls} />
           <p className="font-mono text-sm font-semibold text-slate-600">
-            {stockSummary(totalBalls, t)}
+            {shuttleStockSummary(totalBalls, t, BALLS_PER_BOX)}
           </p>
         </>
       )}

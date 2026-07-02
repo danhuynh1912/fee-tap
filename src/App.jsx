@@ -13,6 +13,8 @@ import { ClubPickerPage } from './screens/ClubPickerPage'
 import { PreJoinPage } from './screens/PreJoinPage'
 import { WelcomeModal } from './screens/WelcomeModal'
 import { ChooseProfilePage } from './screens/ChooseProfilePage'
+import { ClubLayoutSkeleton } from './screens/club/ClubLayoutSkeleton'
+import { activeTab } from './screens/club/tabRoute'
 
 const OnboardingPage = lazy(() => import('./screens/OnboardingPage').then((m) => ({ default: m.OnboardingPage })))
 const ShopOnboardingPage = lazy(() => import('./screens/shop/ShopOnboardingPage').then((m) => ({ default: m.ShopOnboardingPage })))
@@ -130,7 +132,13 @@ export default function App() {
 
   let body
   if (loading) {
-    body = (
+    // Auth/club-list is still resolving. If the URL already points at a club
+    // route, show the club shell (sidebar tabs + tab-shaped content skeleton)
+    // immediately instead of a blank spinner — the club name fills in once
+    // `myClubs` resolves, but nothing else shifts size.
+    body = clubMatch ? (
+      <ClubLayoutSkeleton tab={activeTab(path, clubId)} clubName={activeClub?.name} />
+    ) : (
       <div className="grid flex-1 place-items-center">
         <div className="flex items-center gap-3 text-slate-400">
           <Loader2 className="h-5 w-5 animate-spin" /> {t('loading')}
@@ -234,7 +242,7 @@ export default function App() {
   } else if (clubId) {
     if (activeClub) {
       body = (
-        <Suspense fallback={<PageLoader />}>
+        <Suspense fallback={<ClubLayoutSkeleton tab={activeTab(path, clubId)} clubName={activeClub.name} />}>
           <ClubLayout session={session} club={activeClub} setClub={updateClub} path={path} toast={toast} onSignOut={signOut} />
         </Suspense>
       )
